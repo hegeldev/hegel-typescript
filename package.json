@@ -1,0 +1,25 @@
+{
+  "name": "@antithesishq/hegel-typescript",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for Hegel property-based testing",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/antithesishq/hegel-typescript.git"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "workout": "node --import tsx examples/hegel-workout.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
