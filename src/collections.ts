@@ -1,4 +1,4 @@
-import { generateFromSchema, reject } from "./connection.js";
+import { generateFromSchema, assume } from "./connection.js";
 import { Generator, JsonSchema, FuncGenerator } from "./generator.js";
 import { integers } from "./integers.js";
 import { text } from "./strings.js";
@@ -87,11 +87,7 @@ export class ArrayGenerator<T> implements Generator<T[]> {
           attempts++;
         }
 
-        if (result.length < this._minSize) {
-          reject(
-            `arrays: failed to generate ${this._minSize} unique elements`
-          );
-        }
+        assume(result.length >= this._minSize);
 
         return result;
       }
@@ -299,9 +295,7 @@ export class MapGenerator<V> implements Generator<Map<string, V>> {
         attempts++;
       }
 
-      if (result.size < this._minSize) {
-        reject(`maps: failed to generate ${this._minSize} unique keys`);
-      }
+      assume(result.size >= this._minSize);
 
       return result;
     });

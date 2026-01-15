@@ -53,12 +53,13 @@ function getRejectCode(): number {
 }
 
 /**
- * Reject the current test case with a message.
+ * Assume a condition is true. If false, reject the current test case.
  * This signals to Hegel that the input is invalid, not a test failure.
  */
-export function reject(message: string): never {
-  console.error(`REJECT: ${message}`);
-  process.exit(getRejectCode());
+export function assume(condition: boolean): void {
+  if (!condition) {
+    process.exit(getRejectCode());
+  }
 }
 
 /**
@@ -265,16 +266,11 @@ export function sendRequest(
   try {
     response = JSON.parse(responseStr);
   } catch (err) {
-    reject(`hegel: parse error: ${err}, output: ${responseStr}`);
+    assume(false);
   }
 
-  if (response!.error) {
-    reject(`hegel: server error: ${response!.error}`);
-  }
-
-  if (response!.id !== id) {
-    reject(`hegel: id mismatch: expected ${id}, got ${response!.id}`);
-  }
+  assume(!response!.error);
+  assume(response!.id === id);
 
   return response!;
 }
@@ -294,9 +290,7 @@ export function generateFromSchema<T>(schema: Record<string, unknown>): T {
     closeConnection();
   }
 
-  if (response.error) {
-    reject(response.error);
-  }
+  assume(!response.error);
 
   return response.result as T;
 }

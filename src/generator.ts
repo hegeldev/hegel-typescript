@@ -1,4 +1,4 @@
-import { generateFromSchema, reject } from "./connection.js";
+import { generateFromSchema, assume } from "./connection.js";
 import { LABELS } from "./labels.js";
 import { discardableGroup, group } from "./spans.js";
 
@@ -196,9 +196,7 @@ class FilteredGenerator<T> implements Generator<T> {
       }
     }
 
-    reject(
-      `filter: failed to generate value satisfying predicate after ${this.maxAttempts} attempts`
-    );
+    assume(false);
   }
 
   schema(): null {

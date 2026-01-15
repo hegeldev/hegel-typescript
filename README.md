@@ -41,7 +41,7 @@ import {
   text,
   arrays,
   sampledFrom,
-  reject,
+  assume,
   note,
 } from "@antithesishq/hegel-typescript";
 
@@ -53,10 +53,8 @@ const arr = arrays(integers()).minSize(1).maxSize(10).generate();
 // Use sampledFrom for test selection
 const testName = sampledFrom(["test1", "test2", "test3"]).generate();
 
-// Reject invalid test cases
-if (someCondition) {
-  reject("Invalid test case");
-}
+// Skip test cases that don't meet preconditions
+assume(someCondition);
 
 // Log debugging information
 note(`Testing with value: ${num}`);
@@ -168,18 +166,16 @@ fixedObject()
   .build();
 ```
 
-### Rejection
+### Assumptions
 
 When generated data doesn't meet preconditions that can't be expressed in the schema:
 
 ```typescript
-import { reject } from "@antithesishq/hegel-typescript";
+import { assume } from "@antithesishq/hegel-typescript";
 
 const data = makeGenerator().generate();
 
-if (!isValidPrecondition(data)) {
-  reject("input doesn't satisfy precondition");
-}
+assume(isValidPrecondition(data));
 
 // Test logic here
 ```
