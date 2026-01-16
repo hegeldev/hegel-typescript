@@ -11,8 +11,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "clean": "rm -rf dist",
-    "workout": "node --import tsx examples/hegel-workout.ts"
+    "clean": "rm -rf dist"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
