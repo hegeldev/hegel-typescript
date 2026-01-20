@@ -38,11 +38,11 @@ export class TextGenerator implements Generator<string> {
   schema(): JsonSchema {
     const schema: JsonSchema = {
       type: "string",
-      min_length: this._minSize,
+      min_size: this._minSize,
     };
 
     if (this._maxSize !== undefined) {
-      schema.max_length = this._maxSize;
+      schema.max_size = this._maxSize;
     }
 
     return schema;
