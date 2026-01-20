@@ -266,13 +266,21 @@ export function sendRequest(
   try {
     response = JSON.parse(responseStr);
   } catch (err) {
-    assume(false);
+    throw new Error(
+      `hegel: failed to parse server response as JSON: ${err}\nResponse: ${responseStr}`
+    );
   }
 
-  assume(!response!.error);
-  assume(response!.id === id);
+  if (response.error) {
+    throw new Error(`hegel: server returned error: ${response.error}`);
+  }
+  if (response.id !== id) {
+    throw new Error(
+      `hegel: response ID mismatch: expected ${id}, got ${response.id}`
+    );
+  }
 
-  return response!;
+  return response;
 }
 
 /**
@@ -290,7 +298,10 @@ export function generateFromSchema<T>(schema: Record<string, unknown>): T {
     closeConnection();
   }
 
-  assume(!response.error);
+  // Note: sendRequest already validates response.error, so this is defensive
+  if (response.error) {
+    throw new Error(`hegel: server returned error: ${response.error}`);
+  }
 
   return response.result as T;
 }

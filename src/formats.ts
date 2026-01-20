@@ -42,7 +42,7 @@ abstract class FormatGenerator implements Generator<string> {
  */
 class EmailGenerator extends FormatGenerator {
   protected getSchema(): JsonSchema {
-    return { type: "string", format: "email" };
+    return { type: "email" };
   }
 }
 
@@ -58,7 +58,7 @@ export function emails(): Generator<string> {
  */
 class UrlGenerator extends FormatGenerator {
   protected getSchema(): JsonSchema {
-    return { type: "string", format: "uri" };
+    return { type: "url" };
   }
 }
 
@@ -92,9 +92,8 @@ export class DomainGenerator implements Generator<string> {
 
   schema(): JsonSchema {
     return {
-      type: "string",
-      format: "hostname",
-      maxLength: this._maxLength,
+      type: "domain",
+      max_length: this._maxLength,
     };
   }
 
@@ -163,15 +162,12 @@ export class IpAddressGenerator implements Generator<string> {
   schema(): JsonSchema {
     switch (this._version) {
       case "v4":
-        return { type: "string", format: "ipv4" };
+        return { type: "ipv4" };
       case "v6":
-        return { type: "string", format: "ipv6" };
+        return { type: "ipv6" };
       default:
         return {
-          anyOf: [
-            { type: "string", format: "ipv4" },
-            { type: "string", format: "ipv6" },
-          ],
+          one_of: [{ type: "ipv4" }, { type: "ipv6" }],
         };
     }
   }
@@ -210,7 +206,7 @@ export function ipAddresses(): IpAddressGenerator {
  */
 class DateGenerator extends FormatGenerator {
   protected getSchema(): JsonSchema {
-    return { type: "string", format: "date" };
+    return { type: "date" };
   }
 }
 
@@ -226,7 +222,7 @@ export function dates(): Generator<string> {
  */
 class TimeGenerator extends FormatGenerator {
   protected getSchema(): JsonSchema {
-    return { type: "string", format: "time" };
+    return { type: "time" };
   }
 }
 
@@ -242,7 +238,7 @@ export function times(): Generator<string> {
  */
 class DateTimeGenerator extends FormatGenerator {
   protected getSchema(): JsonSchema {
-    return { type: "string", format: "date-time" };
+    return { type: "datetime" };
   }
 }
 

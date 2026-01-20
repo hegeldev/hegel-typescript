@@ -197,6 +197,7 @@ class FilteredGenerator<T> implements Generator<T> {
     }
 
     assume(false);
+    throw new Error("unreachable"); // assume(false) exits the process
   }
 
   schema(): null {

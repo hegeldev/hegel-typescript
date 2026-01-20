@@ -114,7 +114,7 @@ class OneOfGenerator<T> implements Generator<T> {
       if (!s) return null;
       schemas.push(s);
     }
-    return { anyOf: schemas };
+    return { one_of: schemas };
   }
 
   map<U>(f: (value: T) => U): Generator<U> {
@@ -175,7 +175,7 @@ class OptionalGenerator<T> implements Generator<T | null> {
     if (!innerSchema) return null;
 
     return {
-      anyOf: [{ type: "null" }, innerSchema],
+      one_of: [{ type: "null" }, innerSchema],
     };
   }
 

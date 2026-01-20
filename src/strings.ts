@@ -38,11 +38,11 @@ export class TextGenerator implements Generator<string> {
   schema(): JsonSchema {
     const schema: JsonSchema = {
       type: "string",
-      minLength: this._minSize,
+      min_length: this._minSize,
     };
 
     if (this._maxSize !== undefined) {
-      schema.maxLength = this._maxSize;
+      schema.max_length = this._maxSize;
     }
 
     return schema;
@@ -89,19 +89,20 @@ export function text(): TextGenerator {
 /**
  * Generator for strings matching a regex pattern.
  */
-class RegexGenerator implements Generator<string> {
+export class RegexGenerator implements Generator<string> {
   private readonly _pattern: string;
+  private _fullmatch: boolean = false;
 
   constructor(pattern: string) {
-    // Auto-anchor the pattern
-    let anchored = pattern;
-    if (!pattern.startsWith("^")) {
-      anchored = "^" + anchored;
-    }
-    if (!pattern.endsWith("$")) {
-      anchored = anchored + "$";
-    }
-    this._pattern = anchored;
+    this._pattern = pattern;
+  }
+
+  /**
+   * Require the entire string to match the pattern, not just contain a match.
+   */
+  fullmatch(): RegexGenerator {
+    this._fullmatch = true;
+    return this;
   }
 
   generate(): string {
@@ -109,10 +110,14 @@ class RegexGenerator implements Generator<string> {
   }
 
   schema(): JsonSchema {
-    return {
-      type: "string",
+    const schema: JsonSchema = {
+      type: "regex",
       pattern: this._pattern,
     };
+    if (this._fullmatch) {
+      schema.fullmatch = true;
+    }
+    return schema;
   }
 
   map<U>(f: (value: string) => U): Generator<U> {
@@ -138,17 +143,20 @@ class RegexGenerator implements Generator<string> {
 }
 
 /**
- * Create a generator for strings matching a regex pattern.
- * The pattern is automatically anchored with ^ and $ if not present.
+ * Create a generator for strings that contain a match for the given regex pattern.
+ * Use `.fullmatch()` to require the entire string to match.
  *
  * @param pattern - Regular expression pattern (JSON Schema regex syntax)
  *
  * @example
  * ```typescript
- * // Generate strings matching a pattern
+ * // Generate strings containing a match
  * const hexGen = fromRegex("[0-9a-f]+");
+ *
+ * // Generate strings that fully match
+ * const fullHexGen = fromRegex("[0-9a-f]+").fullmatch();
  * ```
  */
-export function fromRegex(pattern: string): Generator<string> {
+export function fromRegex(pattern: string): RegexGenerator {
   return new RegexGenerator(pattern);
 }

@@ -61,7 +61,13 @@ class FixedObjectGenerator<T extends Record<string, unknown>>
   generate(): T {
     const schema = this.schema();
     if (schema) {
-      return generateFromSchema<T>(schema);
+      const values = generateFromSchema<unknown[]>(schema);
+      // Convert tuple back to object
+      const result: Record<string, unknown> = {};
+      for (let i = 0; i < this.fields.length; i++) {
+        result[this.fields[i].name] = values[i];
+      }
+      return result as T;
     }
 
     // Compositional fallback
@@ -75,20 +81,17 @@ class FixedObjectGenerator<T extends Record<string, unknown>>
   }
 
   schema(): JsonSchema | null {
-    const properties: Record<string, JsonSchema> = {};
-    const required: string[] = [];
+    const elements: JsonSchema[] = [];
 
     for (const field of this.fields) {
       const fieldSchema = field.generator.schema();
       if (!fieldSchema) return null;
-      properties[field.name] = fieldSchema;
-      required.push(field.name);
+      elements.push(fieldSchema);
     }
 
     return {
-      type: "object",
-      properties,
-      required,
+      type: "tuple",
+      elements,
     };
   }
 

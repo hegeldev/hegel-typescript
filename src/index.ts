@@ -10,7 +10,7 @@ export { nulls, booleans, just } from "./primitives.js";
 export { integers, IntegerGenerator } from "./integers.js";
 export { floats, FloatGenerator } from "./floats.js";
 
-export { text, fromRegex, TextGenerator } from "./strings.js";
+export { text, fromRegex, TextGenerator, RegexGenerator } from "./strings.js";
 
 export {
   emails,

@@ -109,17 +109,13 @@ export class ArrayGenerator<T> implements Generator<T[]> {
     }
 
     const schema: JsonSchema = {
-      type: "array",
-      items: elementSchema,
-      minItems: this._minSize,
+      type: this._unique ? "set" : "list",
+      elements: elementSchema,
+      min_size: this._minSize,
     };
 
     if (this._maxSize !== undefined) {
-      schema.maxItems = this._maxSize;
-    }
-
-    if (this._unique) {
-      schema.uniqueItems = true;
+      schema.max_size = this._maxSize;
     }
 
     return schema;
@@ -206,9 +202,22 @@ export class SetGenerator<T> implements Generator<Set<T>> {
   }
 
   schema(): JsonSchema | null {
-    // Sets don't have a direct JSON Schema representation
-    // Fall back to compositional generation
-    return null;
+    const elementSchema = this.elements.schema();
+    if (!elementSchema) {
+      return null;
+    }
+
+    const schema: JsonSchema = {
+      type: "set",
+      elements: elementSchema,
+      min_size: this._minSize,
+    };
+
+    if (this._maxSize !== undefined) {
+      schema.max_size = this._maxSize;
+    }
+
+    return schema;
   }
 
   map<U>(f: (value: Set<T>) => U): Generator<U> {
@@ -308,13 +317,13 @@ export class MapGenerator<V> implements Generator<Map<string, V>> {
     }
 
     const schema: JsonSchema = {
-      type: "object",
-      additionalProperties: valueSchema,
-      minProperties: this._minSize,
+      type: "dict",
+      values: valueSchema,
+      min_size: this._minSize,
     };
 
     if (this._maxSize !== undefined) {
-      schema.maxProperties = this._maxSize;
+      schema.max_size = this._maxSize;
     }
 
     return schema;
@@ -381,14 +390,9 @@ class TupleGenerator<T extends unknown[]> implements Generator<T> {
       schemas.push(s);
     }
 
-    // Use older JSON Schema format (items as array + additionalItems)
-    // because hypothesis-jsonschema doesn't support prefixItems yet
     return {
-      type: "array",
-      items: schemas,
-      additionalItems: false,
-      minItems: schemas.length,
-      maxItems: schemas.length,
+      type: "tuple",
+      elements: schemas,
     };
   }
 
