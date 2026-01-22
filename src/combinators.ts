@@ -6,7 +6,7 @@ import { LABELS } from "./labels.js";
 import { group } from "./spans.js";
 
 /**
- * Check if a value is a primitive type that can be represented in JSON Schema enum.
+ * Check if a value is a primitive type that can be represented in sampled_from schema.
  */
 function isPrimitive(value: unknown): boolean {
   const type = typeof value;
@@ -42,9 +42,9 @@ class SampledFromGenerator<T> implements Generator<T> {
   }
 
   schema(): JsonSchema | null {
-    // Only use enum schema for primitive types
+    // Only use sampled_from schema for primitive types
     if (this.elements.every(isPrimitive)) {
-      return { enum: this.elements as unknown[] };
+      return { sampled_from: this.elements as unknown[] };
     }
     return null;
   }
