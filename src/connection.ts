@@ -230,6 +230,56 @@ function debug(msg: string): void {
 }
 
 /**
+ * Convert special object wrappers from the server to native JS values.
+ * Handles:
+ * - {"$float": "nan"} -> NaN
+ * - {"$float": "inf"} -> Infinity
+ * - {"$float": "-inf"} -> -Infinity
+ * - {"$integer": "..."} -> BigInt (or number if it fits)
+ */
+function convertSpecialValues(value: unknown): unknown {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(convertSpecialValues);
+  }
+
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj);
+
+    // Check for special single-key objects
+    if (keys.length === 1) {
+      if (keys[0] === "$float" && typeof obj["$float"] === "string") {
+        switch (obj["$float"]) {
+          case "nan":
+            return NaN;
+          case "inf":
+            return Infinity;
+          case "-inf":
+            return -Infinity;
+        }
+      }
+      if (keys[0] === "$integer" && typeof obj["$integer"] === "string") {
+        // Return as number (BigInt not commonly used in JS APIs)
+        return Number(obj["$integer"]);
+      }
+    }
+
+    // Recursively convert object values
+    const result: Record<string, unknown> = {};
+    for (const key of keys) {
+      result[key] = convertSpecialValues(obj[key]);
+    }
+    return result;
+  }
+
+  return value;
+}
+
+/**
  * Cleanup helper process on exit.
  */
 function cleanup(): void {
@@ -303,5 +353,5 @@ export function generateFromSchema<T>(schema: Record<string, unknown>): T {
     throw new Error(`hegel: server returned error: ${response.error}`);
   }
 
-  return response.result as T;
+  return convertSpecialValues(response.result) as T;
 }
