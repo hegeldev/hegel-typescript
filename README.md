@@ -1,25 +1,13 @@
 # Hegel TypeScript SDK
 
-A TypeScript SDK for Hegel property-based testing. This SDK allows TypeScript/Node.js test binaries to communicate with the Hegel server to generate random test data according to JSON schemas.
-
-## Prerequisites
-
-This SDK requires the `hegel` CLI tool to be installed. Install it via pip:
-
-```bash
-pip install git+ssh://git@github.com/antithesishq/hegel.git
-```
-
-Verify installation:
-
-```bash
-hegel --version
-```
+A TypeScript SDK for Hegel property-based testing. This SDK allows TypeScript/Node.js programs to generate random test data according to JSON schemas, powered by Hypothesis.
 
 ## Requirements
 
 - Node.js >= 18.0.0
-- Hegel CLI installed (see Prerequisites)
+- Python 3.13+ (auto-installed if needed via uv)
+
+The SDK will automatically install the `hegel` CLI if not found on PATH.
 
 ## Installation
 
@@ -36,43 +24,46 @@ npm install /path/to/hegel-typescript
 ## Quick Start
 
 ```typescript
-import {
-  integers,
-  text,
-  arrays,
-  sampledFrom,
-  assume,
-  note,
-} from "@antithesishq/hegel-typescript";
+import { hegel, integers, text, arrays, assume, note } from "@antithesishq/hegel-typescript";
 
-// Generate random values
-const num = integers().min(0).max(100).generate();
-const str = text().maxSize(50).generate();
-const arr = arrays(integers()).minSize(1).maxSize(10).generate();
+hegel(() => {
+  // Generate random values
+  const num = integers().min(0).max(100).generate();
+  const str = text().maxSize(50).generate();
+  const arr = arrays(integers()).minSize(1).maxSize(10).generate();
 
-// Use sampledFrom for test selection
-const testName = sampledFrom(["test1", "test2", "test3"]).generate();
+  // Skip test cases that don't meet preconditions
+  assume(num > 0);
 
-// Skip test cases that don't meet preconditions
-assume(someCondition);
+  // Log debugging information (only shown on final replay)
+  note(`Testing with value: ${num}`);
 
-// Log debugging information
-note(`Testing with value: ${num}`);
+  // Your test assertions here
+  if (arr.length === 0) {
+    throw new Error("Array should not be empty");
+  }
+});
 ```
 
-## Running with Hegel
+## Configuration
 
-Tests are executed via the `hegel` command:
+Use the `Hegel` builder for more control:
 
-```bash
-hegel node dist/my-test.js --test-cases=100
+```typescript
+import { Hegel, Verbosity, integers } from "@antithesishq/hegel-typescript";
+
+new Hegel(() => {
+  const x = integers().generate();
+  // test logic
+})
+  .testCases(200)              // Run 200 test cases (default: 100)
+  .verbosity(Verbosity.Debug)  // Show debug output
+  .run();
 ```
 
 ## Environment Variables
 
-- `HEGEL_SOCKET`: Path to the Unix socket for generation requests (set by hegel)
-- `HEGEL_REJECT_CODE`: Exit code to signal test case rejection (set by hegel)
-- `HEGEL_DEBUG`: If set, prints request/response JSON to stderr
+- `HEGEL_DEBUG`: If set to `1` or `true`, prints request/response JSON to stderr
 
 ## API Reference
 
@@ -88,13 +79,14 @@ just(value);          // Always returns the same value
 
 ```typescript
 // Integers with fluent configuration
-integers();                           // Full range
+integers();                           // Full safe integer range
 integers().min(0).max(100);          // Constrained range
 
 // Floats with fluent configuration
 floats();                             // Any float
 floats().min(0.0).max(1.0);          // Constrained
 floats().excludeMin().excludeMax();  // Exclusive bounds
+floats().allowNan().allowInfinity(); // Allow special values
 ```
 
 ### String Generators
@@ -103,6 +95,13 @@ floats().excludeMin().excludeMax();  // Exclusive bounds
 text();                              // Any string
 text().minSize(1).maxSize(100);     // Constrained length
 fromRegex("[a-z]{3}-[0-9]{3}");     // Matches pattern
+```
+
+### Binary Generator
+
+```typescript
+binary();                            // Random bytes as Uint8Array
+binary({ minSize: 10, maxSize: 100 }); // Constrained size
 ```
 
 ### Format String Generators
@@ -131,9 +130,9 @@ arrays(integers()).unique();                     // Unique elements
 // Sets
 sets(integers()).minSize(1).maxSize(5);         // Set<number>
 
-// Maps (keys are always strings)
-maps(integers());                                // Map<string, number>
-maps(text()).minSize(1).maxSize(5);             // Constrained size
+// Maps
+maps(text(), integers());                        // Map<string, number>
+maps(text(), text()).minSize(1).maxSize(5);     // Constrained size
 
 // Tuples
 tuples(integers(), text(), booleans());         // [number, string, boolean]
@@ -171,17 +170,29 @@ fixedObject()
 When generated data doesn't meet preconditions that can't be expressed in the schema:
 
 ```typescript
-import { assume } from "@antithesishq/hegel-typescript";
+import { hegel, integers, assume } from "@antithesishq/hegel-typescript";
 
-const data = makeGenerator().generate();
+hegel(() => {
+  const x = integers().generate();
+  const y = integers().generate();
 
-assume(isValidPrecondition(data));
+  assume(y !== 0);  // Reject test cases where y is 0
 
-// Test logic here
+  const result = x / y;
+  // test logic here
+});
 ```
 
-## Exit Codes
+### Notes
 
-- `0`: Test passed
-- `HEGEL_REJECT_CODE`: Test case rejected (try different input)
-- `1`: Test assertion failed
+Print debugging information that only appears on the final replay run:
+
+```typescript
+import { hegel, integers, note } from "@antithesishq/hegel-typescript";
+
+hegel(() => {
+  const x = integers().generate();
+  note(`Generated value: ${x}`);
+  // test logic
+});
+```

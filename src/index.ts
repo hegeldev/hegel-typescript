@@ -1,6 +1,7 @@
 export type { Generator, JsonSchema } from "./generator.js"
 export { SchemaGenerator, FuncGenerator } from "./generator.js"
 export { assume, note } from "./connection.js"
+export { hegel, Hegel, Verbosity } from "./embedded.js"
 export { LABELS } from "./labels.js"
 export type { Label } from "./labels.js"
 export { group, discardableGroup, startSpan, stopSpan } from "./spans.js"

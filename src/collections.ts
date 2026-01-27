@@ -259,7 +259,13 @@ export class MapGenerator<K, V> implements Generator<Map<K, V>> {
       // Schema composition: single socket round-trip
       // Wire format is [[key, value], ...]
       const pairs = generateFromSchema<[K, V][]>(schema)
-      return new Map(pairs)
+      const result = new Map(pairs)
+      // Ensure size constraints are met (in case of duplicate keys)
+      assume(result.size >= this._minSize)
+      if (this._maxSize !== undefined) {
+        assume(result.size <= this._maxSize)
+      }
+      return result
     }
 
     // Compositional fallback

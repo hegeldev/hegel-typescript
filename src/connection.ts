@@ -1,53 +1,59 @@
 /**
- * Connection management for Hegel SDK.
- * Uses a persistent Python helper subprocess for synchronous socket I/O.
+ * Connection management for Hegel SDK (embedded mode).
  *
- * The Python helper maintains a single socket connection and communicates
- * via named pipes (FIFOs) for synchronous request/response with Node.js.
+ * The embedded mode handler (embedded.ts) sets up the socket connection
+ * for each test case and provides it to this module.
  */
-import { spawn, ChildProcess, execSync } from "node:child_process"
+import * as net from "node:net"
 import * as fs from "node:fs"
-import * as os from "node:os"
-import * as path from "node:path"
-import { fileURLToPath } from "node:url"
-
-/**
- * Exit codes for Hegel SDK.
- */
-export const EXIT_CODE_SOCKET_ERROR = 134
+import { RejectError } from "./embedded.js"
 
 /**
  * Module-level state.
  */
-let socketPath: string | null = null
+let embeddedSocket: net.Socket | null = null
+let socketFd: number | null = null
+let socketBuffer = ""
 let requestId = 0
 let spanDepth = 0
-let helperProcess: ChildProcess | null = null
-let requestFifo: string | null = null
-let responseFifo: string | null = null
+let isLastRun = false
 
-// Get the directory containing this module
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+const DEBUG = process.env.HEGEL_DEBUG === "1" || process.env.HEGEL_DEBUG === "true"
 
-// Path to the Python helper script
-const HELPER_SCRIPT = path.join(__dirname, "socket-helper.py")
+function debug(msg: string): void {
+  if (DEBUG) {
+    console.error(`[ts-sdk] ${msg}`)
+  }
+}
 
 /**
- * Get the reject code from environment.
+ * Set the embedded socket connection (called by embedded.ts for each test case).
  */
-function getRejectCode(): number {
-  const codeStr = process.env.HEGEL_REJECT_CODE
-  if (!codeStr) {
-    console.error("hegel: HEGEL_REJECT_CODE environment variable not set")
-    process.exit(EXIT_CODE_SOCKET_ERROR)
-  }
-  const code = parseInt(codeStr, 10)
-  if (isNaN(code)) {
-    console.error(`hegel: HEGEL_REJECT_CODE is not a valid integer: ${codeStr}`)
-    process.exit(EXIT_CODE_SOCKET_ERROR)
-  }
-  return code
+export function setEmbeddedConnection(socket: net.Socket, initialBuffer = ""): void {
+  embeddedSocket = socket
+  socketBuffer = initialBuffer
+  requestId = 0
+  spanDepth = 0
+  // Get the underlying file descriptor for synchronous I/O
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handle = (socket as any)._handle
+  socketFd = handle?.fd ?? null
+}
+
+/**
+ * Clear the embedded socket connection (called by embedded.ts after test case).
+ */
+export function clearEmbeddedConnection(): void {
+  embeddedSocket = null
+  socketFd = null
+  socketBuffer = ""
+}
+
+/**
+ * Set the is_last_run flag (called by embedded.ts).
+ */
+export function setIsLastRun(value: boolean): void {
+  isLastRun = value
 }
 
 /**
@@ -56,29 +62,17 @@ function getRejectCode(): number {
  */
 export function assume(condition: boolean): void {
   if (!condition) {
-    process.exit(getRejectCode())
+    throw new RejectError()
   }
 }
 
 /**
- * Print a note for debugging. Visible during test execution.
+ * Print a note for debugging. Only visible on the final replay run.
  */
 export function note(message: string): void {
-  console.error(message)
-}
-
-/**
- * Check if connected to the Hegel socket.
- */
-export function isConnected(): boolean {
-  return socketPath !== null
-}
-
-/**
- * Get current span depth.
- */
-export function getSpanDepth(): number {
-  return spanDepth
+  if (isLastRun) {
+    console.error(message)
+  }
 }
 
 /**
@@ -93,150 +87,6 @@ export function incrementSpanDepth(): void {
  */
 export function decrementSpanDepth(): void {
   spanDepth--
-}
-
-/**
- * Create FIFOs and start the helper process.
- */
-function ensureHelper(): void {
-  if (helperProcess) return
-
-  // Create temp directory and FIFOs
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hegel-ts-"))
-  requestFifo = path.join(tmpDir, "request")
-  responseFifo = path.join(tmpDir, "response")
-
-  // Create FIFOs using mkfifo
-  try {
-    execSync(`mkfifo "${requestFifo}"`)
-    execSync(`mkfifo "${responseFifo}"`)
-  } catch (err) {
-    console.error(`hegel: failed to create FIFOs: ${(err as Error).message}`)
-    process.exit(EXIT_CODE_SOCKET_ERROR)
-  }
-
-  // Start helper process
-  helperProcess = spawn("python3", [HELPER_SCRIPT, requestFifo, responseFifo], {
-    stdio: ["ignore", "inherit", "inherit"],
-    detached: false,
-  })
-
-  helperProcess.on("error", err => {
-    console.error(`hegel: helper error: ${err.message}`)
-    process.exit(EXIT_CODE_SOCKET_ERROR)
-  })
-
-  helperProcess.on("exit", code => {
-    if (code !== 0 && code !== null) {
-      console.error(`hegel: helper exited with code ${code}`)
-    }
-    helperProcess = null
-  })
-
-  // Don't let the helper keep Node.js alive
-  helperProcess.unref()
-
-  // Register cleanup
-  const doCleanup = () => {
-    cleanup()
-    if (requestFifo) {
-      try {
-        fs.unlinkSync(requestFifo)
-      } catch {}
-    }
-    if (responseFifo) {
-      try {
-        fs.unlinkSync(responseFifo)
-      } catch {}
-    }
-    if (tmpDir) {
-      try {
-        fs.rmdirSync(tmpDir)
-      } catch {}
-    }
-  }
-
-  process.on("exit", doCleanup)
-  process.on("SIGINT", () => {
-    doCleanup()
-    process.exit(130)
-  })
-  process.on("SIGTERM", () => {
-    doCleanup()
-    process.exit(143)
-  })
-}
-
-/**
- * Send a command to the helper and wait synchronously for response.
- */
-function sendToHelper(command: string): string {
-  if (!requestFifo || !responseFifo) {
-    console.error("hegel: helper FIFOs not initialized")
-    process.exit(EXIT_CODE_SOCKET_ERROR)
-  }
-
-  // Write request to request FIFO (blocks until Python reads it)
-  fs.writeFileSync(requestFifo, command + "\n")
-
-  // Read response from response FIFO (blocks until Python writes it)
-  const response = fs.readFileSync(responseFifo, "utf8").trim()
-
-  return response
-}
-
-/**
- * Open connection to Hegel socket.
- */
-export function openConnection(): void {
-  if (socketPath !== null) return
-
-  const envSocket = process.env.HEGEL_SOCKET
-  if (!envSocket) {
-    console.error("hegel: HEGEL_SOCKET environment variable not set")
-    process.exit(EXIT_CODE_SOCKET_ERROR)
-  }
-
-  // Start helper process if not running
-  ensureHelper()
-
-  // Send OPEN command
-  const response = sendToHelper(`OPEN ${envSocket}`)
-  let result: { ok?: boolean; error?: string }
-  try {
-    result = JSON.parse(response)
-  } catch {
-    console.error(`hegel: failed to parse OPEN response: ${response}`)
-    process.exit(EXIT_CODE_SOCKET_ERROR)
-  }
-
-  if (result.error) {
-    console.error(`hegel: connection error: ${result.error}`)
-    process.exit(EXIT_CODE_SOCKET_ERROR)
-  }
-
-  socketPath = envSocket
-}
-
-/**
- * Close connection to Hegel socket.
- */
-export function closeConnection(): void {
-  if (socketPath === null) return
-
-  // Send CLOSE command
-  const response = sendToHelper("CLOSE")
-  // Ignore parse errors on close
-
-  socketPath = null
-}
-
-const DEBUG = process.env.HEGEL_DEBUG === "1" || process.env.HEGEL_DEBUG === "true"
-
-function debug(msg: string): void {
-  if (DEBUG) {
-    console.error(`[ts-sdk] ${msg}`)
-  }
 }
 
 /**
@@ -290,37 +140,31 @@ function convertSpecialValues(value: unknown): unknown {
 }
 
 /**
- * Cleanup helper process on exit.
- */
-function cleanup(): void {
-  if (helperProcess) {
-    // Just kill the helper - don't try to send QUIT as it may block on FIFO
-    try {
-      helperProcess.kill("SIGKILL")
-    } catch {
-      // Ignore
-    }
-    helperProcess = null
-  }
-}
-
-/**
  * Send a request to the Hegel server and wait for a response.
+ * This is synchronous from the caller's perspective.
  */
 export function sendRequest(
   command: string,
   payload: unknown,
 ): { result?: unknown; error?: string } {
-  if (socketPath === null) {
-    console.error("hegel: not connected to socket")
-    process.exit(EXIT_CODE_SOCKET_ERROR)
+  if (!embeddedSocket) {
+    throw new Error("hegel: not connected to socket")
   }
 
   const id = ++requestId
   const request = { id, command, payload }
   const requestJson = JSON.stringify(request)
 
-  const responseStr = sendToHelper(requestJson)
+  debug(`REQUEST: ${requestJson}`)
+
+  // Write request synchronously
+  embeddedSocket.write(requestJson + "\n")
+
+  // Read response - this needs to be synchronous
+  // We use the Atomics-based sync pattern or deasync
+  const responseStr = readLineSync()
+
+  debug(`RESPONSE: ${responseStr}`)
 
   let response: { id: number; result?: unknown; error?: string }
   try {
@@ -342,19 +186,70 @@ export function sendRequest(
 }
 
 /**
+ * Synchronously read a line from the socket.
+ * Uses fs.readSync on the socket's file descriptor for true blocking I/O.
+ */
+function readLineSync(): string {
+  if (!embeddedSocket) {
+    throw new Error("hegel: not connected to socket")
+  }
+
+  // Check buffer first
+  let newlineIndex = socketBuffer.indexOf("\n")
+  if (newlineIndex !== -1) {
+    const line = socketBuffer.slice(0, newlineIndex)
+    socketBuffer = socketBuffer.slice(newlineIndex + 1)
+    return line
+  }
+
+  if (socketFd === null) {
+    throw new Error("hegel: socket file descriptor not available")
+  }
+
+  // Use fs.readSync for true blocking I/O
+  const readBuffer = Buffer.alloc(4096)
+  const startTime = Date.now()
+  const timeout = 30000 // 30 second timeout
+
+  while (true) {
+    try {
+      const bytesRead = fs.readSync(socketFd, readBuffer, 0, readBuffer.length, null)
+      if (bytesRead > 0) {
+        socketBuffer += readBuffer.subarray(0, bytesRead).toString()
+        newlineIndex = socketBuffer.indexOf("\n")
+        if (newlineIndex !== -1) {
+          const line = socketBuffer.slice(0, newlineIndex)
+          socketBuffer = socketBuffer.slice(newlineIndex + 1)
+          return line
+        }
+      } else if (bytesRead === 0) {
+        // EOF - socket closed
+        throw new Error("hegel: socket closed while reading")
+      }
+    } catch (err) {
+      const error = err as NodeJS.ErrnoException
+      if (error.code === "EAGAIN" || error.code === "EWOULDBLOCK") {
+        // Non-blocking socket would block - wait a bit and retry
+        const sharedBuffer = new SharedArrayBuffer(4)
+        const int32 = new Int32Array(sharedBuffer)
+        Atomics.wait(int32, 0, 0, 1) // Wait 1ms
+      } else {
+        throw err
+      }
+    }
+
+    // Check timeout
+    if (Date.now() - startTime > timeout) {
+      throw new Error("hegel: timeout waiting for response")
+    }
+  }
+}
+
+/**
  * Generate a value from a JSON schema.
  */
 export function generateFromSchema<T>(schema: Record<string, unknown>): T {
-  const needConnection = !isConnected()
-  if (needConnection) {
-    openConnection()
-  }
-
   const response = sendRequest("generate", schema)
-
-  if (needConnection && getSpanDepth() === 0) {
-    closeConnection()
-  }
 
   // Note: sendRequest already validates response.error, so this is defensive
   if (response.error) {
