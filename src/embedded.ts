@@ -64,145 +64,133 @@ export class Hegel {
   /**
    * Run the test.
    */
-  run(): void {
-    runEmbedded(this.testFn, this._testCases, this._verbosity)
+  run(): Promise<void> {
+    return runEmbedded(this.testFn, this._testCases, this._verbosity)
   }
 }
 
 /**
  * Simple wrapper for running a Hegel test with default options.
  */
-export function hegel(testFn: () => void): void {
-  new Hegel(testFn).run()
+export function hegel(testFn: () => void): Promise<void> {
+  return new Hegel(testFn).run()
 }
 
 /**
  * Run embedded mode: create socket server, spawn hegel, handle connections.
- * This function blocks until all tests are complete using worker thread synchronization.
+ * Returns a Promise that resolves when all tests complete.
  */
 function runEmbedded(
   testFn: () => void,
   testCases: number,
   verbosity: Verbosity,
-): void {
-  const hegelPath = ensureHegel()
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const hegelPath = ensureHegel()
 
-  // Create temp directory for socket
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hegel-ts-"))
-  const socketPath = path.join(tmpDir, "hegel.sock")
+    // Create temp directory for socket
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hegel-ts-"))
+    const socketPath = path.join(tmpDir, "hegel.sock")
 
-  // Use SharedArrayBuffer for synchronization
-  // [0] = completion flag (0 = running, 1 = done)
-  // [1] = exit code
-  const sharedBuffer = new SharedArrayBuffer(8)
-  const syncArray = new Int32Array(sharedBuffer)
+    // Track exit code from hegel process
+    let hegelExitCode = 0
 
-  // Track cleanup state
-  let cleaned = false
-  const cleanup = () => {
-    if (cleaned) return
-    cleaned = true
-    try {
-      fs.unlinkSync(socketPath)
-    } catch {}
-    try {
-      fs.rmdirSync(tmpDir)
-    } catch {}
-  }
-
-  // Create Unix socket server
-  const server = net.createServer()
-  server.listen(socketPath)
-
-  // Spawn hegel in client mode
-  const child = spawn(
-    hegelPath,
-    [
-      "--client-mode",
-      socketPath,
-      "--test-cases",
-      testCases.toString(),
-      "--no-tui",
-      "--verbosity",
-      verbosity,
-    ],
-    {
-      stdio: ["ignore", "inherit", "inherit"],
-    },
-  )
-
-  child.on("exit", code => {
-    if (verbosity === Verbosity.Debug) {
-      console.error(`hegel-ts: hegel exited with code ${code}`)
+    // Track cleanup state
+    let cleaned = false
+    const cleanup = () => {
+      if (cleaned) return
+      cleaned = true
+      try {
+        fs.unlinkSync(socketPath)
+      } catch {}
+      try {
+        fs.rmdirSync(tmpDir)
+      } catch {}
     }
-    Atomics.store(syncArray, 1, code ?? 0)
-    server.close()
+
+    // Create Unix socket server
+    const server = net.createServer()
+    server.listen(socketPath)
+
+    // Spawn hegel in client mode
+    const child = spawn(
+      hegelPath,
+      [
+        "--client-mode",
+        socketPath,
+        "--test-cases",
+        testCases.toString(),
+        "--no-tui",
+        "--verbosity",
+        verbosity,
+      ],
+      {
+        stdio: ["ignore", "inherit", "inherit"],
+      },
+    )
+
+    child.on("exit", code => {
+      if (verbosity === Verbosity.Debug) {
+        console.error(`hegel-ts: hegel exited with code ${code}`)
+      }
+      hegelExitCode = code ?? 0
+      server.close()
+    })
+
+    child.on("error", err => {
+      console.error(`hegel-ts: failed to spawn hegel: ${err.message}`)
+      cleanup()
+      reject(new Error(`Failed to spawn hegel: ${err.message}`))
+    })
+
+    // Handle connections synchronously using a queue
+    const connectionQueue: net.Socket[] = []
+    let processing = false
+
+    let connectionCount = 0
+    server.on("connection", socket => {
+      connectionCount++
+      if (verbosity === Verbosity.Debug) {
+        console.error(`hegel-ts: connection #${connectionCount} received`)
+      }
+      connectionQueue.push(socket)
+      processQueue()
+    })
+
+    function processQueue() {
+      if (processing || connectionQueue.length === 0) return
+      processing = true
+
+      const socket = connectionQueue.shift()!
+      if (verbosity === Verbosity.Debug) {
+        console.error(
+          `hegel-ts: processing connection, queue size: ${connectionQueue.length}`,
+        )
+      }
+      handleConnection(socket, testFn, verbosity)
+        .catch(err => {
+          console.error(`hegel-ts: connection error: ${err.message}`)
+        })
+        .finally(() => {
+          if (verbosity === Verbosity.Debug) {
+            console.error(`hegel-ts: connection complete`)
+          }
+          processing = false
+          processQueue()
+        })
+    }
+
+    server.on("close", () => {
+      if (verbosity === Verbosity.Debug) {
+        console.error("hegel-ts: server closed")
+      }
+      cleanup()
+      if (hegelExitCode !== 0) {
+        process.exit(hegelExitCode)
+      }
+      resolve()
+    })
   })
-
-  child.on("error", err => {
-    console.error(`hegel-ts: failed to spawn hegel: ${err.message}`)
-    cleanup()
-    process.exit(1)
-  })
-
-  // Handle connections synchronously using a queue
-  const connectionQueue: net.Socket[] = []
-  let processing = false
-
-  let connectionCount = 0
-  server.on("connection", socket => {
-    connectionCount++
-    if (verbosity === Verbosity.Debug) {
-      console.error(`hegel-ts: connection #${connectionCount} received`)
-    }
-    connectionQueue.push(socket)
-    processQueue()
-  })
-
-  function processQueue() {
-    if (processing || connectionQueue.length === 0) return
-    processing = true
-
-    const socket = connectionQueue.shift()!
-    if (verbosity === Verbosity.Debug) {
-      console.error(
-        `hegel-ts: processing connection, queue size: ${connectionQueue.length}`,
-      )
-    }
-    handleConnection(socket, testFn, verbosity)
-      .catch(err => {
-        console.error(`hegel-ts: connection error: ${err.message}`)
-      })
-      .finally(() => {
-        if (verbosity === Verbosity.Debug) {
-          console.error(`hegel-ts: connection complete`)
-        }
-        processing = false
-        processQueue()
-      })
-  }
-
-  server.on("close", () => {
-    if (verbosity === Verbosity.Debug) {
-      console.error("hegel-ts: server closed")
-    }
-    cleanup()
-    // Signal completion
-    Atomics.store(syncArray, 0, 1)
-    const exitCode = Atomics.load(syncArray, 1)
-    if (exitCode !== 0) {
-      process.exit(exitCode)
-    }
-  })
-
-  // Keep process alive while hegel is running
-  // Note: hegel() returns before tests complete due to Node.js's async model.
-  // This is acceptable because test code runs inside the callback, not after hegel().
-  const keepAlive = setInterval(() => {
-    if (Atomics.load(syncArray, 0) === 1) {
-      clearInterval(keepAlive)
-    }
-  }, 100)
 }
 
 /**

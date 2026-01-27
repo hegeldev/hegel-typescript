@@ -7,7 +7,7 @@ interface Params {
 
 const params = getParams<Params>()
 
-new Hegel(() => {
+await new Hegel(() => {
   const value = sampledFrom(params.options).generate()
   write({ value })
 }).testCases(getTestCases()).run()

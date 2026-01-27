@@ -8,7 +8,7 @@ interface Params {
 
 const params = getParams<Params>()
 
-new Hegel(() => {
+await new Hegel(() => {
   let gen = integers()
   if (params.min_value !== null) {
     gen = gen.min(params.min_value)

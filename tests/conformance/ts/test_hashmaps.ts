@@ -13,7 +13,7 @@ interface Params {
 
 const params = getParams<Params>()
 
-new Hegel(() => {
+await new Hegel(() => {
   // Value generator with bounds
   const valueGen = integers().min(params.min_value).max(params.max_value)
 
