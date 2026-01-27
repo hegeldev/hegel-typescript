@@ -11,10 +11,16 @@
   },
   "scripts": {
     "build": "tsc",
-    "clean": "rm -rf dist"
+    "format": "prettier --write src"
+  },
+  "prettier": {
+    "semi": false,
+    "arrowParens": "avoid",
+    "printWidth": 88
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "prettier": "^3.6.2",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"
   },

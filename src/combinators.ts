@@ -1,21 +1,16 @@
-import { generateFromSchema } from "./connection.js";
-import { Generator, JsonSchema, FuncGenerator } from "./generator.js";
-import { booleans } from "./primitives.js";
-import { integers } from "./integers.js";
-import { LABELS } from "./labels.js";
-import { group } from "./spans.js";
+import { generateFromSchema } from "./connection.js"
+import { Generator, JsonSchema, FuncGenerator } from "./generator.js"
+import { booleans } from "./primitives.js"
+import { integers } from "./integers.js"
+import { LABELS } from "./labels.js"
+import { group } from "./spans.js"
 
 /**
  * Check if a value is a primitive type that can be represented in sampled_from schema.
  */
 function isPrimitive(value: unknown): boolean {
-  const type = typeof value;
-  return (
-    type === "string" ||
-    type === "number" ||
-    type === "boolean" ||
-    value === null
-  );
+  const type = typeof value
+  return type === "string" || type === "number" || type === "boolean" || value === null
 }
 
 /**
@@ -24,47 +19,50 @@ function isPrimitive(value: unknown): boolean {
 class SampledFromGenerator<T> implements Generator<T> {
   constructor(private readonly elements: readonly T[]) {
     if (elements.length === 0) {
-      throw new Error("sampledFrom: cannot sample from empty array");
+      throw new Error("sampledFrom: cannot sample from empty array")
     }
   }
 
   generate(): T {
-    const schema = this.schema();
+    const schema = this.schema()
     if (schema) {
-      return generateFromSchema<T>(schema);
+      return generateFromSchema<T>(schema)
     }
 
     // Compositional fallback for non-primitive types
     return group(LABELS.SAMPLED_FROM, () => {
-      const index = integers().min(0).max(this.elements.length - 1).generate();
-      return this.elements[index];
-    });
+      const index = integers()
+        .min(0)
+        .max(this.elements.length - 1)
+        .generate()
+      return this.elements[index]
+    })
   }
 
   schema(): JsonSchema | null {
     // Only use sampled_from schema for primitive types
     if (this.elements.every(isPrimitive)) {
-      return { sampled_from: this.elements as unknown[] };
+      return { sampled_from: this.elements as unknown[] }
     }
-    return null;
+    return null
   }
 
   map<U>(f: (value: T) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()));
+    return new FuncGenerator(() => f(this.generate()))
   }
 
   flatMap<U>(f: (value: T) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate());
+    return new FuncGenerator(() => f(this.generate()).generate())
   }
 
   filter(predicate: (value: T) => boolean, maxAttempts = 3): Generator<T> {
     return new FuncGenerator(() => {
       for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate();
-        if (predicate(value)) return value;
+        const value = this.generate()
+        if (predicate(value)) return value
       }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`);
-    });
+      throw new Error(`filter: failed after ${maxAttempts} attempts`)
+    })
   }
 }
 
@@ -78,7 +76,7 @@ class SampledFromGenerator<T> implements Generator<T> {
  * ```
  */
 export function sampledFrom<T>(elements: readonly T[]): Generator<T> {
-  return new SampledFromGenerator(elements);
+  return new SampledFromGenerator(elements)
 }
 
 /**
@@ -87,14 +85,14 @@ export function sampledFrom<T>(elements: readonly T[]): Generator<T> {
 class OneOfGenerator<T> implements Generator<T> {
   constructor(private readonly generators: Generator<T>[]) {
     if (generators.length === 0) {
-      throw new Error("oneOf: no generators provided");
+      throw new Error("oneOf: no generators provided")
     }
   }
 
   generate(): T {
-    const schema = this.schema();
+    const schema = this.schema()
     if (schema) {
-      return generateFromSchema<T>(schema);
+      return generateFromSchema<T>(schema)
     }
 
     // Compositional fallback
@@ -102,37 +100,37 @@ class OneOfGenerator<T> implements Generator<T> {
       const index = integers()
         .min(0)
         .max(this.generators.length - 1)
-        .generate();
-      return this.generators[index].generate();
-    });
+        .generate()
+      return this.generators[index].generate()
+    })
   }
 
   schema(): JsonSchema | null {
-    const schemas: JsonSchema[] = [];
+    const schemas: JsonSchema[] = []
     for (const gen of this.generators) {
-      const s = gen.schema();
-      if (!s) return null;
-      schemas.push(s);
+      const s = gen.schema()
+      if (!s) return null
+      schemas.push(s)
     }
-    return { one_of: schemas };
+    return { one_of: schemas }
   }
 
   map<U>(f: (value: T) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()));
+    return new FuncGenerator(() => f(this.generate()))
   }
 
   flatMap<U>(f: (value: T) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate());
+    return new FuncGenerator(() => f(this.generate()).generate())
   }
 
   filter(predicate: (value: T) => boolean, maxAttempts = 3): Generator<T> {
     return new FuncGenerator(() => {
       for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate();
-        if (predicate(value)) return value;
+        const value = this.generate()
+        if (predicate(value)) return value
       }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`);
-    });
+      throw new Error(`filter: failed after ${maxAttempts} attempts`)
+    })
   }
 }
 
@@ -148,7 +146,7 @@ class OneOfGenerator<T> implements Generator<T> {
  * ```
  */
 export function oneOf<T>(...generators: Generator<T>[]): Generator<T> {
-  return new OneOfGenerator(generators);
+  return new OneOfGenerator(generators)
 }
 
 /**
@@ -158,46 +156,46 @@ class OptionalGenerator<T> implements Generator<T | null> {
   constructor(private readonly inner: Generator<T>) {}
 
   generate(): T | null {
-    const schema = this.schema();
+    const schema = this.schema()
     if (schema) {
-      return generateFromSchema<T | null>(schema);
+      return generateFromSchema<T | null>(schema)
     }
 
     // Compositional fallback
     return group(LABELS.OPTIONAL, () => {
-      const isNull = booleans().generate();
-      return isNull ? null : this.inner.generate();
-    });
+      const isNull = booleans().generate()
+      return isNull ? null : this.inner.generate()
+    })
   }
 
   schema(): JsonSchema | null {
-    const innerSchema = this.inner.schema();
-    if (!innerSchema) return null;
+    const innerSchema = this.inner.schema()
+    if (!innerSchema) return null
 
     return {
       one_of: [{ type: "null" }, innerSchema],
-    };
+    }
   }
 
   map<U>(f: (value: T | null) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()));
+    return new FuncGenerator(() => f(this.generate()))
   }
 
   flatMap<U>(f: (value: T | null) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate());
+    return new FuncGenerator(() => f(this.generate()).generate())
   }
 
   filter(
     predicate: (value: T | null) => boolean,
-    maxAttempts = 3
+    maxAttempts = 3,
   ): Generator<T | null> {
     return new FuncGenerator(() => {
       for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate();
-        if (predicate(value)) return value;
+        const value = this.generate()
+        if (predicate(value)) return value
       }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`);
-    });
+      throw new Error(`filter: failed after ${maxAttempts} attempts`)
+    })
   }
 }
 
@@ -211,5 +209,5 @@ class OptionalGenerator<T> implements Generator<T | null> {
  * ```
  */
 export function optional<T>(inner: Generator<T>): Generator<T | null> {
-  return new OptionalGenerator(inner);
+  return new OptionalGenerator(inner)
 }

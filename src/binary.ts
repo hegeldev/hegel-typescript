@@ -1,49 +1,46 @@
-import { generateFromSchema } from "./connection.js";
-import { FuncGenerator, Generator, JsonSchema } from "./generator.js";
+import { generateFromSchema } from "./connection.js"
+import { FuncGenerator, Generator, JsonSchema } from "./generator.js"
 
 /**
  * Options for binary generator.
  */
 export interface BinaryOptions {
   /** Minimum size in bytes (default: 0) */
-  minSize?: number;
+  minSize?: number
   /** Maximum size in bytes (default: no limit) */
-  maxSize?: number;
+  maxSize?: number
 }
 
 /**
  * Generator for binary data (byte sequences).
  */
 class BinaryGenerator extends FuncGenerator<Uint8Array> {
-  private readonly _binarySchema: JsonSchema;
+  private readonly _binarySchema: JsonSchema
 
   constructor(options: BinaryOptions = {}) {
-    const schema: JsonSchema = { type: "binary" };
+    const schema: JsonSchema = { type: "binary" }
     if (options.minSize !== undefined && options.minSize > 0) {
-      schema.min_size = options.minSize;
+      schema.min_size = options.minSize
     }
     if (options.maxSize !== undefined) {
-      schema.max_size = options.maxSize;
+      schema.max_size = options.maxSize
     }
 
-    super(
-      () => {
-        const b64 = generateFromSchema<string>(schema);
-        // Decode base64 to Uint8Array
-        const binaryString = atob(b64);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        return bytes;
-      },
-      schema
-    );
-    this._binarySchema = schema;
+    super(() => {
+      const b64 = generateFromSchema<string>(schema)
+      // Decode base64 to Uint8Array
+      const binaryString = atob(b64)
+      const bytes = new Uint8Array(binaryString.length)
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i)
+      }
+      return bytes
+    }, schema)
+    this._binarySchema = schema
   }
 
   override schema(): JsonSchema {
-    return this._binarySchema;
+    return this._binarySchema
   }
 }
 
@@ -63,5 +60,5 @@ class BinaryGenerator extends FuncGenerator<Uint8Array> {
  * ```
  */
 export function binary(options: BinaryOptions = {}): Generator<Uint8Array> {
-  return new BinaryGenerator(options);
+  return new BinaryGenerator(options)
 }

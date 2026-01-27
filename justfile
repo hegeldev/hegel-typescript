@@ -1,0 +1,2 @@
+format:
+    npm run format

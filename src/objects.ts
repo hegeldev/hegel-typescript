@@ -1,14 +1,14 @@
-import { generateFromSchema } from "./connection.js";
-import { Generator, JsonSchema, FuncGenerator } from "./generator.js";
-import { LABELS } from "./labels.js";
-import { group } from "./spans.js";
+import { generateFromSchema } from "./connection.js"
+import { Generator, JsonSchema, FuncGenerator } from "./generator.js"
+import { LABELS } from "./labels.js"
+import { group } from "./spans.js"
 
 /**
  * Field definition for fixed objects.
  */
 interface FieldDef {
-  name: string;
-  generator: Generator<unknown>;
+  name: string
+  generator: Generator<unknown>
 }
 
 /**
@@ -16,17 +16,17 @@ interface FieldDef {
  * Allows defining objects with specific fields and their generators.
  */
 export class FixedObjectBuilder<T extends Record<string, unknown>> {
-  private readonly fields: FieldDef[];
+  private readonly fields: FieldDef[]
 
   private constructor(fields: FieldDef[] = []) {
-    this.fields = fields;
+    this.fields = fields
   }
 
   /**
    * Create a new FixedObjectBuilder.
    */
   static create(): FixedObjectBuilder<Record<string, never>> {
-    return new FixedObjectBuilder([]);
+    return new FixedObjectBuilder([])
   }
 
   /**
@@ -34,83 +34,81 @@ export class FixedObjectBuilder<T extends Record<string, unknown>> {
    */
   field<K extends string, V>(
     name: K,
-    generator: Generator<V>
+    generator: Generator<V>,
   ): FixedObjectBuilder<T & Record<K, V>> {
     return new FixedObjectBuilder<T & Record<K, V>>([
       ...this.fields,
       { name, generator },
-    ]);
+    ])
   }
 
   /**
    * Build the generator.
    */
   build(): Generator<T> {
-    return new FixedObjectGenerator<T>(this.fields);
+    return new FixedObjectGenerator<T>(this.fields)
   }
 }
 
 /**
  * Generator for fixed objects with predefined fields.
  */
-class FixedObjectGenerator<T extends Record<string, unknown>>
-  implements Generator<T>
-{
+class FixedObjectGenerator<T extends Record<string, unknown>> implements Generator<T> {
   constructor(private readonly fields: FieldDef[]) {}
 
   generate(): T {
-    const schema = this.schema();
+    const schema = this.schema()
     if (schema) {
-      const values = generateFromSchema<unknown[]>(schema);
+      const values = generateFromSchema<unknown[]>(schema)
       // Convert tuple back to object
-      const result: Record<string, unknown> = {};
+      const result: Record<string, unknown> = {}
       for (let i = 0; i < this.fields.length; i++) {
-        result[this.fields[i].name] = values[i];
+        result[this.fields[i].name] = values[i]
       }
-      return result as T;
+      return result as T
     }
 
     // Compositional fallback
     return group(LABELS.FIXED_OBJECT, () => {
-      const result: Record<string, unknown> = {};
+      const result: Record<string, unknown> = {}
       for (const field of this.fields) {
-        result[field.name] = field.generator.generate();
+        result[field.name] = field.generator.generate()
       }
-      return result as T;
-    });
+      return result as T
+    })
   }
 
   schema(): JsonSchema | null {
-    const elements: JsonSchema[] = [];
+    const elements: JsonSchema[] = []
 
     for (const field of this.fields) {
-      const fieldSchema = field.generator.schema();
-      if (!fieldSchema) return null;
-      elements.push(fieldSchema);
+      const fieldSchema = field.generator.schema()
+      if (!fieldSchema) return null
+      elements.push(fieldSchema)
     }
 
     return {
       type: "tuple",
       elements,
-    };
+    }
   }
 
   map<U>(f: (value: T) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()));
+    return new FuncGenerator(() => f(this.generate()))
   }
 
   flatMap<U>(f: (value: T) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate());
+    return new FuncGenerator(() => f(this.generate()).generate())
   }
 
   filter(predicate: (value: T) => boolean, maxAttempts = 3): Generator<T> {
     return new FuncGenerator(() => {
       for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate();
-        if (predicate(value)) return value;
+        const value = this.generate()
+        if (predicate(value)) return value
       }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`);
-    });
+      throw new Error(`filter: failed after ${maxAttempts} attempts`)
+    })
   }
 }
 
@@ -131,5 +129,5 @@ class FixedObjectGenerator<T extends Record<string, unknown>>
  * ```
  */
 export function fixedObject(): FixedObjectBuilder<Record<string, never>> {
-  return FixedObjectBuilder.create();
+  return FixedObjectBuilder.create()
 }

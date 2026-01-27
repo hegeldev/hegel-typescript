@@ -6,8 +6,8 @@ import {
   isConnected,
   openConnection,
   sendRequest,
-} from "./connection.js";
-import { Label } from "./labels.js";
+} from "./connection.js"
+import { Label } from "./labels.js"
 
 /**
  * Start a labeled span for structural grouping.
@@ -15,10 +15,10 @@ import { Label } from "./labels.js";
  */
 export function startSpan(label: Label): void {
   if (!isConnected()) {
-    openConnection();
+    openConnection()
   }
-  incrementSpanDepth();
-  sendRequest("start_span", label);
+  incrementSpanDepth()
+  sendRequest("start_span", label)
 }
 
 /**
@@ -26,10 +26,10 @@ export function startSpan(label: Label): void {
  * @param discard - If true, discard the data generated in this span (e.g., filtered value rejected)
  */
 export function stopSpan(discard: boolean): void {
-  sendRequest("stop_span", discard);
-  decrementSpanDepth();
+  sendRequest("stop_span", discard)
+  decrementSpanDepth()
   if (getSpanDepth() === 0) {
-    closeConnection();
+    closeConnection()
   }
 }
 
@@ -38,14 +38,14 @@ export function stopSpan(discard: boolean): void {
  * The span helps Hegel understand structure for shrinking.
  */
 export function group<T>(label: Label, fn: () => T): T {
-  startSpan(label);
+  startSpan(label)
   try {
-    const result = fn();
-    stopSpan(false);
-    return result;
+    const result = fn()
+    stopSpan(false)
+    return result
   } catch (err) {
-    stopSpan(true);
-    throw err;
+    stopSpan(true)
+    throw err
   }
 }
 
@@ -55,13 +55,13 @@ export function group<T>(label: Label, fn: () => T): T {
  * Used for filtering where rejected values should be discarded.
  */
 export function discardableGroup<T>(label: Label, fn: () => T | null): T | null {
-  startSpan(label);
+  startSpan(label)
   try {
-    const result = fn();
-    stopSpan(result === null);
-    return result;
+    const result = fn()
+    stopSpan(result === null)
+    return result
   } catch (err) {
-    stopSpan(true);
-    throw err;
+    stopSpan(true)
+    throw err
   }
 }

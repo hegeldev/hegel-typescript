@@ -16,6 +16,6 @@ export const LABELS = {
   FLAT_MAP: 11,
   FILTER: 12,
   SAMPLED_FROM: 13,
-} as const;
+} as const
 
-export type Label = (typeof LABELS)[keyof typeof LABELS];
+export type Label = (typeof LABELS)[keyof typeof LABELS]

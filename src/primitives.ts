@@ -1,11 +1,11 @@
-import { Generator, JsonSchema, SchemaGenerator } from "./generator.js";
+import { Generator, JsonSchema, SchemaGenerator } from "./generator.js"
 
 /**
  * Generator for null values.
  */
 class NullGenerator extends SchemaGenerator<null> {
   constructor() {
-    super({ type: "null" });
+    super({ type: "null" })
   }
 }
 
@@ -13,7 +13,7 @@ class NullGenerator extends SchemaGenerator<null> {
  * Create a generator that always produces null.
  */
 export function nulls(): Generator<null> {
-  return new NullGenerator();
+  return new NullGenerator()
 }
 
 /**
@@ -21,7 +21,7 @@ export function nulls(): Generator<null> {
  */
 class BooleanGenerator extends SchemaGenerator<boolean> {
   constructor() {
-    super({ type: "boolean" });
+    super({ type: "boolean" })
   }
 }
 
@@ -29,7 +29,7 @@ class BooleanGenerator extends SchemaGenerator<boolean> {
  * Create a generator for boolean values.
  */
 export function booleans(): Generator<boolean> {
-  return new BooleanGenerator();
+  return new BooleanGenerator()
 }
 
 /**
@@ -37,13 +37,13 @@ export function booleans(): Generator<boolean> {
  */
 class JustGenerator<T> extends SchemaGenerator<T> {
   constructor(private readonly value: T) {
-    super({ const: value });
+    super({ const: value })
   }
 
   // Override generate to return the constant value directly
   // (no need for socket communication)
   override generate(): T {
-    return this.value;
+    return this.value
   }
 }
 
@@ -51,5 +51,5 @@ class JustGenerator<T> extends SchemaGenerator<T> {
  * Create a generator that always produces the same value.
  */
 export function just<T>(value: T): Generator<T> {
-  return new JustGenerator(value);
+  return new JustGenerator(value)
 }

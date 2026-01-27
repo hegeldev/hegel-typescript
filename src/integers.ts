@@ -1,12 +1,12 @@
-import { generateFromSchema } from "./connection.js";
-import { Generator, JsonSchema } from "./generator.js";
-import { FuncGenerator } from "./generator.js";
+import { generateFromSchema } from "./connection.js"
+import { Generator, JsonSchema } from "./generator.js"
+import { FuncGenerator } from "./generator.js"
 
 /**
  * Safe integer bounds in JavaScript.
  */
-const MIN_SAFE_INTEGER = Number.MIN_SAFE_INTEGER;
-const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
+const MIN_SAFE_INTEGER = Number.MIN_SAFE_INTEGER
+const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER
 
 /**
  * Generator for integer values with builder pattern.
@@ -14,32 +14,32 @@ const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
 export class IntegerGenerator implements Generator<number> {
   private constructor(
     private readonly _min: number = MIN_SAFE_INTEGER,
-    private readonly _max: number = MAX_SAFE_INTEGER
+    private readonly _max: number = MAX_SAFE_INTEGER,
   ) {}
 
   /**
    * Create a new IntegerGenerator.
    */
   static create(): IntegerGenerator {
-    return new IntegerGenerator();
+    return new IntegerGenerator()
   }
 
   /**
    * Set the minimum value (inclusive).
    */
   min(value: number): IntegerGenerator {
-    return new IntegerGenerator(value, this._max);
+    return new IntegerGenerator(value, this._max)
   }
 
   /**
    * Set the maximum value (inclusive).
    */
   max(value: number): IntegerGenerator {
-    return new IntegerGenerator(this._min, value);
+    return new IntegerGenerator(this._min, value)
   }
 
   generate(): number {
-    return generateFromSchema<number>(this.schema());
+    return generateFromSchema<number>(this.schema())
   }
 
   schema(): JsonSchema {
@@ -47,30 +47,25 @@ export class IntegerGenerator implements Generator<number> {
       type: "integer",
       minimum: this._min,
       maximum: this._max,
-    };
+    }
   }
 
   map<U>(f: (value: number) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()));
+    return new FuncGenerator(() => f(this.generate()))
   }
 
   flatMap<U>(f: (value: number) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate());
+    return new FuncGenerator(() => f(this.generate()).generate())
   }
 
-  filter(
-    predicate: (value: number) => boolean,
-    maxAttempts = 3
-  ): Generator<number> {
+  filter(predicate: (value: number) => boolean, maxAttempts = 3): Generator<number> {
     return new FuncGenerator(() => {
       for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate();
-        if (predicate(value)) return value;
+        const value = this.generate()
+        if (predicate(value)) return value
       }
-      throw new Error(
-        `filter: failed after ${maxAttempts} attempts`
-      );
-    });
+      throw new Error(`filter: failed after ${maxAttempts} attempts`)
+    })
   }
 }
 
@@ -87,5 +82,5 @@ export class IntegerGenerator implements Generator<number> {
  * ```
  */
 export function integers(): IntegerGenerator {
-  return IntegerGenerator.create();
+  return IntegerGenerator.create()
 }
