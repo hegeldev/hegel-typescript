@@ -250,53 +250,57 @@ export function sets<T>(elements: Generator<T>): SetGenerator<T> {
 }
 
 /**
- * Generator for Maps (dictionaries) with string keys.
+ * Generator for Maps (dictionaries) with configurable key and value types.
  */
-export class MapGenerator<V> implements Generator<Map<string, V>> {
+export class MapGenerator<K, V> implements Generator<Map<K, V>> {
   private constructor(
+    private readonly keys: Generator<K>,
     private readonly values: Generator<V>,
     private readonly _minSize: number = 0,
     private readonly _maxSize?: number
   ) {}
 
-  static create<V>(values: Generator<V>): MapGenerator<V> {
-    return new MapGenerator(values);
+  static create<K, V>(
+    keys: Generator<K>,
+    values: Generator<V>
+  ): MapGenerator<K, V> {
+    return new MapGenerator(keys, values);
   }
 
   /**
    * Set the minimum map size.
    */
-  minSize(value: number): MapGenerator<V> {
-    return new MapGenerator(this.values, value, this._maxSize);
+  minSize(value: number): MapGenerator<K, V> {
+    return new MapGenerator(this.keys, this.values, value, this._maxSize);
   }
 
   /**
    * Set the maximum map size.
    */
-  maxSize(value: number): MapGenerator<V> {
-    return new MapGenerator(this.values, this._minSize, value);
+  maxSize(value: number): MapGenerator<K, V> {
+    return new MapGenerator(this.keys, this.values, this._minSize, value);
   }
 
-  generate(): Map<string, V> {
+  generate(): Map<K, V> {
     const schema = this.schema();
     if (schema) {
       // Schema composition: single socket round-trip
-      const obj = generateFromSchema<Record<string, V>>(schema);
-      return new Map(Object.entries(obj));
+      // Wire format is [[key, value], ...]
+      const pairs = generateFromSchema<[K, V][]>(schema);
+      return new Map(pairs);
     }
 
     // Compositional fallback
     return group(LABELS.MAP, () => {
       const maxSize = this._maxSize ?? 100;
       const targetSize = integers().min(this._minSize).max(maxSize).generate();
-      const result = new Map<string, V>();
-      const keyGen = text().minSize(1).maxSize(20);
+      const result = new Map<K, V>();
       const maxAttempts = targetSize * 10;
       let attempts = 0;
 
       while (result.size < targetSize && attempts < maxAttempts) {
         group(LABELS.MAP_ENTRY, () => {
-          const key = keyGen.generate();
+          const key = this.keys.generate();
           if (!result.has(key)) {
             result.set(key, this.values.generate());
           }
@@ -311,13 +315,15 @@ export class MapGenerator<V> implements Generator<Map<string, V>> {
   }
 
   schema(): JsonSchema | null {
+    const keySchema = this.keys.schema();
     const valueSchema = this.values.schema();
-    if (!valueSchema) {
+    if (!keySchema || !valueSchema) {
       return null;
     }
 
     const schema: JsonSchema = {
       type: "dict",
+      keys: keySchema,
       values: valueSchema,
       min_size: this._minSize,
     };
@@ -329,18 +335,18 @@ export class MapGenerator<V> implements Generator<Map<string, V>> {
     return schema;
   }
 
-  map<U>(f: (value: Map<string, V>) => U): Generator<U> {
+  map<U>(f: (value: Map<K, V>) => U): Generator<U> {
     return new FuncGenerator(() => f(this.generate()));
   }
 
-  flatMap<U>(f: (value: Map<string, V>) => Generator<U>): Generator<U> {
+  flatMap<U>(f: (value: Map<K, V>) => Generator<U>): Generator<U> {
     return new FuncGenerator(() => f(this.generate()).generate());
   }
 
   filter(
-    predicate: (value: Map<string, V>) => boolean,
+    predicate: (value: Map<K, V>) => boolean,
     maxAttempts = 3
-  ): Generator<Map<string, V>> {
+  ): Generator<Map<K, V>> {
     return new FuncGenerator(() => {
       for (let i = 0; i < maxAttempts; i++) {
         const value = this.generate();
@@ -352,16 +358,22 @@ export class MapGenerator<V> implements Generator<Map<string, V>> {
 }
 
 /**
- * Create a generator for Maps with string keys.
+ * Create a generator for Maps with configurable key and value types.
  *
  * @example
  * ```typescript
- * const gen = maps(integers());
- * const m: Map<string, number> = gen.generate();
+ * // String keys (common case)
+ * const strMap = maps(text(), integers());
+ *
+ * // Integer keys
+ * const intMap = maps(integers(), text());
  * ```
  */
-export function maps<V>(values: Generator<V>): MapGenerator<V> {
-  return MapGenerator.create(values);
+export function maps<K, V>(
+  keys: Generator<K>,
+  values: Generator<V>
+): MapGenerator<K, V> {
+  return MapGenerator.create(keys, values);
 }
 
 /**
