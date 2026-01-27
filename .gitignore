@@ -6,3 +6,4 @@ dist/
 .hegel/
 .hypothesis/
 __pycache__
+.claude/settings.local.json
