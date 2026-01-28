@@ -53,7 +53,7 @@ jobs:
       - run: npm run docs
 
   conformance:
-    name: conformance tests
+    name: conformance
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
