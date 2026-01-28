@@ -7,3 +7,5 @@ dist/
 .hypothesis/
 __pycache__
 .claude/settings.local.json
+# built docs
+docs/

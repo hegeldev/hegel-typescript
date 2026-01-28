@@ -12,7 +12,8 @@
   "scripts": {
     "build": "tsc",
     "format": "prettier --write src",
-    "test": "tsx --test tests/unit/*.ts"
+    "test": "tsx --test tests/unit/*.ts",
+    "docs": "typedoc"
   },
   "prettier": {
     "semi": false,
@@ -23,6 +24,7 @@
     "@types/node": "^20.0.0",
     "prettier": "^3.6.2",
     "tsx": "^4.0.0",
+    "typedoc": "^0.28.16",
     "typescript": "^5.0.0"
   },
   "engines": {

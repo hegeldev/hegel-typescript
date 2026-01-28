@@ -14,6 +14,7 @@ export { floats, FloatGenerator } from "./floats.js"
 export { text, fromRegex, TextGenerator, RegexGenerator } from "./strings.js"
 
 export { binary } from "./binary.js"
+export type { BinaryOptions } from "./binary.js"
 
 export {
   emails,

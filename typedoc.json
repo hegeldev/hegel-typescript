@@ -1,0 +1,9 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts"],
+  "out": "docs",
+  "name": "Hegel TypeScript SDK",
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "treatWarningsAsErrors": true
+}
