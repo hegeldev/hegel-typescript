@@ -1,14 +1,16 @@
 import { generateFromSchema } from "./connection.js"
-import { Generator, JsonSchema, FuncGenerator } from "./generator.js"
+import { JsonSchema, BaseGenerator } from "./generator.js"
 
 /**
  * Generator for text strings with builder pattern.
  */
-export class TextGenerator implements Generator<string> {
+export class TextGenerator extends BaseGenerator<string> {
   private constructor(
     private readonly _minSize: number = 0,
     private readonly _maxSize?: number,
-  ) {}
+  ) {
+    super()
+  }
 
   /**
    * Create a new TextGenerator.
@@ -47,24 +49,6 @@ export class TextGenerator implements Generator<string> {
 
     return schema
   }
-
-  map<U>(f: (value: string) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()))
-  }
-
-  flatMap<U>(f: (value: string) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate())
-  }
-
-  filter(predicate: (value: string) => boolean, maxAttempts = 3): Generator<string> {
-    return new FuncGenerator(() => {
-      for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate()
-        if (predicate(value)) return value
-      }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`)
-    })
-  }
 }
 
 /**
@@ -86,11 +70,12 @@ export function text(): TextGenerator {
 /**
  * Generator for strings matching a regex pattern.
  */
-export class RegexGenerator implements Generator<string> {
+export class RegexGenerator extends BaseGenerator<string> {
   private readonly _pattern: string
   private _fullmatch: boolean = false
 
   constructor(pattern: string) {
+    super()
     this._pattern = pattern
   }
 
@@ -115,24 +100,6 @@ export class RegexGenerator implements Generator<string> {
       schema.fullmatch = true
     }
     return schema
-  }
-
-  map<U>(f: (value: string) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()))
-  }
-
-  flatMap<U>(f: (value: string) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate())
-  }
-
-  filter(predicate: (value: string) => boolean, maxAttempts = 3): Generator<string> {
-    return new FuncGenerator(() => {
-      for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate()
-        if (predicate(value)) return value
-      }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`)
-    })
   }
 }
 

@@ -1,6 +1,5 @@
 import { generateFromSchema } from "./connection.js"
-import { Generator, JsonSchema } from "./generator.js"
-import { FuncGenerator } from "./generator.js"
+import { JsonSchema, BaseGenerator } from "./generator.js"
 
 /**
  * Safe integer bounds in JavaScript.
@@ -11,11 +10,13 @@ const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER
 /**
  * Generator for integer values with builder pattern.
  */
-export class IntegerGenerator implements Generator<number> {
+export class IntegerGenerator extends BaseGenerator<number> {
   private constructor(
     private readonly _min: number = MIN_SAFE_INTEGER,
     private readonly _max: number = MAX_SAFE_INTEGER,
-  ) {}
+  ) {
+    super()
+  }
 
   /**
    * Create a new IntegerGenerator.
@@ -48,24 +49,6 @@ export class IntegerGenerator implements Generator<number> {
       minimum: this._min,
       maximum: this._max,
     }
-  }
-
-  map<U>(f: (value: number) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()))
-  }
-
-  flatMap<U>(f: (value: number) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate())
-  }
-
-  filter(predicate: (value: number) => boolean, maxAttempts = 3): Generator<number> {
-    return new FuncGenerator(() => {
-      for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate()
-        if (predicate(value)) return value
-      }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`)
-    })
   }
 }
 

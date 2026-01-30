@@ -1,5 +1,5 @@
 import { generateFromSchema } from "./connection.js"
-import { Generator, JsonSchema, FuncGenerator } from "./generator.js"
+import { Generator, JsonSchema, BaseGenerator } from "./generator.js"
 import { booleans } from "./primitives.js"
 import { integers } from "./integers.js"
 import { LABELS } from "./labels.js"
@@ -16,8 +16,9 @@ function isPrimitive(value: unknown): boolean {
 /**
  * Generator that samples uniformly from a fixed collection.
  */
-class SampledFromGenerator<T> implements Generator<T> {
+class SampledFromGenerator<T> extends BaseGenerator<T> {
   constructor(private readonly elements: readonly T[]) {
+    super()
     if (elements.length === 0) {
       throw new Error("sampledFrom: cannot sample from empty array")
     }
@@ -46,24 +47,6 @@ class SampledFromGenerator<T> implements Generator<T> {
     }
     return null
   }
-
-  map<U>(f: (value: T) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()))
-  }
-
-  flatMap<U>(f: (value: T) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate())
-  }
-
-  filter(predicate: (value: T) => boolean, maxAttempts = 3): Generator<T> {
-    return new FuncGenerator(() => {
-      for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate()
-        if (predicate(value)) return value
-      }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`)
-    })
-  }
 }
 
 /**
@@ -82,8 +65,9 @@ export function sampledFrom<T>(elements: readonly T[]): Generator<T> {
 /**
  * Generator that chooses from one of several generators.
  */
-class OneOfGenerator<T> implements Generator<T> {
+class OneOfGenerator<T> extends BaseGenerator<T> {
   constructor(private readonly generators: Generator<T>[]) {
+    super()
     if (generators.length === 0) {
       throw new Error("oneOf: no generators provided")
     }
@@ -114,24 +98,6 @@ class OneOfGenerator<T> implements Generator<T> {
     }
     return { one_of: schemas }
   }
-
-  map<U>(f: (value: T) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()))
-  }
-
-  flatMap<U>(f: (value: T) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate())
-  }
-
-  filter(predicate: (value: T) => boolean, maxAttempts = 3): Generator<T> {
-    return new FuncGenerator(() => {
-      for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate()
-        if (predicate(value)) return value
-      }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`)
-    })
-  }
 }
 
 /**
@@ -152,8 +118,10 @@ export function oneOf<T>(...generators: Generator<T>[]): Generator<T> {
 /**
  * Generator for optional values (T | null).
  */
-class OptionalGenerator<T> implements Generator<T | null> {
-  constructor(private readonly inner: Generator<T>) {}
+class OptionalGenerator<T> extends BaseGenerator<T | null> {
+  constructor(private readonly inner: Generator<T>) {
+    super()
+  }
 
   generate(): T | null {
     const schema = this.schema()
@@ -175,27 +143,6 @@ class OptionalGenerator<T> implements Generator<T | null> {
     return {
       one_of: [{ type: "null" }, innerSchema],
     }
-  }
-
-  map<U>(f: (value: T | null) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()))
-  }
-
-  flatMap<U>(f: (value: T | null) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate())
-  }
-
-  filter(
-    predicate: (value: T | null) => boolean,
-    maxAttempts = 3,
-  ): Generator<T | null> {
-    return new FuncGenerator(() => {
-      for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate()
-        if (predicate(value)) return value
-      }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`)
-    })
   }
 }
 

@@ -1,10 +1,10 @@
 import { generateFromSchema } from "./connection.js"
-import { Generator, JsonSchema, FuncGenerator } from "./generator.js"
+import { Generator, JsonSchema, BaseGenerator } from "./generator.js"
 
 /**
  * Base class for format string generators.
  */
-abstract class FormatGenerator implements Generator<string> {
+abstract class FormatGenerator extends BaseGenerator<string> {
   protected abstract getSchema(): JsonSchema
 
   generate(): string {
@@ -13,24 +13,6 @@ abstract class FormatGenerator implements Generator<string> {
 
   schema(): JsonSchema {
     return this.getSchema()
-  }
-
-  map<U>(f: (value: string) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()))
-  }
-
-  flatMap<U>(f: (value: string) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate())
-  }
-
-  filter(predicate: (value: string) => boolean, maxAttempts = 3): Generator<string> {
-    return new FuncGenerator(() => {
-      for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate()
-        if (predicate(value)) return value
-      }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`)
-    })
   }
 }
 
@@ -69,8 +51,10 @@ export function urls(): Generator<string> {
 /**
  * Generator for domain names with optional max length.
  */
-export class DomainGenerator implements Generator<string> {
-  private constructor(private readonly _maxLength: number = 255) {}
+export class DomainGenerator extends BaseGenerator<string> {
+  private constructor(private readonly _maxLength: number = 255) {
+    super()
+  }
 
   static create(): DomainGenerator {
     return new DomainGenerator()
@@ -93,24 +77,6 @@ export class DomainGenerator implements Generator<string> {
       max_length: this._maxLength,
     }
   }
-
-  map<U>(f: (value: string) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()))
-  }
-
-  flatMap<U>(f: (value: string) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate())
-  }
-
-  filter(predicate: (value: string) => boolean, maxAttempts = 3): Generator<string> {
-    return new FuncGenerator(() => {
-      for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate()
-        if (predicate(value)) return value
-      }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`)
-    })
-  }
 }
 
 /**
@@ -128,8 +94,10 @@ type IpVersion = "v4" | "v6" | "any"
 /**
  * Generator for IP addresses.
  */
-export class IpAddressGenerator implements Generator<string> {
-  private constructor(private readonly _version: IpVersion = "any") {}
+export class IpAddressGenerator extends BaseGenerator<string> {
+  private constructor(private readonly _version: IpVersion = "any") {
+    super()
+  }
 
   static create(): IpAddressGenerator {
     return new IpAddressGenerator()
@@ -164,24 +132,6 @@ export class IpAddressGenerator implements Generator<string> {
           one_of: [{ type: "ipv4" }, { type: "ipv6" }],
         }
     }
-  }
-
-  map<U>(f: (value: string) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()))
-  }
-
-  flatMap<U>(f: (value: string) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate())
-  }
-
-  filter(predicate: (value: string) => boolean, maxAttempts = 3): Generator<string> {
-    return new FuncGenerator(() => {
-      for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate()
-        if (predicate(value)) return value
-      }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`)
-    })
   }
 }
 

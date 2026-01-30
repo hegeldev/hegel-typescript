@@ -39,17 +39,39 @@ export interface Generator<T> {
    * Filter generated values by a predicate.
    * Note: This invalidates the schema, causing compositional generation.
    * @param predicate - Function that returns true for valid values
-   * @param maxAttempts - Maximum attempts before rejecting (default: 3)
    */
-  filter(predicate: (value: T) => boolean, maxAttempts?: number): Generator<T>
+  filter(predicate: (value: T) => boolean): Generator<T>
+}
+
+/**
+ * Abstract base class providing default implementations of map, flatMap, and filter.
+ * Concrete generators only need to implement generate() and schema().
+ */
+export abstract class BaseGenerator<T> implements Generator<T> {
+  abstract generate(): T
+  abstract schema(): JsonSchema | null
+
+  map<U>(f: (value: T) => U): Generator<U> {
+    return new MappedGenerator(this, f)
+  }
+
+  flatMap<U>(f: (value: T) => Generator<U>): Generator<U> {
+    return new FlatMappedGenerator(this, f)
+  }
+
+  filter(predicate: (value: T) => boolean): Generator<T> {
+    return new FilteredGenerator(this, predicate)
+  }
 }
 
 /**
  * Schema-based generator that uses a JSON schema for generation.
  * Provides efficient single socket round-trip generation.
  */
-export class SchemaGenerator<T> implements Generator<T> {
-  constructor(private readonly _schema: JsonSchema) {}
+export class SchemaGenerator<T> extends BaseGenerator<T> {
+  constructor(private readonly _schema: JsonSchema) {
+    super()
+  }
 
   generate(): T {
     return generateFromSchema<T>(this._schema)
@@ -58,29 +80,19 @@ export class SchemaGenerator<T> implements Generator<T> {
   schema(): JsonSchema {
     return this._schema
   }
-
-  map<U>(f: (value: T) => U): Generator<U> {
-    return new MappedGenerator(this, f)
-  }
-
-  flatMap<U>(f: (value: T) => Generator<U>): Generator<U> {
-    return new FlatMappedGenerator(this, f)
-  }
-
-  filter(predicate: (value: T) => boolean, maxAttempts = 3): Generator<T> {
-    return new FilteredGenerator(this, predicate, maxAttempts)
-  }
 }
 
 /**
  * Function-based generator that wraps a generation function.
  * May or may not have a schema.
  */
-export class FuncGenerator<T> implements Generator<T> {
+export class FuncGenerator<T> extends BaseGenerator<T> {
   constructor(
     private readonly genFn: () => T,
     private readonly _schema: JsonSchema | null = null,
-  ) {}
+  ) {
+    super()
+  }
 
   generate(): T {
     return this.genFn()
@@ -89,49 +101,26 @@ export class FuncGenerator<T> implements Generator<T> {
   schema(): JsonSchema | null {
     return this._schema
   }
-
-  map<U>(f: (value: T) => U): Generator<U> {
-    return new MappedGenerator(this, f)
-  }
-
-  flatMap<U>(f: (value: T) => Generator<U>): Generator<U> {
-    return new FlatMappedGenerator(this, f)
-  }
-
-  filter(predicate: (value: T) => boolean, maxAttempts = 3): Generator<T> {
-    return new FilteredGenerator(this, predicate, maxAttempts)
-  }
 }
 
 /**
  * Generator that transforms values from another generator.
  * Always has no schema (transformation invalidates it).
  */
-class MappedGenerator<T, U> implements Generator<U> {
+class MappedGenerator<T, U> extends BaseGenerator<U> {
   constructor(
     private readonly source: Generator<T>,
     private readonly f: (value: T) => U,
-  ) {}
+  ) {
+    super()
+  }
 
   generate(): U {
     return this.f(this.source.generate())
   }
 
   schema(): null {
-    // Transformation invalidates schema
     return null
-  }
-
-  map<V>(f: (value: U) => V): Generator<V> {
-    return new MappedGenerator(this, f)
-  }
-
-  flatMap<V>(f: (value: U) => Generator<V>): Generator<V> {
-    return new FlatMappedGenerator(this, f)
-  }
-
-  filter(predicate: (value: U) => boolean, maxAttempts = 3): Generator<U> {
-    return new FilteredGenerator(this, predicate, maxAttempts)
   }
 }
 
@@ -140,11 +129,13 @@ class MappedGenerator<T, U> implements Generator<U> {
  * The next generator depends on the value from the first generator.
  * Always has no schema.
  */
-class FlatMappedGenerator<T, U> implements Generator<U> {
+class FlatMappedGenerator<T, U> extends BaseGenerator<U> {
   constructor(
     private readonly source: Generator<T>,
     private readonly f: (value: T) => Generator<U>,
-  ) {}
+  ) {
+    super()
+  }
 
   generate(): U {
     return group(LABELS.FLAT_MAP, () => {
@@ -155,37 +146,25 @@ class FlatMappedGenerator<T, U> implements Generator<U> {
   }
 
   schema(): null {
-    // Dependent generation can't have static schema
     return null
-  }
-
-  map<V>(f: (value: U) => V): Generator<V> {
-    return new MappedGenerator(this, f)
-  }
-
-  flatMap<V>(f: (value: U) => Generator<V>): Generator<V> {
-    return new FlatMappedGenerator(this, f)
-  }
-
-  filter(predicate: (value: U) => boolean, maxAttempts = 3): Generator<U> {
-    return new FilteredGenerator(this, predicate, maxAttempts)
   }
 }
 
 /**
  * Generator that filters values by a predicate.
- * Retries up to maxAttempts times before rejecting.
+ * Retries up to 3 times before rejecting.
  * Always has no schema.
  */
-class FilteredGenerator<T> implements Generator<T> {
+export class FilteredGenerator<T> extends BaseGenerator<T> {
   constructor(
     private readonly source: Generator<T>,
     private readonly predicate: (value: T) => boolean,
-    private readonly maxAttempts: number,
-  ) {}
+  ) {
+    super()
+  }
 
   generate(): T {
-    for (let i = 0; i < this.maxAttempts; i++) {
+    for (let i = 0; i < 3; i++) {
       const result = discardableGroup(LABELS.FILTER, () => {
         const value = this.source.generate()
         return this.predicate(value) ? value : null
@@ -201,19 +180,6 @@ class FilteredGenerator<T> implements Generator<T> {
   }
 
   schema(): null {
-    // Filter invalidates schema
     return null
-  }
-
-  map<U>(f: (value: T) => U): Generator<U> {
-    return new MappedGenerator(this, f)
-  }
-
-  flatMap<U>(f: (value: T) => Generator<U>): Generator<U> {
-    return new FlatMappedGenerator(this, f)
-  }
-
-  filter(predicate: (value: T) => boolean, maxAttempts = 3): Generator<T> {
-    return new FilteredGenerator(this, predicate, maxAttempts)
   }
 }

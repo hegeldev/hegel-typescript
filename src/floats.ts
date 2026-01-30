@@ -1,10 +1,10 @@
 import { generateFromSchema } from "./connection.js"
-import { Generator, JsonSchema, FuncGenerator } from "./generator.js"
+import { JsonSchema, BaseGenerator } from "./generator.js"
 
 /**
  * Generator for floating-point values with builder pattern.
  */
-export class FloatGenerator implements Generator<number> {
+export class FloatGenerator extends BaseGenerator<number> {
   private constructor(
     private readonly _min?: number,
     private readonly _max?: number,
@@ -12,7 +12,9 @@ export class FloatGenerator implements Generator<number> {
     private readonly _excludeMax: boolean = false,
     private readonly _allowNan: boolean = false,
     private readonly _allowInfinity: boolean = false,
-  ) {}
+  ) {
+    super()
+  }
 
   /**
    * Create a new FloatGenerator.
@@ -135,24 +137,6 @@ export class FloatGenerator implements Generator<number> {
     }
 
     return schema
-  }
-
-  map<U>(f: (value: number) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()))
-  }
-
-  flatMap<U>(f: (value: number) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate())
-  }
-
-  filter(predicate: (value: number) => boolean, maxAttempts = 3): Generator<number> {
-    return new FuncGenerator(() => {
-      for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate()
-        if (predicate(value)) return value
-      }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`)
-    })
   }
 }
 

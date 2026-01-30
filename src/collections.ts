@@ -1,20 +1,21 @@
 import { generateFromSchema, assume } from "./connection.js"
-import { Generator, JsonSchema, FuncGenerator } from "./generator.js"
+import { Generator, JsonSchema, BaseGenerator } from "./generator.js"
 import { integers } from "./integers.js"
-import { text } from "./strings.js"
 import { LABELS } from "./labels.js"
 import { group } from "./spans.js"
 
 /**
  * Generator for arrays with builder pattern.
  */
-export class ArrayGenerator<T> implements Generator<T[]> {
+export class ArrayGenerator<T> extends BaseGenerator<T[]> {
   private constructor(
     private readonly elements: Generator<T>,
     private readonly _minSize: number = 0,
     private readonly _maxSize?: number,
     private readonly _unique: boolean = false,
-  ) {}
+  ) {
+    super()
+  }
 
   static create<T>(elements: Generator<T>): ArrayGenerator<T> {
     return new ArrayGenerator(elements)
@@ -101,24 +102,6 @@ export class ArrayGenerator<T> implements Generator<T[]> {
 
     return schema
   }
-
-  map<U>(f: (value: T[]) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()))
-  }
-
-  flatMap<U>(f: (value: T[]) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate())
-  }
-
-  filter(predicate: (value: T[]) => boolean, maxAttempts = 3): Generator<T[]> {
-    return new FuncGenerator(() => {
-      for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate()
-        if (predicate(value)) return value
-      }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`)
-    })
-  }
 }
 
 /**
@@ -144,12 +127,14 @@ export function arrays<T>(elements: Generator<T>): ArrayGenerator<T> {
  * Generator for Sets.
  * Internally generates unique arrays and converts to Set.
  */
-export class SetGenerator<T> implements Generator<Set<T>> {
+export class SetGenerator<T> extends BaseGenerator<Set<T>> {
   private constructor(
     private readonly elements: Generator<T>,
     private readonly _minSize: number = 0,
     private readonly _maxSize?: number,
-  ) {}
+  ) {
+    super()
+  }
 
   static create<T>(elements: Generator<T>): SetGenerator<T> {
     return new SetGenerator(elements)
@@ -197,24 +182,6 @@ export class SetGenerator<T> implements Generator<Set<T>> {
 
     return schema
   }
-
-  map<U>(f: (value: Set<T>) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()))
-  }
-
-  flatMap<U>(f: (value: Set<T>) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate())
-  }
-
-  filter(predicate: (value: Set<T>) => boolean, maxAttempts = 3): Generator<Set<T>> {
-    return new FuncGenerator(() => {
-      for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate()
-        if (predicate(value)) return value
-      }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`)
-    })
-  }
 }
 
 /**
@@ -227,13 +194,15 @@ export function sets<T>(elements: Generator<T>): SetGenerator<T> {
 /**
  * Generator for Maps (dictionaries) with configurable key and value types.
  */
-export class MapGenerator<K, V> implements Generator<Map<K, V>> {
+export class MapGenerator<K, V> extends BaseGenerator<Map<K, V>> {
   private constructor(
     private readonly keys: Generator<K>,
     private readonly values: Generator<V>,
     private readonly _minSize: number = 0,
     private readonly _maxSize?: number,
-  ) {}
+  ) {
+    super()
+  }
 
   static create<K, V>(keys: Generator<K>, values: Generator<V>): MapGenerator<K, V> {
     return new MapGenerator(keys, values)
@@ -312,27 +281,6 @@ export class MapGenerator<K, V> implements Generator<Map<K, V>> {
 
     return schema
   }
-
-  map<U>(f: (value: Map<K, V>) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()))
-  }
-
-  flatMap<U>(f: (value: Map<K, V>) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate())
-  }
-
-  filter(
-    predicate: (value: Map<K, V>) => boolean,
-    maxAttempts = 3,
-  ): Generator<Map<K, V>> {
-    return new FuncGenerator(() => {
-      for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate()
-        if (predicate(value)) return value
-      }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`)
-    })
-  }
 }
 
 /**
@@ -357,8 +305,10 @@ export function maps<K, V>(
 /**
  * Generator for tuples (fixed-length heterogeneous arrays).
  */
-class TupleGenerator<T extends unknown[]> implements Generator<T> {
-  constructor(private readonly generators: Generator<unknown>[]) {}
+class TupleGenerator<T extends unknown[]> extends BaseGenerator<T> {
+  constructor(private readonly generators: Generator<unknown>[]) {
+    super()
+  }
 
   generate(): T {
     const schema = this.schema()
@@ -384,24 +334,6 @@ class TupleGenerator<T extends unknown[]> implements Generator<T> {
       type: "tuple",
       elements: schemas,
     }
-  }
-
-  map<U>(f: (value: T) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()))
-  }
-
-  flatMap<U>(f: (value: T) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate())
-  }
-
-  filter(predicate: (value: T) => boolean, maxAttempts = 3): Generator<T> {
-    return new FuncGenerator(() => {
-      for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate()
-        if (predicate(value)) return value
-      }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`)
-    })
   }
 }
 

@@ -1,5 +1,5 @@
 import { generateFromSchema } from "./connection.js"
-import { Generator, JsonSchema, FuncGenerator } from "./generator.js"
+import { Generator, JsonSchema, BaseGenerator } from "./generator.js"
 import { LABELS } from "./labels.js"
 import { group } from "./spans.js"
 
@@ -53,8 +53,10 @@ export class FixedObjectBuilder<T extends Record<string, unknown>> {
 /**
  * Generator for fixed objects with predefined fields.
  */
-class FixedObjectGenerator<T extends Record<string, unknown>> implements Generator<T> {
-  constructor(private readonly fields: FieldDef[]) {}
+class FixedObjectGenerator<T extends Record<string, unknown>> extends BaseGenerator<T> {
+  constructor(private readonly fields: FieldDef[]) {
+    super()
+  }
 
   generate(): T {
     const schema = this.schema()
@@ -91,24 +93,6 @@ class FixedObjectGenerator<T extends Record<string, unknown>> implements Generat
       type: "tuple",
       elements,
     }
-  }
-
-  map<U>(f: (value: T) => U): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()))
-  }
-
-  flatMap<U>(f: (value: T) => Generator<U>): Generator<U> {
-    return new FuncGenerator(() => f(this.generate()).generate())
-  }
-
-  filter(predicate: (value: T) => boolean, maxAttempts = 3): Generator<T> {
-    return new FuncGenerator(() => {
-      for (let i = 0; i < maxAttempts; i++) {
-        const value = this.generate()
-        if (predicate(value)) return value
-      }
-      throw new Error(`filter: failed after ${maxAttempts} attempts`)
-    })
   }
 }
 
