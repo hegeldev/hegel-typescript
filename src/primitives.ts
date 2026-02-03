@@ -21,7 +21,7 @@ export function nulls(): Generator<null> {
  */
 class BooleanGenerator extends SchemaGenerator<boolean> {
   constructor() {
-    super({ type: "boolean", p: 0.5 })
+    super({ type: "boolean" })
   }
 }
 
