@@ -10,8 +10,8 @@ export class FloatGenerator extends BaseGenerator<number> {
     private readonly _max?: number,
     private readonly _excludeMin: boolean = false,
     private readonly _excludeMax: boolean = false,
-    private readonly _allowNan: boolean = false,
-    private readonly _allowInfinity: boolean = false,
+    private readonly _allowNan: boolean = true,
+    private readonly _allowInfinity: boolean = true,
   ) {
     super()
   }
@@ -80,30 +80,30 @@ export class FloatGenerator extends BaseGenerator<number> {
   }
 
   /**
-   * Allow NaN values to be generated.
+   * Set whether NaN values can be generated.
    */
-  allowNan(): FloatGenerator {
+  allowNan(allow: boolean): FloatGenerator {
     return new FloatGenerator(
       this._min,
       this._max,
       this._excludeMin,
       this._excludeMax,
-      true,
+      allow,
       this._allowInfinity,
     )
   }
 
   /**
-   * Allow infinity values to be generated.
+   * Set whether infinity values can be generated.
    */
-  allowInfinity(): FloatGenerator {
+  allowInfinity(allow: boolean): FloatGenerator {
     return new FloatGenerator(
       this._min,
       this._max,
       this._excludeMin,
       this._excludeMax,
       this._allowNan,
-      true,
+      allow,
     )
   }
 
@@ -112,28 +112,21 @@ export class FloatGenerator extends BaseGenerator<number> {
   }
 
   schema(): JsonSchema {
-    const schema: JsonSchema = { type: "number" }
+    const schema: JsonSchema = {
+      type: "number",
+      exclude_minimum: this._excludeMin,
+      exclude_maximum: this._excludeMax,
+      allow_nan: this._allowNan,
+      allow_infinity: this._allowInfinity,
+      width: 64, // JavaScript numbers are always f64
+    }
 
     if (this._min !== undefined) {
       schema.minimum = this._min
-      if (this._excludeMin) {
-        schema.exclude_minimum = true
-      }
     }
 
     if (this._max !== undefined) {
       schema.maximum = this._max
-      if (this._excludeMax) {
-        schema.exclude_maximum = true
-      }
-    }
-
-    if (this._allowNan) {
-      schema.allow_nan = true
-    }
-
-    if (this._allowInfinity) {
-      schema.allow_infinity = true
     }
 
     return schema

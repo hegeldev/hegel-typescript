@@ -92,14 +92,11 @@ export class RegexGenerator extends BaseGenerator<string> {
   }
 
   schema(): JsonSchema {
-    const schema: JsonSchema = {
+    return {
       type: "regex",
       pattern: this._pattern,
+      fullmatch: this._fullmatch,
     }
-    if (this._fullmatch) {
-      schema.fullmatch = true
-    }
-    return schema
   }
 }
 

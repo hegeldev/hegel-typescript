@@ -18,9 +18,9 @@ class BinaryGenerator extends FuncGenerator<Uint8Array> {
   private readonly _binarySchema: JsonSchema
 
   constructor(options: BinaryOptions = {}) {
-    const schema: JsonSchema = { type: "binary" }
-    if (options.minSize !== undefined && options.minSize > 0) {
-      schema.min_size = options.minSize
+    const schema: JsonSchema = {
+      type: "binary",
+      min_size: options.minSize ?? 0,
     }
     if (options.maxSize !== undefined) {
       schema.max_size = options.maxSize
