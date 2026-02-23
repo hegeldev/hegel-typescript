@@ -34,7 +34,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/node": "^25.3.0",
     "@vitest/coverage-v8": "^4.0.18",
+    "cbor2": "^2.2.1",
     "eslint": "^10.0.1",
     "prettier": "^3.8.1",
     "typedoc": "^0.28.17",
