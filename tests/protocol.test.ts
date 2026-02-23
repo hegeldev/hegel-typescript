@@ -279,6 +279,20 @@ describe("recvExact", () => {
       closeAll(reader, writer);
     }
   }, 10_000);
+
+  it("throws ConnectionError via onClose when partial data then clean close", async () => {
+    const [reader, writer] = await makeSocketPair();
+    try {
+      // Start waiting before any data arrives
+      const promise = recvExact(reader, 10);
+      // Write partial data then cleanly close (FIN, not RST) to trigger onClose
+      writer.write(Buffer.from("abc"));
+      writer.end();
+      await expect(promise).rejects.toThrow("Connection closed while reading");
+    } finally {
+      closeAll(reader);
+    }
+  }, 10_000);
 });
 
 // ---------------------------------------------------------------------------

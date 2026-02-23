@@ -1,5 +1,5 @@
 {
-  "entryPoints": ["src/index.ts", "src/protocol.ts"],
+  "entryPoints": ["src/index.ts", "src/protocol.ts", "src/connection.ts"],
   "out": "docs",
   "treatWarningsAsErrors": true,
   "excludePrivate": true,

@@ -131,6 +131,7 @@ export function recvExact(socket: net.Socket, n: number): Promise<Buffer> {
           socket.once("readable", tryRead);
           socket.once("end", onEnd);
           socket.once("error", onError);
+          socket.once("close", onClose);
           return;
         }
         chunks.push(chunk);
@@ -139,12 +140,14 @@ export function recvExact(socket: net.Socket, n: number): Promise<Buffer> {
       // Got everything
       socket.off("end", onEnd);
       socket.off("error", onError);
+      socket.off("close", onClose);
       resolve(Buffer.concat(chunks).subarray(0, n));
     }
 
     function onEnd(): void {
       socket.off("readable", tryRead);
       socket.off("error", onError);
+      socket.off("close", onClose);
       if (received === 0) {
         reject(
           new PartialPacket(
@@ -163,7 +166,15 @@ export function recvExact(socket: net.Socket, n: number): Promise<Buffer> {
     function onError(err: Error): void {
       socket.off("readable", tryRead);
       socket.off("end", onEnd);
+      socket.off("close", onClose);
       reject(err);
+    }
+
+    function onClose(): void {
+      socket.off("readable", tryRead);
+      socket.off("error", onError);
+      // Treat an abrupt close the same as a clean TCP half-close (FIN)
+      onEnd();
     }
 
     tryRead();
