@@ -19,8 +19,9 @@ jobs:
       - uses: extractions/setup-just@v2
       - uses: astral-sh/setup-uv@v6
 
-      # TODO(Stage 1): Add typescript toolchain setup here.
-      # e.g. actions/setup-go, dtolnay/rust-toolchain, actions/setup-java, etc.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - run: just setup
       - run: just check
@@ -41,7 +42,9 @@ jobs:
         with:
           python-version: "3.13"
 
-      # TODO(Stage 1): Add typescript toolchain setup here.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - run: just setup
       - run: pip install pytest
