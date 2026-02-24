@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# Cancel in-progress PR builds if another commit is pushed.
+# On non-PR builds, fall back to the globally-unique run_id and don't cancel.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -23,29 +29,9 @@ jobs:
         with:
           node-version: "22"
 
-      - run: just setup
-      - run: just check
-
-  conformance:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: ./.github/actions/base
-        with:
-          ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
-
-      - uses: extractions/setup-just@v2
-      - uses: astral-sh/setup-uv@v6
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
       - run: just setup
-      - run: pip install pytest
-      - run: just conformance
+      - run: just check

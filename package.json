@@ -1,7 +1,11 @@
 {
-  "name": "hegel-sdk",
+  "name": "@antithesishq/hegel-typescript",
   "version": "0.1.0",
-  "description": "Hegel property-based testing SDK for TypeScript",
+  "description": "TypeScript SDK for Hegel property-based testing",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/antithesishq/hegel-typescript.git"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

@@ -1,9 +1,11 @@
 {
+  "$schema": "https://typedoc.org/schema.json",
   "entryPoints": ["src/index.ts", "src/protocol.ts", "src/connection.ts", "src/client.ts", "src/session.ts"],
   "out": "docs",
+  "name": "Hegel TypeScript SDK",
   "treatWarningsAsErrors": true,
   "excludePrivate": true,
   "excludeInternal": true,
-  "readme": "none",
+  "readme": "README.md",
   "disableSources": true
 }
