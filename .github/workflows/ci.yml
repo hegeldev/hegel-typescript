@@ -13,70 +13,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  format:
-    name: format
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - run: npm ci
-      - name: format
-        run: |
-          npm run format
-          git diff --exit-code
 
-  test:
-    name: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
       - uses: ./.github/actions/base
         with:
           ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - name: Install hegel
-        run: |
-          pip install git+ssh://git@github.com/antithesishq/hegel.git
-      - run: npm ci
-      - run: npm run test
 
-  docs:
-    name: docs
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      - uses: extractions/setup-just@v2
+      - uses: astral-sh/setup-uv@v6
+
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      - run: npm ci
-      - run: npm run docs
+          node-version: "22"
+
+      - run: just setup
+      - run: just check
 
   conformance:
-    name: conformance
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: ./.github/actions/base
         with:
           ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+
+      - uses: extractions/setup-just@v2
+      - uses: astral-sh/setup-uv@v6
+
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
-      - name: Install hegel
-        run: |
-          pip install git+ssh://git@github.com/antithesishq/hegel.git
-          pip install pytest
-      - run: npm ci
-      - name: Run conformance tests
-        working-directory: tests/conformance
-        run: pytest test_conformance.py --durations=20 --durations-min=1.0
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: just setup
+      - run: pip install pytest
+      - run: just conformance

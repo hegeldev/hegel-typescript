@@ -1,33 +1,40 @@
 {
-  "name": "@antithesishq/hegel-typescript",
+  "name": "hegel-typescript",
   "version": "0.1.0",
-  "description": "TypeScript SDK for Hegel property-based testing",
+  "description": "Hegel property-based testing SDK for TypeScript",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/antithesishq/hegel-typescript.git"
-  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
-    "format": "prettier --write src",
-    "test": "tsx --test tests/unit/*.ts",
+    "test": "vitest run --coverage",
+    "lint": "prettier --check . && eslint . && tsc --noEmit",
+    "format": "prettier --write .",
     "docs": "typedoc"
   },
-  "prettier": {
-    "semi": false,
-    "arrowParens": "avoid",
-    "printWidth": 88
-  },
+  "keywords": [
+    "hegel",
+    "property-based-testing",
+    "hypothesis"
+  ],
+  "author": "David R. MacIver <david.maciver@antithesis.com>",
+  "license": "MIT",
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "prettier": "^3.6.2",
-    "tsx": "^4.0.0",
-    "typedoc": "^0.28.16",
-    "typescript": "^5.0.0"
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.3.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "eslint": "^10.0.2",
+    "prettier": "^3.8.1",
+    "tsx": "^4.19.3",
+    "typedoc": "^0.28.17",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1",
+    "vitest": "^4.0.18"
   },
-  "engines": {
-    "node": ">=18.0.0"
+  "dependencies": {
+    "cbor-x": "^1.6.0"
   }
 }
