@@ -328,7 +328,7 @@ boundary cases that violate your assertions.
 
 ## Next steps
 
-- See the [API reference](index.html) for the full list of generators and options.
+- Build the API reference with `just docs` (output in `docs/`), then open `docs/index.html`.
 - Browse the [`examples/`](../examples/) directory for complete runnable programs.
 - Read the [Hypothesis documentation](https://hypothesis.readthedocs.io/) for deeper
   background on property-based testing strategies.

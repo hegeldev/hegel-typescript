@@ -198,10 +198,9 @@ examples/            — Example programs demonstrating SDK usage
   01-basic-properties.ts     — Primitive generators and basic properties
   02-collections-and-combinators.ts — Collections, combinators, dependent generation
   03-real-world-scenario.ts  — Domain model with derived generators
-getting-started.md   — Getting Started tutorial (TypeScript translation)
 README.md            — Project overview and quick start
 dist/                — Compiled output (gitignored)
-docs/                — Generated TypeDoc output (gitignored)
+docs/                — Generated TypeDoc output (gitignored) + getting-started.md
 coverage/            — Coverage reports (gitignored)
 ```
 
@@ -375,16 +374,15 @@ true` in `tsconfig.json`) stores metadata in a `Map<Constructor, FieldMeta[]>`. 
 - **TypeDoc `readme` option renders README.md on the index page.** Add `"readme": "README.md"`
   to `typedoc.json` so the documentation index page shows the project README. This gives users
   a nice landing page with quick-start examples before diving into the API reference.
-- **Getting-started tutorial goes at the project root, not in `docs/`.** The `docs/` directory
-  is generated output that TypeDoc overwrites on each build. Place user-facing Markdown files
-  like `getting-started.md` at the project root, and link to them from README.md.
+- **Getting-started tutorial lives in `docs/getting-started.md`.** Although `docs/` is in
+  `.gitignore` (for TypeDoc output), `getting-started.md` is force-tracked with `git add -f`.
+  This keeps all SDKs consistent with `docs/getting-started.md` as the tutorial location.
 - **Examples directory does NOT need to be compiled or tested.** The `examples/` directory
   contains runnable TypeScript programs that demonstrate SDK usage. They are excluded from
   coverage measurement and ESLint/TypeScript checking. Keep them correct and idiomatic but
   do not add them to `tsconfig.json` or `vitest.config.ts`.
-- **ESLint and Prettier must ignore `examples/` and `getting-started.md`.** Add `examples/`
-  to the ESLint global ignores block, and add `getting-started.md` to `.prettierignore`
-  (or just rely on Prettier skipping non-source markdown files by default).
+- **ESLint and Prettier must ignore `examples/`.** Add `examples/`
+  to the ESLint global ignores block. The `docs/` directory is already ignored.
 - **TypeDoc `treatWarningsAsErrors: true` catches broken `{@link}` references.** Any
   `{@link Foo}` or `@throws {Foo}` in JSDoc that references a non-exported symbol
   will fail the docs build. Always export symbols that appear in JSDoc links, or replace

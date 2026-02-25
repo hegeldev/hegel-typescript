@@ -148,7 +148,7 @@ just docs    # generate docs in docs/
 
 Then open `docs/index.html` in your browser.
 
-A [Getting Started tutorial](getting-started.md) is also available.
+A [Getting Started tutorial](docs/getting-started.md) is also available.
 
 ## Development
 
