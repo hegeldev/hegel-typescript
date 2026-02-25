@@ -615,10 +615,7 @@ export class CompositeTupleGenerator<T extends unknown[]> extends Generator<T> {
  * @param g1 - Generator for the first element.
  * @param g2 - Generator for the second element.
  */
-export function tuples2<A, B>(
-  g1: Generator<A>,
-  g2: Generator<B>,
-): Generator<[A, B]> {
+export function tuples2<A, B>(g1: Generator<A>, g2: Generator<B>): Generator<[A, B]> {
   if (g1 instanceof BasicGenerator && g2 instanceof BasicGenerator) {
     return _basicTuple([g1, g2]) as BasicGenerator<[A, B]>;
   }
