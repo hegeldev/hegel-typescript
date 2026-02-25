@@ -25,11 +25,6 @@ it("integers are integers", async () => {
 });
 ```
 
-> **TypeScript vs Python:** In Python, the `@hegel` decorator marks a function as a
-> property-based test and you call it directly. In TypeScript, `runHegelTest` is a plain
-> async function — wrap your test body in it. There is also a `hegel({ testCases })` factory
-> function that returns a wrapper, useful for test frameworks that take a function argument.
-
 `runHegelTest` runs the test body 100 times (by default) with different random inputs.
 You call `.generate()` on generators inside the body to produce values. Running the test
 produces different values on each case.
@@ -75,11 +70,6 @@ it("multiple generators work together", async () => {
   });
 });
 ```
-
-> **TypeScript vs Python:** In Hypothesis (Python), strategies are passed as arguments
-> to `@given` and received as function parameters. In Hegel (both Python and TypeScript),
-> you call `.generate()` directly inside the test body. This means you can generate values
-> at any point, including conditionally or in loops — no `@composite` decorator needed.
 
 ## Filtering
 
@@ -150,10 +140,6 @@ it("index is always valid for the generated list", async () => {
   });
 });
 ```
-
-> **TypeScript vs Python:** In Hypothesis, dependent generation requires `@composite`
-> or `data()`. In Hegel, it falls out naturally from the imperative `.generate()` style —
-> just use the earlier value to configure the next generator.
 
 You can also use `.flatMap()` for dependent generation within a single generator expression:
 
@@ -330,5 +316,5 @@ boundary cases that violate your assertions.
 
 - Build the API reference with `just docs` (output in `docs/`), then open `docs/index.html`.
 - Browse the [`examples/`](../examples/) directory for complete runnable programs.
-- Read the [Hypothesis documentation](https://hypothesis.readthedocs.io/) for deeper
-  background on property-based testing strategies.
+- Read the [Hypothesis documentation](https://hypothesis.readthedocs.io/) for background
+  on property-based testing concepts.
