@@ -34,8 +34,13 @@ lint:
     npx tsc --noEmit
 
 # Build API documentation from source.
+# TypeDoc clears docs/ before generating, so we preserve getting-started.md.
 docs:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cp docs/getting-started.md /tmp/hegel-ts-getting-started.md 2>/dev/null || true
     npx typedoc
+    cp /tmp/hegel-ts-getting-started.md docs/getting-started.md 2>/dev/null || true
 
 # Compile conformance test binaries to bin/conformance/.
 # Each binary is an executable shell script that runs the TypeScript source via tsx.
