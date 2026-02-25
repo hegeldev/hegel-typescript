@@ -143,7 +143,7 @@ import { runHegelTest, integers, lists } from "hegel-typescript";
 it("index is always valid for the generated list", async () => {
   await runHegelTest(async () => {
     const n = await integers(1, 10).generate();
-    const lst = await lists(integers(), { minSize: n, maxSize: n }).generate();
+    const lst = await lists(integers(), n, n).generate();
     const index = await integers(0, n - 1).generate();
     if (index < 0 || index >= lst.length)
       throw new Error(`index ${index} out of bounds for list of length ${lst.length}`);
@@ -164,7 +164,7 @@ it("flatMap dependent generation", async () => {
   await runHegelTest(async () => {
     const pair = await integers(1, 10)
       .flatMap((n) =>
-        lists(integers(), { minSize: n, maxSize: n }).map((lst) => [lst, n - 1] as const),
+        lists(integers(), n, n).map((lst) => [lst, n - 1] as const),
       )
       .generate();
     const [lst, index] = pair;
@@ -197,11 +197,11 @@ sampledFrom([a, b, c]); // picks from an array of values
 ### Collections
 
 ```typescript
-lists(elements, { minSize?, maxSize? })        // arrays of generated elements
+lists(elements, minSize?, maxSize?)             // arrays of generated elements
 tuples2(gen1, gen2)                            // [T1, T2] tuple
 tuples3(gen1, gen2, gen3)                      // [T1, T2, T3] tuple
 tuples4(gen1, gen2, gen3, gen4)                // [T1, T2, T3, T4] tuple
-dicts(keys, values, { minSize?, maxSize? })    // Map<K, V>
+dicts(keys, values, minSize?, maxSize?)         // Map<K, V>
 ```
 
 ### Combinators

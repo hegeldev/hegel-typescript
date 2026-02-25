@@ -42,7 +42,7 @@ export abstract class Generator<T = unknown> {
    * Transform each generated value with `f`.
    *
    * On a {@link BasicGenerator} this stays basic (preserves schema).
-   * On any other generator it returns a {@link MappedGenerator}.
+   * On any other generator it returns a MappedGenerator.
    */
   map<U>(f: (value: T) => U): Generator<U> {
     return new MappedGenerator<T, U>(this, f);
@@ -224,7 +224,7 @@ export class FilteredGenerator<T> extends Generator<T> {
  * Starts the span before calling `fn`, then stops it (with `discard=false`)
  * after `fn` returns. Returns the value returned by `fn`.
  *
- * @param label - Span label constant (see {@link Labels}).
+ * @param label - Span label constant (see `Labels`).
  * @param fn - Function to run inside the span.
  */
 export async function group<T>(label: number, fn: () => T | Promise<T>): Promise<T> {
@@ -242,7 +242,7 @@ export async function group<T>(label: number, fn: () => T | Promise<T>): Promise
  * If `fn` throws, stops the span with `discard=true`. Otherwise stops with
  * `discard=false`. The exception (if any) is re-thrown.
  *
- * @param label - Span label constant (see {@link Labels}).
+ * @param label - Span label constant (see `Labels`).
  * @param fn - Function to run inside the span.
  */
 export async function discardableGroup<T>(label: number, fn: () => T | Promise<T>): Promise<T> {
@@ -271,7 +271,7 @@ export async function discardableGroup<T>(label: number, fn: () => T | Promise<T
  * generated element.
  *
  * StopTest errors from any collection command propagate as {@link DataExhausted}
- * (same as in {@link generateFromSchema}).
+ * (same as in `generateFromSchema`).
  */
 export class Collection {
   private _baseName: string | null;
@@ -609,7 +609,7 @@ export class CompositeTupleGenerator<T extends unknown[]> extends Generator<T> {
  *
  * If both elements are {@link BasicGenerator}s, returns a BasicGenerator with
  * a tuple schema so the server can see and shrink both components. Otherwise
- * returns a {@link CompositeTupleGenerator} that generates each element inside
+ * returns a CompositeTupleGenerator that generates each element inside
  * a TUPLE span.
  *
  * @param g1 - Generator for the first element.
@@ -629,7 +629,7 @@ export function tuples2<A, B>(
  * Generate a 3-tuple.
  *
  * If all elements are {@link BasicGenerator}s, returns a BasicGenerator with
- * a tuple schema. Otherwise returns a {@link CompositeTupleGenerator}.
+ * a tuple schema. Otherwise returns a CompositeTupleGenerator.
  *
  * @param g1 - Generator for the first element.
  * @param g2 - Generator for the second element.
@@ -654,7 +654,7 @@ export function tuples3<A, B, C>(
  * Generate a 4-tuple.
  *
  * If all elements are {@link BasicGenerator}s, returns a BasicGenerator with
- * a tuple schema. Otherwise returns a {@link CompositeTupleGenerator}.
+ * a tuple schema. Otherwise returns a CompositeTupleGenerator.
  *
  * @param g1 - Generator for the first element.
  * @param g2 - Generator for the second element.
@@ -728,7 +728,7 @@ export class CompositeListGenerator<T = unknown> extends Generator<T[]> {
  * server directly (optimal shrinking). If the element generator has a transform,
  * a list-level transform is composed that applies it to each item. When elements
  * is a composite generator (e.g., filtered or mapped), the collection protocol
- * is used in a LIST span via {@link CompositeListGenerator}.
+ * is used in a LIST span via CompositeListGenerator.
  *
  * @param elements - Generator for list elements.
  * @param minSize - Minimum list length. Defaults to 0.
@@ -800,7 +800,7 @@ function _basicTuple(elements: BasicGenerator<unknown>[]): BasicGenerator<unknow
  * (i.e., when at least one branch is not a {@link BasicGenerator}).
  *
  * Generates an integer index then delegates to the selected generator. Wrapped
- * in a ONE_OF span (label {@link Labels.ONE_OF}) so the server tracks the choice.
+ * in a ONE_OF span (label `Labels.ONE_OF`) so the server tracks the choice.
  */
 export class CompositeOneOfGenerator<T = unknown> extends Generator<T> {
   /** @internal */
@@ -841,7 +841,7 @@ export class CompositeOneOfGenerator<T = unknown> extends Generator<T> {
  *   returns a `BasicGenerator` using tagged-tuple schemas so each branch can
  *   carry its own transform.
  * - **Path 3** — any branch is not a `BasicGenerator`:
- *   returns a {@link CompositeOneOfGenerator} that generates an index then
+ *   returns a CompositeOneOfGenerator that generates an index then
  *   delegates to the selected generator inside a ONE_OF span.
  *
  * @param generators - Two or more generators to choose between.
@@ -984,7 +984,7 @@ export class CompositeDictGenerator<K, V> extends Generator<Map<K, V>> {
  *
  * When both `keys` and `values` are {@link BasicGenerator}s, the server handles
  * the full dict generation (basic path) and the result is a plain
- * `Record<string, unknown>`. Otherwise a {@link CompositeDictGenerator} is used
+ * `Record<string, unknown>`. Otherwise a CompositeDictGenerator is used
  * (non-basic path) which returns a `Map<K, V>`.
  *
  * @param keys - Generator for dictionary keys.

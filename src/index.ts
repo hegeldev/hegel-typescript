@@ -9,69 +9,26 @@ export function version(): string {
   return "0.1.0";
 }
 
-export type { Packet } from "./protocol.js";
-export {
-  PROTOCOL_VERSION,
-  MAGIC,
-  REPLY_BIT,
-  TERMINATOR,
-  CLOSE_CHANNEL_MESSAGE_ID,
-  CLOSE_CHANNEL_PAYLOAD,
-  PartialPacketError,
-  ConnectionClosedError,
-  SocketIdleTimeoutError,
-  recvExact,
-  readPacket,
-  writePacket,
-  encodeValue,
-  decodeValue,
-  extractInt,
-  extractFloat,
-  extractString,
-  extractBool,
-  extractBytes,
-  extractList,
-  extractDict,
-} from "./protocol.js";
-
-export {
-  ConnectionState,
-  Connection,
-  Channel,
-  RequestError,
-  PendingRequest,
-  resultOrError,
-  SHUTDOWN,
-} from "./connection.js";
-
+// Error classes
 export {
   AssumeRejected,
   AssertionError,
   ConnectionError,
   DataExhausted,
   RuntimeError,
-  Labels,
-  Client,
-  extractOrigin,
-  generateFromSchema,
-  assume,
-  note,
-  target,
-  startSpan,
-  stopSpan,
 } from "./runner.js";
 
+// Test entry points
 export { runHegelTest, hegel, HegelSession } from "./session.js";
 
+// Test helpers
+export { assume, note, target, startSpan, stopSpan } from "./runner.js";
+
+// Generators
 export {
   Generator,
   BasicGenerator,
-  MappedGenerator,
-  FlatMappedGenerator,
-  FilteredGenerator,
-  CompositeTupleGenerator,
   Collection,
-  CompositeListGenerator,
   group,
   discardableGroup,
   integers,
@@ -92,14 +49,13 @@ export {
   tuples2,
   tuples3,
   tuples4,
-  CompositeOneOfGenerator,
   oneOf,
   optional,
   ipAddresses,
-  CompositeDictGenerator,
   dicts,
 } from "./generators.js";
 
+// Type-directed derivation
 export {
   field,
   DerivedGenerator,
@@ -112,4 +68,5 @@ export {
 
 export type { VariantDef, FieldMeta } from "./derive.js";
 
+// Conformance testing
 export { getTestCases, writeMetrics } from "./conformance.js";

@@ -376,7 +376,7 @@ export async function target(value: number, label = ""): Promise<void> {
  *
  * No-op when the test has been aborted (StopTest received).
  *
- * @param label - Span label constant (see {@link Labels}).
+ * @param label - Span label constant (see `Labels`).
  */
 export async function startSpan(label = 0): Promise<void> {
   const ctx = _testContextStorage.getStore();
