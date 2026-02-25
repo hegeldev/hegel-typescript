@@ -618,7 +618,7 @@ export class CompositeTupleGenerator<T extends unknown[]> extends Generator<T> {
 export function tuples2<A, B>(
   g1: Generator<A>,
   g2: Generator<B>,
-): BasicGenerator<[A, B]> | CompositeTupleGenerator<[A, B]> {
+): Generator<[A, B]> {
   if (g1 instanceof BasicGenerator && g2 instanceof BasicGenerator) {
     return _basicTuple([g1, g2]) as BasicGenerator<[A, B]>;
   }
@@ -639,7 +639,7 @@ export function tuples3<A, B, C>(
   g1: Generator<A>,
   g2: Generator<B>,
   g3: Generator<C>,
-): BasicGenerator<[A, B, C]> | CompositeTupleGenerator<[A, B, C]> {
+): Generator<[A, B, C]> {
   if (
     g1 instanceof BasicGenerator &&
     g2 instanceof BasicGenerator &&
@@ -666,7 +666,7 @@ export function tuples4<A, B, C, D>(
   g2: Generator<B>,
   g3: Generator<C>,
   g4: Generator<D>,
-): BasicGenerator<[A, B, C, D]> | CompositeTupleGenerator<[A, B, C, D]> {
+): Generator<[A, B, C, D]> {
   if (
     g1 instanceof BasicGenerator &&
     g2 instanceof BasicGenerator &&
@@ -997,7 +997,7 @@ export function dicts<K, V>(
   values: Generator<V>,
   minSize = 0,
   maxSize: number | null = null,
-): BasicGenerator<Record<string, unknown>> | CompositeDictGenerator<K, V> {
+): Generator<Record<string, unknown>> | Generator<Map<K, V>> {
   if (keys instanceof BasicGenerator && values instanceof BasicGenerator) {
     const rawSchema: Record<string, unknown> = {
       type: "dict",
