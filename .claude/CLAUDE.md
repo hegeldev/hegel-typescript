@@ -200,7 +200,8 @@ examples/            — Example programs demonstrating SDK usage
   03-real-world-scenario.ts  — Domain model with derived generators
 README.md            — Project overview and quick start
 dist/                — Compiled output (gitignored)
-docs/                — Generated TypeDoc output (gitignored) + getting-started.md
+guide/               — User-facing tutorials (getting-started.md)
+docs/                — Generated TypeDoc output (gitignored)
 coverage/            — Coverage reports (gitignored)
 ```
 
@@ -374,9 +375,9 @@ true` in `tsconfig.json`) stores metadata in a `Map<Constructor, FieldMeta[]>`. 
 - **TypeDoc `readme` option renders README.md on the index page.** Add `"readme": "README.md"`
   to `typedoc.json` so the documentation index page shows the project README. This gives users
   a nice landing page with quick-start examples before diving into the API reference.
-- **Getting-started tutorial lives in `docs/getting-started.md`.** Although `docs/` is in
-  `.gitignore` (for TypeDoc output), `getting-started.md` is force-tracked with `git add -f`.
-  This keeps all SDKs consistent with `docs/getting-started.md` as the tutorial location.
+- **Getting-started tutorial lives in `guide/getting-started.md`.** The `docs/` directory
+  is reserved for TypeDoc generated output (gitignored), so the tutorial goes in `guide/`
+  instead. Other SDKs that don't have this constraint use `docs/getting-started.md`.
 - **Examples directory does NOT need to be compiled or tested.** The `examples/` directory
   contains runnable TypeScript programs that demonstrate SDK usage. They are excluded from
   coverage measurement and ESLint/TypeScript checking. Keep them correct and idiomatic but
