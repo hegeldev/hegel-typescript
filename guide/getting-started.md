@@ -149,9 +149,7 @@ import { runHegelTest, integers, lists } from "hegel-typescript";
 it("flatMap dependent generation", async () => {
   await runHegelTest(async () => {
     const pair = await integers(1, 10)
-      .flatMap((n) =>
-        lists(integers(), n, n).map((lst) => [lst, n - 1] as const),
-      )
+      .flatMap((n) => lists(integers(), n, n).map((lst) => [lst, n - 1] as const))
       .generate();
     const [lst, index] = pair;
     if (index < 0 || index >= lst.length) throw new Error(`index ${index} out of bounds`);
