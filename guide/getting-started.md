@@ -5,9 +5,11 @@
 Install the Python backend and the TypeScript SDK:
 
 ```bash
-pip install hegel
+pip install "git+ssh://git@github.com/antithesishq/hegel-core.git"
 npm install hegel-typescript
 ```
+
+If you are working inside this repository, `just setup` handles both steps.
 
 ## Write your first test
 
