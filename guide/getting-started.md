@@ -5,7 +5,7 @@
 Install the Python backend and the TypeScript SDK:
 
 ```bash
-pip install hegel-sdk
+pip install hegel
 npm install hegel-typescript
 ```
 
@@ -20,16 +20,16 @@ it("integers are integers", async () => {
   await runHegelTest(async () => {
     const n = await integers().generate();
     console.log(`called with ${n}`);
-    if (!Number.isInteger(n)) throw new Error(`Expected integer, got ${String(n)}`);
+    expect(typeof n).toBe("number");
   });
 });
 ```
 
-`runHegelTest` runs the test body 100 times (by default) with different random inputs.
-You call `.generate()` on generators inside the body to produce values. Running the test
-produces different values on each case.
+`runHegelTest` runs the test body many times with different random inputs. Inside
+the body, call `.generate()` on a generator to produce a value. If any assertion
+fails, Hegel shrinks the inputs to a minimal counterexample.
 
-By default, Hegel generates 100 random inputs. Control this with the `testCases` option:
+By default Hegel runs **100 test cases**. Override this with the `testCases` option:
 
 ```typescript
 await runHegelTest(async () => { ... }, { testCases: 500 });
@@ -42,17 +42,16 @@ Hegel tests integrate with any test runner (Vitest, Jest, etc.):
 ```typescript
 import { runHegelTest, integers } from "hegel-typescript";
 
-it("bounded integers stay in range", async () => {
+it("bounded integers", async () => {
   await runHegelTest(async () => {
-    const n = await integers(0, 49).generate();
-    if (n >= 50) throw new Error(`${n} >= 50`);
+    const n = await integers(0, 200).generate();
+    expect(n).toBeLessThan(50); // this will fail!
   });
 });
 ```
 
-When a test fails, Hegel finds the smallest counterexample. For example, if the range
-is `integers(0, 200)` and you assert `n < 50`, Hegel will shrink the failure to `n = 50`
-— the minimal value that violates the property.
+When a test fails, Hegel shrinks the counterexample to the smallest value that
+still triggers the failure — in this case, `n = 50`.
 
 ## Generating multiple values
 
@@ -61,15 +60,18 @@ Call `.generate()` multiple times to produce multiple values in a single test:
 ```typescript
 import { runHegelTest, integers, text } from "hegel-typescript";
 
-it("multiple generators work together", async () => {
+it("multiple generators", async () => {
   await runHegelTest(async () => {
     const n = await integers().generate();
     const s = await text().generate();
-    if (!Number.isInteger(n)) throw new Error("n is not an integer");
-    if (typeof s !== "string") throw new Error("s is not a string");
+    expect(typeof n).toBe("number");
+    expect(typeof s).toBe("string");
   });
 });
 ```
+
+Because generation is imperative, you can call `.generate()` at any point —
+including conditionally or in loops.
 
 ## Filtering
 
@@ -78,17 +80,18 @@ Use `.filter()` for simple conditions on generators:
 ```typescript
 import { runHegelTest, integers } from "hegel-typescript";
 
-it("even integers are even", async () => {
+it("even integers", async () => {
   await runHegelTest(async () => {
     const n = await integers()
       .filter((n) => n % 2 === 0)
       .generate();
-    if (n % 2 !== 0) throw new Error(`${n} is not even`);
+    expect(n % 2).toBe(0);
   });
 });
 ```
 
-For more complex conditions, use `assume()` inside the test body:
+For conditions that depend on multiple generated values, use `assume()` inside
+the test body:
 
 ```typescript
 import { runHegelTest, integers, assume } from "hegel-typescript";
@@ -97,15 +100,17 @@ it("Euclidean division identity", async () => {
   await runHegelTest(async () => {
     const n1 = await integers().generate();
     const n2 = await integers().generate();
-    assume(n2 !== 0); // skip this test case if n2 is zero
+    assume(n2 !== 0);
 
-    // n2 is guaranteed non-zero here
     const q = Math.trunc(n1 / n2);
     const r = n1 % n2;
-    if (q * n2 + r !== n1) throw new Error(`Euclidean identity failed for ${n1} / ${n2}`);
+    expect(q * n2 + r).toBe(n1);
   });
 });
 ```
+
+Using bounds and `.map()` is more efficient than `.filter()` or `assume()` because
+they avoid generating values that will be rejected.
 
 ## Transforming generated values
 
@@ -114,61 +119,60 @@ Use `.map()` to transform values after generation:
 ```typescript
 import { runHegelTest, integers } from "hegel-typescript";
 
-it("stringified integers look like digits", async () => {
+it("stringified integers", async () => {
   await runHegelTest(async () => {
     const s = await integers(0, 100).map(String).generate();
-    if (!/^\d+$/.test(s)) throw new Error(`"${s}" does not look like digits`);
+    expect(s).toMatch(/^\d+$/);
   });
 });
 ```
 
 ## Dependent generation
 
-Since generation is imperative in Hegel, you can use earlier results to configure
+Because generation is imperative in Hegel, you can use earlier results to configure
 later generators directly:
 
 ```typescript
 import { runHegelTest, integers, lists } from "hegel-typescript";
 
-it("index is always valid for the generated list", async () => {
+it("list with valid index", async () => {
   await runHegelTest(async () => {
     const n = await integers(1, 10).generate();
     const lst = await lists(integers(), n, n).generate();
     const index = await integers(0, n - 1).generate();
-    if (index < 0 || index >= lst.length)
-      throw new Error(`index ${index} out of bounds for list of length ${lst.length}`);
+    expect(index).toBeGreaterThanOrEqual(0);
+    expect(index).toBeLessThan(lst.length);
   });
 });
 ```
 
-You can also use `.flatMap()` for dependent generation within a single generator expression:
+You can also use `.flatMap()` for dependent generation within a single generator
+expression:
 
 ```typescript
 import { runHegelTest, integers, lists } from "hegel-typescript";
 
 it("flatMap dependent generation", async () => {
   await runHegelTest(async () => {
-    const pair = await integers(1, 10)
-      .flatMap((n) => lists(integers(), n, n).map((lst) => [lst, n - 1] as const))
+    const result = await integers(1, 5)
+      .flatMap((n) => lists(integers(), n, n))
       .generate();
-    const [lst, index] = pair;
-    if (index < 0 || index >= lst.length) throw new Error(`index ${index} out of bounds`);
+    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBeLessThanOrEqual(5);
   });
 });
 ```
 
 ## What you can generate
 
-Hegel provides generators for all common data types.
-
 ### Primitive types
 
 ```typescript
-booleans()                          // true or false
-integers(minValue?, maxValue?)      // integer numbers
-floats(minValue?, maxValue?)        // floating-point numbers
-text(minSize?, maxSize?)            // Unicode strings
-binary(minSize?, maxSize?)          // Uint8Array byte arrays
+booleans(); // true or false
+integers(minValue?, maxValue?); // integer numbers
+floats(minValue?, maxValue?); // floating-point numbers
+text(minSize?, maxSize?); // Unicode strings
+binary(minSize?, maxSize?); // Uint8Array byte arrays
 ```
 
 ### Constants and choices
@@ -181,24 +185,24 @@ sampledFrom([a, b, c]); // picks from an array of values
 ### Collections
 
 ```typescript
-lists(elements, minSize?, maxSize?)             // arrays of generated elements
-tuples2(gen1, gen2)                            // [T1, T2] tuple
-tuples3(gen1, gen2, gen3)                      // [T1, T2, T3] tuple
-tuples4(gen1, gen2, gen3, gen4)                // [T1, T2, T3, T4] tuple
-dicts(keys, values, minSize?, maxSize?)         // Map<K, V>
+lists(elements, minSize?, maxSize?); // arrays of generated elements
+tuples2(gen1, gen2); // [T1, T2] tuple
+tuples3(gen1, gen2, gen3); // [T1, T2, T3] tuple
+tuples4(gen1, gen2, gen3, gen4); // [T1, T2, T3, T4] tuple
+dicts(keys, values, minSize?, maxSize?); // Map<K, V>
 ```
 
 ### Combinators
 
 ```typescript
-oneOf(gen1, gen2, ...)              // values from any of the given generators
-optional(gen)                       // a generated value or null
-gen.map(f)                          // transform generated values
-gen.filter(predicate)               // keep only values matching a condition
-gen.flatMap(f)                      // chain generators where output depends on input
+oneOf(gen1, gen2, ...); // values from any of the given generators
+optional(gen); // a generated value or null
+gen.map(f); // transform generated values
+gen.filter(predicate); // keep only values matching a condition
+gen.flatMap(f); // chain generators where output depends on input
 ```
 
-### Specialized generators
+### Formats and patterns
 
 ```typescript
 fromRegex(pattern); // strings matching a regular expression
@@ -263,8 +267,11 @@ type Shape =
 
 const shapeGen = variantGenerator<Shape>({
   circle: recordGenerator({ radius: floats(0.1, 100) }),
-  rectangle: recordGenerator({ width: floats(0.1, 100), height: floats(0.1, 100) }),
-  point: null, // data-less variant
+  rectangle: recordGenerator({
+    width: floats(0.1, 100),
+    height: floats(0.1, 100),
+  }),
+  point: null,
 });
 // await shapeGen.generate() returns one of the Shape variants
 ```
@@ -282,37 +289,35 @@ it("debugging example", async () => {
     const x = await integers().generate();
     const y = await integers().generate();
     note(`trying x=${x}, y=${y}`);
-    // This assertion is always true, just for illustration:
-    if (x + y !== y + x) throw new Error("addition is not commutative");
+    expect(x + y).toBe(y + x); // commutativity — always true
   });
 });
 ```
 
 ## Guiding generation with `target()`
 
-Use `target()` to guide Hegel toward interesting values:
+Use `target()` to guide Hegel toward interesting values, making it more likely to
+find boundary failures:
 
 ```typescript
-import { runHegelTest, floats, target } from "hegel-typescript";
+import { runHegelTest, integers, target } from "hegel-typescript";
 
-it("optimization example", async () => {
+it("seek large values", async () => {
   await runHegelTest(
     async () => {
-      const x = await floats(0, 10000).generate();
+      const x = await integers(0, 10000).generate();
       target(x, "maximize_x");
-      if (x >= 9999) throw new Error(`x = ${x} is too large`);
+      expect(x).toBeLessThanOrEqual(9999); // this will fail!
     },
     { testCases: 1000 },
   );
 });
 ```
 
-Hegel will try to maximize the targeted value, making it more likely to find
-boundary cases that violate your assertions.
+`target()` is advisory — Hegel will try to maximize the targeted metric, but it
+may still explore other regions of the input space.
 
 ## Next steps
 
-- Build the API reference with `just docs` (output in `docs/`), then open `docs/index.html`.
-- Browse the [`examples/`](../examples/) directory for complete runnable programs.
-- Read the [Hypothesis documentation](https://hypothesis.readthedocs.io/) for background
-  on property-based testing concepts.
+- Build the API reference with `just docs`, then open `docs/index.html`.
+- Browse the [`examples/`](../examples/) directory for runnable programs.
