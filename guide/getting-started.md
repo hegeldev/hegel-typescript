@@ -3,7 +3,7 @@
 ## Install Hegel
 
 ```bash
-npm install hegel-typescript
+npm install "git+ssh://git@github.com/antithesishq/hegel-typescript.git"
 ```
 
 The SDK requires the `hegel` CLI on your PATH:
