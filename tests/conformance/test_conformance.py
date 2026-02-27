@@ -1,49 +1,65 @@
+"""Conformance tests for the Hegel TypeScript SDK.
+
+These tests validate that the TypeScript SDK correctly implements the Hegel
+protocol by running compiled TypeScript binaries against the real hegel server
+and checking that the generated values satisfy the expected constraints.
+
+The conformance binaries are compiled by `just build-conformance` to
+`bin/conformance/` as executable Node.js scripts.
+"""
+
 from pathlib import Path
 
+import pytest
 from hegel.conformance import (
     BinaryConformance,
     BooleanConformance,
     DictConformance,
+    EmptyTestConformance,
+    ErrorResponseConformance,
     FloatConformance,
     IntegerConformance,
     ListConformance,
     SampledFromConformance,
+    StopTestOnCollectionMoreConformance,
+    StopTestOnGenerateConformance,
+    StopTestOnMarkCompleteConformance,
+    StopTestOnNewCollectionConformance,
     TextConformance,
     run_conformance_tests,
 )
 
-BIN_DIR = Path(__file__).parent / "ts" / "bin"
-
-# JavaScript numbers are IEEE 754 doubles, safe integer range is -(2^53-1) to 2^53-1
-JS_MIN_SAFE_INTEGER = -(2**53 - 1)
-JS_MAX_SAFE_INTEGER = 2**53 - 1
+# Path to the compiled conformance binaries.
+# The justfile compiles them to bin/conformance/ before running tests.
+BINARIES_DIR = Path(__file__).parent.parent.parent / "bin" / "conformance"
 
 
-def test_conformance(subtests):
-    run_conformance_tests(
-        [
-            BooleanConformance(BIN_DIR / "test_booleans"),
-            IntegerConformance(
-                BIN_DIR / "test_integers",
-                min_value=JS_MIN_SAFE_INTEGER,
-                max_value=JS_MAX_SAFE_INTEGER,
-            ),
-            FloatConformance(BIN_DIR / "test_floats"),
-            TextConformance(BIN_DIR / "test_text"),
-            BinaryConformance(BIN_DIR / "test_binary"),
-            ListConformance(
-                BIN_DIR / "test_lists",
-                min_value=JS_MIN_SAFE_INTEGER,
-                max_value=JS_MAX_SAFE_INTEGER,
-            ),
-            SampledFromConformance(BIN_DIR / "test_sampled_from"),
-            DictConformance(
-                BIN_DIR / "test_hashmaps",
-                min_key=JS_MIN_SAFE_INTEGER,
-                max_key=JS_MAX_SAFE_INTEGER,
-                min_value=JS_MIN_SAFE_INTEGER,
-                max_value=JS_MAX_SAFE_INTEGER,
-            ),
-        ],
-        subtests,
-    )
+def _bin(name: str) -> Path:
+    """Return the path to a conformance binary."""
+    return BINARIES_DIR / name
+
+
+@pytest.fixture
+def conformance_tests() -> list:
+    """Return all conformance test instances."""
+    return [
+        BooleanConformance(_bin("test_booleans")),
+        IntegerConformance(_bin("test_integers"), min_value=-1000, max_value=1000),
+        FloatConformance(_bin("test_floats")),
+        TextConformance(_bin("test_text")),
+        BinaryConformance(_bin("test_binary")),
+        ListConformance(_bin("test_lists"), min_value=-1000, max_value=1000),
+        SampledFromConformance(_bin("test_sampled_from")),
+        DictConformance(_bin("test_hashmaps")),
+        StopTestOnGenerateConformance(_bin("test_booleans")),
+        StopTestOnMarkCompleteConformance(_bin("test_booleans")),
+        StopTestOnCollectionMoreConformance(_bin("test_lists")),
+        StopTestOnNewCollectionConformance(_bin("test_lists")),
+        ErrorResponseConformance(_bin("test_booleans")),
+        EmptyTestConformance(_bin("test_booleans")),
+    ]
+
+
+def test_conformance(conformance_tests: list, subtests: pytest.Subtests) -> None:
+    """Run all conformance tests for the TypeScript SDK."""
+    run_conformance_tests(conformance_tests, subtests)

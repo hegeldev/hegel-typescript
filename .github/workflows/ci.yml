@@ -6,77 +6,176 @@ on:
   pull_request:
     branches: [main]
 
-# Cancel in-progress PR builds if another commit is pushed.
-# On non-PR builds, fall back to the globally-unique run_id and don't cancel.
+permissions: {}
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
-  format:
-    name: format
+  check-release:
+    name: check release
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          node-version: '20'
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check release
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: python .github/scripts/release.py check "$BASE_REF"
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
       - run: npm ci
-      - name: format
-        run: |
-          npm run format
-          git diff --exit-code
+      - name: Check formatting
+        run: npx prettier --check .
+      - name: Lint
+        run: npx eslint .
+      - name: Typecheck
+        run: npx tsc --noEmit
 
   test:
     name: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
       - uses: ./.github/actions/base
         with:
           ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
-      - uses: actions/setup-node@v4
+
+      - name: Install just
+        run: sudo apt-get update && sudo apt-get install -y just
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '20'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - name: Install hegel
-        run: |
-          pip install git+ssh://git@github.com/antithesishq/hegel.git
+          node-version: "22"
+
       - run: npm ci
-      - run: npm run test
+      - run: just setup
+      - name: Run tests
+        run: npm run test
 
   docs:
     name: docs
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          node-version: '20'
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
       - run: npm ci
-      - run: npm run docs
+      - name: Build docs
+        run: npm run docs
 
   conformance:
     name: conformance
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
       - uses: ./.github/actions/base
         with:
           ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
-      - uses: actions/setup-node@v4
+
+      - name: Install just
+        run: sudo apt-get update && sudo apt-get install -y just
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
-          node-version: '20'
-      - uses: actions/setup-python@v5
+          python-version: "3.13"
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          python-version: '3.13'
-      - name: Install hegel
+          node-version: "22"
+
+      - run: just setup
+      - run: pip install pytest
+      - run: just conformance
+
+  zizmor:
+    name: zizmor
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Install zizmor
+        run: pipx install zizmor
+      - name: Run zizmor
+        run: zizmor --format plain .github/
+
+  release:
+    name: release
+    if: github.event_name == 'push' && github.repository == 'antithesishq/hegel-typescript'
+    needs: [lint, test, docs, conformance, zizmor]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      checks: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Check for RELEASE.md
+        id: check
         run: |
-          pip install git+ssh://git@github.com/antithesishq/hegel.git
-          pip install pytest
-      - run: npm ci
-      - name: Run conformance tests
-        working-directory: tests/conformance
-        run: pytest test_conformance.py --durations=20 --durations-min=1.0
+          if [ ! -f RELEASE.md ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate app token
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        id: app-token
+        with:
+          app-id: ${{ vars.HEGEL_RELEASE_APP_ID }}
+          private-key: ${{ secrets.HEGEL_RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Re-checkout with app token # zizmor: ignore[artipacked]
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Release
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: python .github/scripts/release.py release

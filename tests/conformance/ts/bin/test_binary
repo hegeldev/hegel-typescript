@@ -1,6 +1,0 @@
-#!/bin/bash
-set -e
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TS_DIR="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-export CONFORMANCE_PARAMS="$1"
-npx --prefix "$TS_DIR" tsx "$SCRIPT_DIR/../test_binary.ts"

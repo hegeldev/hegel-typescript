@@ -1,61 +1,48 @@
-# Hegel TypeScript SDK
+# hegel-typescript
 
-Hegel TypeScript SDK.
+A TypeScript SDK for [Hegel](https://github.com/antithesishq/hegel-core) —
+universal property-based testing powered by
+[Hypothesis](https://hypothesis.works/).
+
+Hegel generates random inputs for your tests, finds failures, and automatically
+shrinks them to minimal counterexamples.
 
 ## Installation
 
 ```bash
-npm install git+ssh://git@github.com/antithesishq/hegel-typescript.git
+npm install "git+ssh://git@github.com/antithesishq/hegel-typescript.git"
+```
+
+The SDK requires the `hegel` CLI on your PATH:
+
+```bash
+pip install "hegel @ git+ssh://git@github.com/antithesishq/hegel-core.git"
 ```
 
 ## Quick Start
 
 ```typescript
-import { hegel, integers, text, arrays, assume, note } from "@antithesishq/hegel-typescript";
+import { runHegelTest, integers } from "hegel-typescript";
 
-await hegel(() => {
-  // Generate random values
-  const num = integers().min(0).max(100).generate();
-  const str = text().maxSize(50).generate();
-  const arr = arrays(integers()).minSize(1).maxSize(10).generate();
-
-  // Skip test cases that don't meet preconditions
-  assume(num > 0);
-
-  // Log debugging information (only shown on final replay)
-  note(`Testing with value: ${num}`);
-
-  // Your test assertions here
-  if (arr.length === 0) {
-    throw new Error("Array should not be empty");
-  }
+it("addition is commutative", async () => {
+  await runHegelTest(async () => {
+    const a = await integers().generate();
+    const b = await integers().generate();
+    expect(a + b).toBe(b + a);
+  });
 });
 ```
 
-## Configuration
+Run with your test runner (Vitest, Jest, etc.) as normal. Hegel generates 100
+random input pairs and reports the minimal counterexample if it finds one.
 
-Use the `Hegel` builder for more control:
+For a full walkthrough, see [guide/getting-started.md](guide/getting-started.md).
 
-```typescript
-import { Hegel, Verbosity, integers } from "@antithesishq/hegel-typescript";
-
-await new Hegel(() => {
-  const x = integers().generate();
-  // test logic
-})
-  .testCases(200)              // Run 200 test cases (default: 100)
-  .verbosity(Verbosity.Debug)  // Show debug output
-  .run();
-```
-
-## API Documentation
-
-Builds docs with:
+## Development
 
 ```bash
-just docs
+just setup   # Install dependencies + hegel binary
+just check   # Full CI: lint + docs + tests with 100% coverage
+just test    # Run tests only
+just format  # Auto-format code
 ```
-
-## Environment Variables
-
-- `HEGEL_DEBUG`: If set to `1` or `true`, prints request/response JSON to stderr

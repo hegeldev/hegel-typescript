@@ -1,43 +1,72 @@
-export type { Generator, JsonSchema } from "./generator.js"
-export { SchemaGenerator, FuncGenerator } from "./generator.js"
-export { assume, note } from "./connection.js"
-export { hegel, Hegel, Verbosity } from "./embedded.js"
-export { LABELS } from "./labels.js"
-export type { Label } from "./labels.js"
-export { group, discardableGroup, startSpan, stopSpan } from "./spans.js"
+/**
+ * Hegel property-based testing SDK for TypeScript.
+ *
+ * @packageDocumentation
+ */
 
-export { nulls, booleans, just } from "./primitives.js"
+/** Returns the version of the Hegel TypeScript SDK. */
+export function version(): string {
+  return "0.1.0";
+}
 
-export { integers, IntegerGenerator } from "./integers.js"
-export { floats, FloatGenerator } from "./floats.js"
-
-export { text, fromRegex, TextGenerator, RegexGenerator } from "./strings.js"
-
-export { binary } from "./binary.js"
-export type { BinaryOptions } from "./binary.js"
-
+// Error classes
 export {
+  AssumeRejected,
+  AssertionError,
+  ConnectionError,
+  DataExhausted,
+  RuntimeError,
+} from "./runner.js";
+
+// Test entry points
+export { runHegelTest, hegel, HegelSession } from "./session.js";
+
+// Test helpers
+export { assume, note, target, startSpan, stopSpan } from "./runner.js";
+
+// Generators
+export {
+  Generator,
+  BasicGenerator,
+  Collection,
+  group,
+  discardableGroup,
+  integers,
+  floats,
+  booleans,
+  text,
+  binary,
+  just,
+  sampledFrom,
+  fromRegex,
   emails,
   urls,
   domains,
-  ipAddresses,
   dates,
   times,
   datetimes,
-  DomainGenerator,
-  IpAddressGenerator,
-} from "./formats.js"
+  lists,
+  tuples2,
+  tuples3,
+  tuples4,
+  oneOf,
+  optional,
+  ipAddresses,
+  dicts,
+} from "./generators.js";
 
+// Type-directed derivation
 export {
-  arrays,
-  sets,
-  maps,
-  tuples,
-  ArrayGenerator,
-  SetGenerator,
-  MapGenerator,
-} from "./collections.js"
+  field,
+  DerivedGenerator,
+  deriveGenerator,
+  RecordDerivedGenerator,
+  recordGenerator,
+  VariantGenerator,
+  variantGenerator,
+} from "./derive.js";
 
-export { sampledFrom, oneOf, optional } from "./combinators.js"
+export type { VariantDef, FieldMeta } from "./derive.js";
 
-export { fixedObject, FixedObjectBuilder } from "./objects.js"
+// Conformance testing
+export { getTestCases, writeMetrics } from "./conformance.js";
