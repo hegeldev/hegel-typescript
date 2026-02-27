@@ -1,4 +1,4 @@
-name: Check
+name: Lint
 
 on:
   push:
@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
-    name: check
+  lint:
+    name: lint
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -23,18 +23,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/base
-        with:
-          ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
-
-      - name: Install just
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
-      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
-
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
 
-      - run: just setup
-      - run: just check
+      - run: npm ci
+      - name: Check formatting
+        run: npx prettier --check .
+      - name: Lint
+        run: npx eslint .
+      - name: Typecheck
+        run: npx tsc --noEmit
