@@ -421,7 +421,7 @@ export function floats(
   const hasMax = maxValue !== null;
   const resolvedAllowNan = allowNan !== null ? allowNan : !hasMin && !hasMax;
   const resolvedAllowInfinity = allowInfinity !== null ? allowInfinity : !hasMin || !hasMax;
-  const schema: Record<string, unknown> = { type: "number" };
+  const schema: Record<string, unknown> = { type: "float" };
   if (hasMin) schema["min_value"] = minValue;
   if (hasMax) schema["max_value"] = maxValue;
   schema["allow_nan"] = resolvedAllowNan;

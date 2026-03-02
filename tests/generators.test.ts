@@ -552,10 +552,10 @@ describe("Collection non-StopTest errors", () => {
 // ---------------------------------------------------------------------------
 
 describe("floats()", () => {
-  it("returns a BasicGenerator with type=number", () => {
+  it("returns a BasicGenerator with type=float", () => {
     const gen = floats();
     expect(gen).toBeInstanceOf(BasicGenerator);
-    expect(gen.schema()).toMatchObject({ type: "number" });
+    expect(gen.schema()).toMatchObject({ type: "float" });
   });
 
   it("includes min_value and max_value when provided", () => {
@@ -979,7 +979,7 @@ describe("floats()", () => {
 
   it("schema defaults: allow_nan=true, allow_infinity=true when no bounds", () => {
     const schema = floats().schema();
-    expect(schema["type"]).toBe("number");
+    expect(schema["type"]).toBe("float");
     expect(schema["allow_nan"]).toBe(true);
     expect(schema["allow_infinity"]).toBe(true);
     expect(schema["exclude_min"]).toBe(false);

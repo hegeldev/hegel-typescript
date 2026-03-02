@@ -16,7 +16,7 @@ import { Channel, Connection, RequestError } from "./connection.js";
 // ---------------------------------------------------------------------------
 
 const SUPPORTED_PROTOCOL_LO = 0.1;
-const SUPPORTED_PROTOCOL_HI = 0.1;
+const SUPPORTED_PROTOCOL_HI = 0.3;
 
 // ---------------------------------------------------------------------------
 // Error classes

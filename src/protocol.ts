@@ -20,7 +20,7 @@ const zlib = require("zlib") as typeof import("zlib");
 // ---------------------------------------------------------------------------
 
 /** Protocol version. */
-export const PROTOCOL_VERSION = 0.1;
+export const PROTOCOL_VERSION = 0.3;
 
 /** Magic cookie: "HEGL" in hex (0x48 0x45 0x47 0x4C). */
 export const MAGIC = 0x4845474c;
