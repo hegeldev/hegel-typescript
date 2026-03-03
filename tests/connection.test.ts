@@ -51,9 +51,23 @@ async function socketPair(): Promise<[net.Socket, net.Socket]> {
   });
 }
 
+/**
+ * Raw handshake responder: reads the handshake request from the control channel
+ * and replies with "Hegel/0.3". Sets the connection to CLIENT state with a high
+ * channel ID base to avoid collisions with the actual client side.
+ */
+async function rawHandshakeResponder(conn: Connection): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (conn as any)._connectionState = ConnectionState.CLIENT;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (conn as any)._nextChannelId = 1000;
+  const [msgId] = await conn.controlChannel.receiveRequestRaw();
+  await conn.controlChannel.sendResponseRaw(msgId, Buffer.from("Hegel/0.3"));
+}
+
 /** Perform handshake on both sides concurrently. */
 async function handshakePair(serverConn: Connection, clientConn: Connection): Promise<void> {
-  await Promise.all([serverConn.receiveHandshake(), clientConn.sendHandshake()]);
+  await Promise.all([rawHandshakeResponder(serverConn), clientConn.sendHandshake()]);
 }
 
 // ---------------------------------------------------------------------------
@@ -130,37 +144,6 @@ describe("handshake", () => {
 
     await handshakePair(serverConn, clientConn);
     await expect(clientConn.sendHandshake()).rejects.toThrow(/Handshake already established/);
-
-    clientConn.close();
-    serverConn.close();
-  });
-
-  it("double receiveHandshake throws", async () => {
-    const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
-
-    await handshakePair(serverConn, clientConn);
-    await expect(serverConn.receiveHandshake()).rejects.toThrow(/Handshake already established/);
-
-    clientConn.close();
-    serverConn.close();
-  });
-
-  it("bad handshake string from client raises ConnectionError on server", async () => {
-    const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
-
-    // Send bad version from client side manually
-    const badSend = async () => {
-      const ch = clientConn.controlChannel;
-      await ch.sendRequestRaw(Buffer.from("BadVersion"));
-    };
-
-    await expect(Promise.all([serverConn.receiveHandshake(), badSend()])).rejects.toThrow(
-      /Bad handshake/,
-    );
 
     clientConn.close();
     serverConn.close();
@@ -386,154 +369,6 @@ describe("request/response", () => {
     clientConn.close();
     serverConn.close();
   });
-
-  it("handle_requests processes requests with handler", async () => {
-    const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
-
-    await handshakePair(serverConn, clientConn);
-
-    const serverCh = serverConn.newChannel({ role: "Handler" });
-    // Handle one request then stop
-    let handled = 0;
-    const serverHandle = serverCh.handleRequests(
-      async (msg) => {
-        const m = msg as Record<string, number>;
-        handled++;
-        return { sum: m.x + m.y };
-      },
-      () => handled >= 1,
-    );
-
-    const clientCh = clientConn.connectChannel(serverCh.channelId);
-    const result = await clientCh.request({ x: 10, y: 5 }).get();
-    expect(result).toEqual({ sum: 15 });
-
-    await serverHandle;
-    clientConn.close();
-    serverConn.close();
-  });
-
-  it("handle_requests sends error response when handler throws", async () => {
-    const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
-
-    await handshakePair(serverConn, clientConn);
-
-    const serverCh = serverConn.newChannel({ role: "ErrTest" });
-    let handled = 0;
-    const serverHandle = serverCh.handleRequests(
-      async (_) => {
-        handled++;
-        throw new Error("test error");
-      },
-      () => handled >= 1,
-    );
-
-    const clientCh = clientConn.connectChannel(serverCh.channelId);
-    // Send one request, the server handler throws — expect a RequestError back.
-    const pending = clientCh.request({ anything: true });
-    let caught: unknown;
-    try {
-      await pending.get();
-    } catch (e) {
-      caught = e;
-    }
-    expect(caught).toBeInstanceOf(RequestError);
-    expect((caught as RequestError).message).toBe("test error");
-
-    await serverHandle;
-    clientConn.close();
-    serverConn.close();
-  });
-
-  it("handle_requests wraps non-Error throws in Error", async () => {
-    const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
-    await handshakePair(serverConn, clientConn);
-
-    const serverCh = serverConn.newChannel({ role: "NonErrTest" });
-    let handled = 0;
-    const serverHandle = serverCh.handleRequests(
-      async (_) => {
-        handled++;
-        // Throw a non-Error value (string) — covers `e instanceof Error ? e : new Error(String(e))`
-        throw "string error";
-      },
-      () => handled >= 1,
-    );
-
-    const clientCh = clientConn.connectChannel(serverCh.channelId);
-    const pending = clientCh.request({ anything: true });
-    let caught: unknown;
-    try {
-      await pending.get();
-    } catch (e) {
-      caught = e;
-    }
-    expect(caught).toBeInstanceOf(RequestError);
-    expect((caught as RequestError).message).toBe("string error");
-
-    await serverHandle;
-    clientConn.close();
-    serverConn.close();
-  });
-
-  it("sendResponseError with exception object", async () => {
-    const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
-
-    await handshakePair(serverConn, clientConn);
-
-    const serverCh = serverConn.newChannel({ role: "ErrMsg" });
-    const serverHandle = (async () => {
-      const [msgId] = await serverCh.receiveRequest();
-      await serverCh.sendResponseError(msgId, new ValueError("an error"));
-    })();
-
-    const clientCh = clientConn.connectChannel(serverCh.channelId);
-    await expect(clientCh.request({ anything: true }).get()).rejects.toThrow("an error");
-
-    await serverHandle;
-    clientConn.close();
-    serverConn.close();
-  });
-
-  it("sendResponseError with explicit error and type kwargs", async () => {
-    const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
-
-    await handshakePair(serverConn, clientConn);
-
-    const serverCh = serverConn.newChannel({ role: "ErrKw" });
-    const serverHandle = (async () => {
-      const [msgId] = await serverCh.receiveRequest();
-      await serverCh.sendResponseError(msgId, null, {
-        error: "custom error",
-        errorType: "CustomType",
-      });
-    })();
-
-    const clientCh = clientConn.connectChannel(serverCh.channelId);
-    let caught: RequestError | null = null;
-    try {
-      await clientCh.request({ anything: true }).get();
-    } catch (e) {
-      caught = e as RequestError;
-    }
-    expect(caught).toBeInstanceOf(RequestError);
-    expect(caught!.message).toBe("custom error");
-    expect(caught!.errorType).toBe("CustomType");
-
-    await serverHandle;
-    clientConn.close();
-    serverConn.close();
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -571,10 +406,9 @@ describe("message to nonexistent channel", () => {
 // ---------------------------------------------------------------------------
 
 describe("ConnectionState", () => {
-  it("has UNRESOLVED, CLIENT, SERVER values", () => {
+  it("has UNRESOLVED and CLIENT values", () => {
     expect(ConnectionState.UNRESOLVED).toBeDefined();
     expect(ConnectionState.CLIENT).toBeDefined();
-    expect(ConnectionState.SERVER).toBeDefined();
   });
 });
 
@@ -597,38 +431,6 @@ describe("Channel.close() on replaced channel", () => {
 
     clientConn.close();
     serverConn.close();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Coverage: handleRequests with default until parameter
-// ---------------------------------------------------------------------------
-
-describe("handleRequests default until", () => {
-  it("processes requests and can be interrupted by closing the connection", async () => {
-    const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
-    await handshakePair(serverConn, clientConn);
-
-    const serverCh = serverConn.newChannel({ role: "Loop" });
-    // Use default until (always false), close the connection to break the loop
-    const loopHandle = serverCh
-      .handleRequests(async (msg) => {
-        return { echo: (msg as Record<string, unknown>).v };
-      })
-      .catch(() => {
-        // handleRequests will throw when connection closes — expected
-      });
-
-    const clientCh = clientConn.connectChannel(serverCh.channelId);
-    const result = await clientCh.request({ v: 99 }).get();
-    expect(result).toEqual({ echo: 99 });
-
-    // Close the connection — this will cause handleRequests to throw from receiveRequest
-    serverConn.close();
-    clientConn.close();
-    await loopHandle;
   });
 });
 
@@ -678,6 +480,35 @@ describe("_waitForMessage SHUTDOWN mid-wait", () => {
     expect((err as Error).message).toMatch(/closed|Timed out/);
 
     clientConn.close();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Coverage: _waitForMessage SHUTDOWN injected during the while loop (line 621)
+// ---------------------------------------------------------------------------
+
+describe("_waitForMessage SHUTDOWN during while loop", () => {
+  it("raises Connection closed when SHUTDOWN is injected mid-loop", async () => {
+    const [serverSock, clientSock] = await socketPair();
+    const serverConn = new Connection(serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, { name: "Client" });
+    await handshakePair(serverConn, clientConn);
+
+    const ch = clientConn.newChannel({ role: "ShutdownInLoop" });
+    // Start waiting for a message
+    const waiter = ch.receiveRequest({ timeoutMs: 2000 }).catch((e: unknown) => e);
+    // After a short delay, inject SHUTDOWN directly into the inbox.
+    // This triggers the post-loop SHUTDOWN path in _waitForMessage.
+    setTimeout(() => {
+      ch.inbox.push(SHUTDOWN);
+      ch._notifyWaiter();
+    }, 50);
+    const err = await waiter;
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toBe("Connection closed");
+
+    clientConn.close();
+    serverConn.close();
   });
 });
 
@@ -875,64 +706,6 @@ describe("message to dead channel", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Coverage: sendResponseError with null error and no opts
-// ---------------------------------------------------------------------------
-
-describe("sendResponseError edge cases", () => {
-  it("sends Unknown error when err is null and no opts", async () => {
-    const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
-    await handshakePair(serverConn, clientConn);
-
-    const serverCh = serverConn.newChannel({ role: "ErrNull" });
-    const serverHandle = (async () => {
-      const [msgId] = await serverCh.receiveRequest();
-      // null err, no opts → uses "Unknown error" and "Error" type
-      await serverCh.sendResponseError(msgId, null);
-    })();
-
-    const clientCh = clientConn.connectChannel(serverCh.channelId);
-    let caught: RequestError | null = null;
-    try {
-      await clientCh.request({ x: 1 }).get();
-    } catch (e) {
-      caught = e as RequestError;
-    }
-    expect(caught).toBeInstanceOf(RequestError);
-    expect(caught!.message).toBe("Unknown error");
-    expect(caught!.errorType).toBe("Error");
-
-    await serverHandle;
-    clientConn.close();
-    serverConn.close();
-  });
-
-  it("sends error with err.message when err has no stack", async () => {
-    const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
-    await handshakePair(serverConn, clientConn);
-
-    const serverCh = serverConn.newChannel({ role: "ErrNoStack" });
-    const serverHandle = (async () => {
-      const [msgId] = await serverCh.receiveRequest();
-      const err = new Error("no stack error");
-      // Remove the stack so that err.stack is undefined
-      delete err.stack;
-      await serverCh.sendResponseError(msgId, err);
-    })();
-
-    const clientCh = clientConn.connectChannel(serverCh.channelId);
-    await expect(clientCh.request({ x: 1 }).get()).rejects.toThrow("no stack error");
-
-    await serverHandle;
-    clientConn.close();
-    serverConn.close();
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Coverage: _waitForMessage with data already ready after drain (line 672)
 // ---------------------------------------------------------------------------
 
@@ -985,14 +758,3 @@ describe("request() on dead socket", () => {
     clientConn.close();
   });
 });
-
-// ---------------------------------------------------------------------------
-// Helper error class used in tests
-// ---------------------------------------------------------------------------
-
-class ValueError extends Error {
-  constructor(msg: string) {
-    super(msg);
-    this.name = "ValueError";
-  }
-}

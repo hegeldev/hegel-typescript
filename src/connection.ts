@@ -25,7 +25,6 @@ import {
   writePacket,
   encodeValue,
   decodeValue,
-  PROTOCOL_VERSION,
   CLOSE_CHANNEL_PAYLOAD,
   CLOSE_CHANNEL_MESSAGE_ID,
   SocketIdleTimeoutError,
@@ -63,11 +62,10 @@ export type Shutdown = typeof SHUTDOWN;
 // Connection state
 // ---------------------------------------------------------------------------
 
-/** Connection state: unresolved (pre-handshake), client, or server. */
+/** Connection state: unresolved (pre-handshake) or client. */
 export enum ConnectionState {
   UNRESOLVED = 0,
   CLIENT = 1,
-  SERVER = 2,
 }
 
 // ---------------------------------------------------------------------------
@@ -291,30 +289,6 @@ export class Connection {
     return decoded.slice("Hegel/".length);
   }
 
-  /**
-   * Accept a handshake as a server.
-   *
-   * @throws {Error} If handshake was already performed, or the client sends badly.
-   */
-  async receiveHandshake(): Promise<void> {
-    if (this._connectionState !== ConnectionState.UNRESOLVED) {
-      throw new Error("Handshake already established");
-    }
-    this._connectionState = ConnectionState.SERVER;
-    // Server channel IDs are even: (counter << 1) | 0. counter=0 would produce
-    // ID 0, which is already taken by the control channel. Start at 1 so the
-    // first server channel gets ID 2.
-    this._nextChannelId = 1;
-
-    const [msgId, payload] = await this._controlChannel.receiveRequestRaw();
-    if (!payload.equals(HANDSHAKE_STRING)) {
-      throw new Error(
-        `Bad handshake: expected ${JSON.stringify(HANDSHAKE_STRING.toString())}, got ${JSON.stringify(payload.toString())}`,
-      );
-    }
-    await this._controlChannel.sendResponseRaw(msgId, Buffer.from(`Hegel/${PROTOCOL_VERSION}`));
-  }
-
   // ---------------------------------------------------------------------------
   // Channel creation
   // ---------------------------------------------------------------------------
@@ -323,7 +297,6 @@ export class Connection {
    * Create a new logical channel on this connection (client-initiated).
    *
    * Channel IDs for clients are odd: `(counter << 1) | 1`.
-   * Channel IDs for servers are even: `(counter << 1) | 0`.
    *
    * @throws {Error} If called before handshake.
    */
@@ -331,8 +304,7 @@ export class Connection {
     if (this._connectionState === ConnectionState.UNRESOLVED) {
       throw new Error("Cannot create a new channel before handshake has been performed.");
     }
-    const isClient = this._connectionState === ConnectionState.CLIENT ? 1 : 0;
-    const channelId = (this._nextChannelId << 1) | isClient;
+    const channelId = (this._nextChannelId << 1) | 1;
     this._nextChannelId++;
     return this._makeChannel(channelId, opts.role);
   }
@@ -570,51 +542,6 @@ export class Channel {
   /** Send a CBOR-encoded `{ result: value }` reply. */
   async sendResponseValue(messageId: number, value: unknown): Promise<void> {
     await this.sendResponseRaw(messageId, encodeValue({ result: value }));
-  }
-
-  /**
-   * Send an error reply.
-   *
-   * Pass either an Error object as `err`, or explicit `error`/`errorType` strings
-   * via `opts`. At least one must be provided.
-   */
-  async sendResponseError(
-    messageId: number,
-    err: Error | null,
-    opts: { error?: string; errorType?: string } = {},
-  ): Promise<void> {
-    const errorMsg = opts.error ?? err?.message ?? "Unknown error";
-    const errorType = opts.errorType ?? (err ? err.constructor.name : "Error");
-    const response: Record<string, unknown> = { error: errorMsg, type: errorType };
-    if (err !== null) {
-      response["detail"] = err.stack ?? err.message;
-    }
-    await this.sendResponseRaw(messageId, encodeValue(response));
-  }
-
-  // ---------------------------------------------------------------------------
-  // Handle requests loop
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Process incoming requests in a loop until `until()` returns true.
-   *
-   * For each request, calls `handler(body)` and sends the result as a response.
-   * If the handler throws, sends an error response.
-   */
-  async handleRequests(
-    handler: (msg: unknown) => Promise<unknown>,
-    until: () => boolean = () => false,
-  ): Promise<void> {
-    while (!until()) {
-      const [msgId, body] = await this.receiveRequest();
-      try {
-        const result = await handler(body);
-        await this.sendResponseValue(msgId, result);
-      } catch (e) {
-        await this.sendResponseError(msgId, e instanceof Error ? e : new Error(String(e)));
-      }
-    }
   }
 
   // ---------------------------------------------------------------------------

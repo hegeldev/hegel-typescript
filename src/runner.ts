@@ -10,6 +10,7 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Channel, Connection, RequestError } from "./connection.js";
+import { encodeValue } from "./protocol.js";
 import type { Generator } from "./generators.js";
 
 // ---------------------------------------------------------------------------
@@ -193,10 +194,13 @@ export class Client {
         break;
       } else {
         // Unrecognised event — send error response
-        await testChannel.sendResponseError(messageId, null, {
-          error: `Unrecognised event ${String(event)}`,
-          errorType: "InvalidMessage",
-        });
+        await testChannel.sendResponseRaw(
+          messageId,
+          encodeValue({
+            error: `Unrecognised event ${String(event)}`,
+            type: "InvalidMessage",
+          }),
+        );
       }
     }
 
