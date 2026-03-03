@@ -4,5 +4,6 @@
   "out": "docs",
   "treatWarningsAsErrors": true,
   "disableSources": true,
-  "readme": "README.md"
+  "readme": "README.md",
+  "excludeInternal": true
 }

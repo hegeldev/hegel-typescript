@@ -8,14 +8,20 @@
 
 import { describe, expect, it } from "vitest";
 import { Channel, RequestError } from "../src/connection.js";
-import { _testContextStorage, generateFromSchema, startSpan, stopSpan } from "../src/runner.js";
+import {
+  _testContextStorage,
+  draw,
+  generateFromSchema,
+  startSpan,
+  stopSpan,
+} from "../src/runner.js";
+import type { TestCaseData } from "../src/runner.js";
 import {
   BasicGenerator,
   Collection,
   CompositeTupleGenerator,
   FilteredGenerator,
   FlatMappedGenerator,
-  Generator,
   MappedGenerator,
   discardableGroup,
   group,
@@ -74,7 +80,7 @@ describe("BasicGenerator", () => {
     // Verify via live server: values should be odd numbers 3,5,7,9,11
     await runHegelTest(
       async () => {
-        const v = await gen.generate();
+        const v = await draw(gen);
         const validValues = new Set([3, 5, 7, 9, 11]);
         if (!validValues.has(v)) {
           throw new Error(`Unexpected value: ${v}`);
@@ -94,10 +100,11 @@ describe("BasicGenerator", () => {
     // Map twice: x * 2, then x + 1; result should always be odd
     await runHegelTest(
       async () => {
-        const v = await integers(0, 5)
-          .map((x) => x * 2)
-          .map((x) => x + 1)
-          .generate();
+        const v = await draw(
+          integers(0, 5)
+            .map((x) => x * 2)
+            .map((x) => x + 1),
+        );
         if (v % 2 !== 1) {
           throw new Error(`Expected odd, got ${v}`);
         }
@@ -123,7 +130,7 @@ describe("MappedGenerator", () => {
     await runHegelTest(
       async () => {
         const gen = integers(0, 10).filter((x) => x % 2 === 0);
-        const v = await gen.map((x) => x * 3).generate();
+        const v = await draw(gen.map((x) => x * 3));
         if (v % 6 !== 0) {
           throw new Error(`Expected multiple of 6, got ${v}`);
         }
@@ -148,19 +155,8 @@ describe("FlatMappedGenerator", () => {
     await runHegelTest(
       async () => {
         // Generate n, then generate exactly n+1 booleans as a list
-        const gen = integers(0, 3).flatMap(
-          (n) =>
-            ({
-              async generate() {
-                const results: boolean[] = [];
-                for (let i = 0; i <= n; i++) {
-                  results.push((await generateFromSchema({ type: "boolean" })) as boolean);
-                }
-                return results;
-              },
-            }) as Generator<boolean[]>,
-        );
-        const v = await gen.generate();
+        const gen = integers(0, 3).flatMap((n) => lists(booleans(), n + 1, n + 1));
+        const v = await draw(gen);
         if (!Array.isArray(v)) throw new Error("Expected array");
       },
       { testCases: 10 },
@@ -173,7 +169,7 @@ describe("FlatMappedGenerator", () => {
     await runHegelTest(
       async () => {
         const gen = integers(1, 5).flatMap((n) => text(n, n));
-        const s = await gen.generate();
+        const s = await draw(gen);
         const codepoints = Array.from(s).length;
         if (codepoints < 1 || codepoints > 5) {
           throw new Error(`Expected 1–5 codepoints, got ${codepoints}: "${s}"`);
@@ -199,7 +195,7 @@ describe("FlatMappedGenerator", () => {
           capturedN = n;
           return text(n, n);
         });
-        const s = await gen.generate();
+        const s = await draw(gen);
         pairs.push({ n: capturedN, len: Array.from(s).length });
         if (Array.from(s).length !== capturedN) {
           throw new Error(
@@ -239,9 +235,7 @@ describe("FilteredGenerator", () => {
   it("filters values via live server", async () => {
     await runHegelTest(
       async () => {
-        const v = await integers(0, 100)
-          .filter((x) => x % 2 === 0)
-          .generate();
+        const v = await draw(integers(0, 100).filter((x) => x % 2 === 0));
         if (v % 2 !== 0) throw new Error(`Expected even, got ${v}`);
       },
       { testCases: 10 },
@@ -253,7 +247,7 @@ describe("FilteredGenerator", () => {
     // The whole test run succeeds (all cases are just INVALID)
     await runHegelTest(
       async () => {
-        await new FilteredGenerator(integers(0, 10), () => false).generate();
+        await draw(new FilteredGenerator(integers(0, 10), () => false));
       },
       { testCases: 5 },
     );
@@ -273,7 +267,7 @@ describe("integers()", () => {
   it("generates integers in range via live server", async () => {
     await runHegelTest(
       async () => {
-        const v = await integers(0, 100).generate();
+        const v = await draw(integers(0, 100));
         if (v < 0 || v > 100) throw new Error(`Out of range: ${v}`);
       },
       { testCases: 20 },
@@ -304,10 +298,15 @@ describe("group()", () => {
   it("calls start_span and stop_span around fn", async () => {
     await runHegelTest(
       async () => {
+        const data = _testContextStorage.getStore()!;
         // group() runs fn inside a span — verify it works end-to-end
-        const result = await group(1, async () => {
-          return await generateFromSchema({ type: "boolean" });
-        });
+        const result = await group(
+          1,
+          async () => {
+            return await generateFromSchema({ type: "boolean" }, data);
+          },
+          data,
+        );
         if (typeof result !== "boolean") {
           throw new Error("Expected boolean");
         }
@@ -321,9 +320,14 @@ describe("discardableGroup()", () => {
   it("stops with discard=false when fn succeeds", async () => {
     await runHegelTest(
       async () => {
-        const result = await discardableGroup(1, async () => {
-          return await generateFromSchema({ type: "boolean" });
-        });
+        const data = _testContextStorage.getStore()!;
+        const result = await discardableGroup(
+          1,
+          async () => {
+            return await generateFromSchema({ type: "boolean" }, data);
+          },
+          data,
+        );
         if (typeof result !== "boolean") throw new Error("Expected boolean");
       },
       { testCases: 5 },
@@ -341,26 +345,28 @@ describe("discardableGroup()", () => {
         };
       },
     } as unknown as Channel;
-    const ctx = { channel: fakeChannel, isFinal: false, testAborted: false };
+    const data: TestCaseData = { channel: fakeChannel, isFinal: false, testAborted: false };
 
-    await _testContextStorage.run(ctx, async () => {
-      const err = new Error("fn failed");
-      await expect(
-        discardableGroup(1, async () => {
+    const err = new Error("fn failed");
+    await expect(
+      discardableGroup(
+        1,
+        async () => {
           throw err;
-        }),
-      ).rejects.toBe(err);
+        },
+        data,
+      ),
+    ).rejects.toBe(err);
 
-      // Check that stop_span was called with discard=true
-      const stopMsg = fakeRequests.find(
-        (m) =>
-          typeof m === "object" &&
-          m !== null &&
-          (m as Record<string, unknown>)["command"] === "stop_span" &&
-          (m as Record<string, unknown>)["discard"] === true,
-      );
-      expect(stopMsg).toBeDefined();
-    });
+    // Check that stop_span was called with discard=true
+    const stopMsg = fakeRequests.find(
+      (m) =>
+        typeof m === "object" &&
+        m !== null &&
+        (m as Record<string, unknown>)["command"] === "stop_span" &&
+        (m as Record<string, unknown>)["discard"] === true,
+    );
+    expect(stopMsg).toBeDefined();
   });
 });
 
@@ -372,9 +378,10 @@ describe("startSpan / stopSpan with live server", () => {
   it("sends start_span and stop_span to server", async () => {
     await runHegelTest(
       async () => {
-        await startSpan(1);
-        await generateFromSchema({ type: "boolean" });
-        await stopSpan();
+        const data = _testContextStorage.getStore()!;
+        await startSpan(1, data);
+        await generateFromSchema({ type: "boolean" }, data);
+        await stopSpan({}, data);
       },
       { testCases: 3 },
     );
@@ -389,12 +396,13 @@ describe("Collection", () => {
   it("more() returns false immediately after collection is finished", async () => {
     await runHegelTest(
       async () => {
+        const data = _testContextStorage.getStore()!;
         const coll = new Collection("test_coll", 0, 1);
-        while (await coll.more()) {
-          await generateFromSchema({ type: "integer" });
+        while (await coll.more(data)) {
+          await generateFromSchema({ type: "integer" }, data);
         }
         // After exhaustion, more() should return false without server call
-        const result = await coll.more();
+        const result = await coll.more(data);
         if (result !== false) throw new Error("Expected false");
       },
       { testCases: 5 },
@@ -404,15 +412,19 @@ describe("Collection", () => {
   it("reject() while collection active notifies server", async () => {
     await runHegelTest(
       async () => {
+        const data = _testContextStorage.getStore()!;
         const coll = new Collection("test_coll", 1, 5);
-        while (await coll.more()) {
-          const val = (await generateFromSchema({
-            type: "integer",
-            min_value: 0,
-            max_value: 100,
-          })) as number;
+        while (await coll.more(data)) {
+          const val = (await generateFromSchema(
+            {
+              type: "integer",
+              min_value: 0,
+              max_value: 100,
+            },
+            data,
+          )) as number;
           if (val % 2 !== 0) {
-            await coll.reject();
+            await coll.reject(data);
           }
         }
       },
@@ -423,12 +435,13 @@ describe("Collection", () => {
   it("reject() after collection finished is a no-op", async () => {
     await runHegelTest(
       async () => {
+        const data = _testContextStorage.getStore()!;
         const coll = new Collection("test_coll", 0, 1);
-        while (await coll.more()) {
-          await generateFromSchema({ type: "integer" });
+        while (await coll.more(data)) {
+          await generateFromSchema({ type: "integer" }, data);
         }
         // reject() after finished is a no-op
-        const result = await coll.reject();
+        const result = await coll.reject(data);
         if (result !== undefined) throw new Error("Expected undefined");
       },
       { testCases: 5 },
@@ -444,8 +457,9 @@ describe("Collection", () => {
     });
     try {
       await session.runTest(async () => {
+        const data = _testContextStorage.getStore()!;
         const coll = new Collection("test_coll", 0, 5);
-        await coll.more();
+        await coll.more(data);
       }, 5);
     } finally {
       session._cleanup();
@@ -464,8 +478,9 @@ describe("Collection", () => {
     const session = new HS();
     try {
       await session.runTest(async () => {
+        const data = _testContextStorage.getStore()!;
         const coll = new Collection("test_coll", 0, 5);
-        await coll.more();
+        await coll.more(data);
       }, 5);
     } finally {
       session._cleanup();
@@ -518,12 +533,10 @@ describe("Collection non-StopTest errors", () => {
         get: () => Promise.reject(makeRequestError("InvalidSchema")),
       }),
     } as unknown as Channel;
-    const ctx = { channel: fakeChannel, isFinal: false, testAborted: false };
+    const data: TestCaseData = { channel: fakeChannel, isFinal: false, testAborted: false };
 
-    await _testContextStorage.run(ctx, async () => {
-      const coll = new Collection("test_coll", 0, 5);
-      await expect(coll.more()).rejects.toBeInstanceOf(RequestError);
-    });
+    const coll = new Collection("test_coll", 0, 5);
+    await expect(coll.more(data)).rejects.toBeInstanceOf(RequestError);
   });
 
   it("more(): non-StopTest error is re-thrown", async () => {
@@ -538,12 +551,10 @@ describe("Collection non-StopTest errors", () => {
         },
       }),
     } as unknown as Channel;
-    const ctx = { channel: fakeChannel, isFinal: false, testAborted: false };
+    const data: TestCaseData = { channel: fakeChannel, isFinal: false, testAborted: false };
 
-    await _testContextStorage.run(ctx, async () => {
-      const coll = new Collection("test_coll", 0, 5);
-      await expect(coll.more()).rejects.toBeInstanceOf(RequestError);
-    });
+    const coll = new Collection("test_coll", 0, 5);
+    await expect(coll.more(data)).rejects.toBeInstanceOf(RequestError);
   });
 });
 
@@ -552,10 +563,10 @@ describe("Collection non-StopTest errors", () => {
 // ---------------------------------------------------------------------------
 
 describe("floats()", () => {
-  it("returns a BasicGenerator with type=number", () => {
+  it("returns a BasicGenerator with type=float", () => {
     const gen = floats();
     expect(gen).toBeInstanceOf(BasicGenerator);
-    expect(gen.schema()).toMatchObject({ type: "number" });
+    expect(gen.schema()).toMatchObject({ type: "float" });
   });
 
   it("includes min_value and max_value when provided", () => {
@@ -656,7 +667,7 @@ describe("emails()", () => {
   it("generates strings containing '@' via live server", async () => {
     await runHegelTest(
       async () => {
-        const email = await emails().generate();
+        const email = await draw(emails());
         if (typeof email !== "string" || !email.includes("@")) {
           throw new Error(`Expected email with '@', got: ${String(email)}`);
         }
@@ -676,7 +687,7 @@ describe("urls()", () => {
   it("generates strings starting with http:// or https:// via live server", async () => {
     await runHegelTest(
       async () => {
-        const url = await urls().generate();
+        const url = await draw(urls());
         if (
           typeof url !== "string" ||
           (!url.startsWith("http://") && !url.startsWith("https://"))
@@ -706,7 +717,7 @@ describe("domains()", () => {
     const validDomainChars = /^[a-zA-Z0-9.-]+$/;
     await runHegelTest(
       async () => {
-        const domain = await domains().generate();
+        const domain = await draw(domains());
         if (typeof domain !== "string" || !validDomainChars.test(domain)) {
           throw new Error(`Expected domain with only valid chars, got: ${String(domain)}`);
         }
@@ -719,7 +730,7 @@ describe("domains()", () => {
     const maxLen = 20;
     await runHegelTest(
       async () => {
-        const domain = await domains(maxLen).generate();
+        const domain = await draw(domains(maxLen));
         if (typeof domain !== "string" || domain.length > maxLen) {
           throw new Error(
             `Expected domain length <= ${maxLen}, got length ${String((domain as string).length)}: ${String(domain)}`,
@@ -741,7 +752,7 @@ describe("dates()", () => {
   it("generates ISO 8601 date strings (YYYY-MM-DD) via live server", async () => {
     await runHegelTest(
       async () => {
-        const dateStr = await dates().generate();
+        const dateStr = await draw(dates());
         if (typeof dateStr !== "string") {
           throw new Error(`Expected string, got: ${String(dateStr)}`);
         }
@@ -776,7 +787,7 @@ describe("times()", () => {
   it("generates time strings containing ':' via live server", async () => {
     await runHegelTest(
       async () => {
-        const timeStr = await times().generate();
+        const timeStr = await draw(times());
         if (typeof timeStr !== "string" || !timeStr.includes(":")) {
           throw new Error(`Expected time string with ':', got: ${String(timeStr)}`);
         }
@@ -796,7 +807,7 @@ describe("datetimes()", () => {
   it("generates datetime strings containing 'T' via live server", async () => {
     await runHegelTest(
       async () => {
-        const dtStr = await datetimes().generate();
+        const dtStr = await draw(datetimes());
         if (typeof dtStr !== "string" || !dtStr.includes("T")) {
           throw new Error(`Expected datetime string with 'T', got: ${String(dtStr)}`);
         }
@@ -831,7 +842,7 @@ describe("just()", () => {
   it("returns constant value via live server", async () => {
     await runHegelTest(
       async () => {
-        const v = await just(42).generate();
+        const v = await draw(just(42));
         if (v !== 42) throw new Error(`Expected 42, got ${v}`);
       },
       { testCases: 10 },
@@ -842,7 +853,7 @@ describe("just()", () => {
     const obj = { x: 1, y: 2 };
     await runHegelTest(
       async () => {
-        const v = await just(obj).generate();
+        const v = await draw(just(obj));
         if (v !== obj) throw new Error(`Expected same object reference`);
       },
       { testCases: 5 },
@@ -893,7 +904,7 @@ describe("sampledFrom()", () => {
     const itemSet = new Set(items);
     await runHegelTest(
       async () => {
-        const v = await sampledFrom(items).generate();
+        const v = await draw(sampledFrom(items));
         if (!itemSet.has(v)) throw new Error(`Unexpected value: ${v}`);
       },
       { testCases: 50 },
@@ -907,7 +918,7 @@ describe("sampledFrom()", () => {
     const items = [new Custom(1), new Custom(2), new Custom(3)];
     await runHegelTest(
       async () => {
-        const v = await sampledFrom(items).generate();
+        const v = await draw(sampledFrom(items));
         if (!(v instanceof Custom)) throw new Error(`Expected Custom instance`);
         if (!items.includes(v)) throw new Error(`Value not in items list`);
       },
@@ -920,7 +931,7 @@ describe("sampledFrom()", () => {
     const seen = new Set<string>();
     await runHegelTest(
       async () => {
-        const v = await sampledFrom(items).generate();
+        const v = await draw(sampledFrom(items));
         seen.add(v);
       },
       { testCases: 100 },
@@ -960,7 +971,7 @@ describe("fromRegex()", () => {
     const re = new RegExp(`^${pattern}$`);
     await runHegelTest(
       async () => {
-        const v = await fromRegex(pattern).generate();
+        const v = await draw(fromRegex(pattern));
         if (!re.test(v)) throw new Error(`Value "${v}" does not match pattern ${pattern}`);
       },
       { testCases: 50 },
@@ -979,7 +990,7 @@ describe("floats()", () => {
 
   it("schema defaults: allow_nan=true, allow_infinity=true when no bounds", () => {
     const schema = floats().schema();
-    expect(schema["type"]).toBe("number");
+    expect(schema["type"]).toBe("float");
     expect(schema["allow_nan"]).toBe(true);
     expect(schema["allow_infinity"]).toBe(true);
     expect(schema["exclude_min"]).toBe(false);
@@ -1017,7 +1028,7 @@ describe("floats()", () => {
   it("generates numbers via live server", async () => {
     await runHegelTest(
       async () => {
-        const v = await floats(0, 1).generate();
+        const v = await draw(floats(0, 1));
         if (typeof v !== "number") throw new Error(`Expected number, got ${typeof v}`);
         if (v < 0 || v > 1) throw new Error(`Out of range [0,1]: ${v}`);
       },
@@ -1045,7 +1056,7 @@ describe("booleans()", () => {
   it("generates booleans via live server", async () => {
     await runHegelTest(
       async () => {
-        const v = await booleans().generate();
+        const v = await draw(booleans());
         if (typeof v !== "boolean") throw new Error(`Expected boolean, got ${typeof v}`);
       },
       { testCases: 20 },
@@ -1074,7 +1085,7 @@ describe("text()", () => {
   it("generates strings via live server", async () => {
     await runHegelTest(
       async () => {
-        const v = await text(0, 20).generate();
+        const v = await draw(text(0, 20));
         if (typeof v !== "string") throw new Error(`Expected string, got ${typeof v}`);
         // Use Array.from to count Unicode codepoints (not UTF-16 code units)
         if (Array.from(v).length > 20)
@@ -1106,7 +1117,7 @@ describe("binary()", () => {
   it("generates Uint8Array via live server", async () => {
     await runHegelTest(
       async () => {
-        const v = await binary(0, 10).generate();
+        const v = await draw(binary(0, 10));
         if (!(v instanceof Uint8Array)) throw new Error(`Expected Uint8Array`);
         if (v.length > 10) throw new Error(`Too long: ${v.length}`);
       },
@@ -1166,7 +1177,7 @@ describe("tuples2()", () => {
         const g1 = integers(0, 10).map((x) => x * 2);
         const g2 = just(5).map((x) => x + 1);
         const gen = tuples2(g1, g2);
-        const v = await gen.generate();
+        const v = await draw(gen);
         const [a, b] = v;
         // a is integers(0,10) * 2 → even, in [0, 20]
         if (a % 2 !== 0 || a < 0 || a > 20) {
@@ -1195,7 +1206,7 @@ describe("tuples2()", () => {
       async () => {
         const filtered = integers(0, 10).filter(() => true);
         const gen = tuples2(filtered, booleans());
-        const v = await gen.generate();
+        const v = await draw(gen);
         if (!Array.isArray(v) || v.length !== 2) {
           throw new Error(`Expected 2-element array, got ${JSON.stringify(v)}`);
         }
@@ -1214,7 +1225,7 @@ describe("tuples2()", () => {
   it("all basic, no transforms: generates correct types via live server", async () => {
     await runHegelTest(
       async () => {
-        const v = await tuples2(integers(0, 10), booleans()).generate();
+        const v = await draw(tuples2(integers(0, 10), booleans()));
         const [n, b] = v;
         if (typeof n !== "number" || n < 0 || n > 10) {
           throw new Error(`First element out of range [0,10]: ${n}`);
@@ -1235,7 +1246,7 @@ describe("tuples2()", () => {
         const g2 = integers(0, 5); // no transform
         const gen = tuples2(g1, g2);
         expect(gen).toBeInstanceOf(BasicGenerator);
-        const v = await gen.generate();
+        const v = await draw(gen);
         const [a, b] = v;
         // a is 0..5 * 3, so 0,3,6,9,12,15
         if (a % 3 !== 0 || a < 0 || a > 15) {
@@ -1272,7 +1283,7 @@ describe("tuples3()", () => {
   it("generates 3-tuples with correct types via live server", async () => {
     await runHegelTest(
       async () => {
-        const v = await tuples3(text(), integers(0, 5), floats(0, 1)).generate();
+        const v = await draw(tuples3(text(), integers(0, 5), floats(0, 1)));
         const [s, n, f] = v;
         if (typeof s !== "string") throw new Error(`First element not string: ${String(s)}`);
         if (typeof n !== "number" || !Number.isInteger(n) || n < 0 || n > 5) {
@@ -1306,7 +1317,7 @@ describe("tuples4()", () => {
   it("generates 4-tuples via live server", async () => {
     await runHegelTest(
       async () => {
-        const v = await tuples4(integers(0, 10), booleans(), text(0, 5), floats(0, 1)).generate();
+        const v = await draw(tuples4(integers(0, 10), booleans(), text(0, 5), floats(0, 1)));
         const [n, b, s, f] = v;
         if (typeof n !== "number" || n < 0 || n > 10) {
           throw new Error(`First element out of range [0,10]: ${n}`);
@@ -1332,7 +1343,7 @@ describe("CompositeTupleGenerator", () => {
           integers(0, 10).filter((x) => x > 5),
           booleans(),
         );
-        const v = await gen.generate();
+        const v = await draw(gen);
         const [n, b] = v;
         if (typeof n !== "number" || n <= 5 || n > 10) {
           throw new Error(`First element should be > 5 and <= 10, got ${n}`);
@@ -1373,7 +1384,7 @@ describe("dicts() basic path", () => {
   it("generates a record (plain object) via live server", async () => {
     await runHegelTest(
       async () => {
-        const result = await dicts(text(1, 5), integers(0, 100), 0, 3).generate();
+        const result = await draw(dicts(text(1, 5), integers(0, 100), 0, 3));
         expect(result).toBeDefined();
         expect(typeof result).toBe("object");
         expect(result).not.toBeNull();
@@ -1391,7 +1402,7 @@ describe("dicts() basic path", () => {
   it("generates dict respecting min_size=1", async () => {
     await runHegelTest(
       async () => {
-        const result = (await dicts(text(1, 5), integers(0, 100), 1, 5).generate()) as Record<
+        const result = (await draw(dicts(text(1, 5), integers(0, 100), 1, 5))) as Record<
           string,
           unknown
         >;
@@ -1406,7 +1417,7 @@ describe("dicts() basic path", () => {
     const mappedKeys = integers(0, 9).map((n) => `key_${n}`);
     await runHegelTest(
       async () => {
-        const result = (await dicts(mappedKeys, integers(0, 100), 0, 3).generate()) as Record<
+        const result = (await draw(dicts(mappedKeys, integers(0, 100), 0, 3))) as Record<
           string,
           unknown
         >;
@@ -1422,7 +1433,7 @@ describe("dicts() basic path", () => {
     const doubledInts = integers(0, 50).map((n) => n * 2);
     await runHegelTest(
       async () => {
-        const result = (await dicts(text(1, 5), doubledInts, 0, 3).generate()) as Record<
+        const result = (await draw(dicts(text(1, 5), doubledInts, 0, 3))) as Record<
           string,
           unknown
         >;
@@ -1440,7 +1451,7 @@ describe("dicts() basic path", () => {
     const negatedInts = integers(1, 100).map((n) => -n);
     await runHegelTest(
       async () => {
-        const result = (await dicts(uppercaseKeys, negatedInts, 0, 3).generate()) as Record<
+        const result = (await draw(dicts(uppercaseKeys, negatedInts, 0, 3))) as Record<
           string,
           unknown
         >;
@@ -1476,7 +1487,7 @@ describe("dicts() non-basic path (CompositeDictGenerator)", () => {
     await runHegelTest(
       async () => {
         const filteredKeys = text(1, 3).filter((s) => s.length > 0);
-        const result = await dicts(filteredKeys, integers(0, 100), 0, 3).generate();
+        const result = await draw(dicts(filteredKeys, integers(0, 100), 0, 3));
         expect(result).toBeInstanceOf(Map);
         for (const [k, v] of (result as Map<string, number>).entries()) {
           expect(typeof k).toBe("string");
@@ -1494,10 +1505,7 @@ describe("dicts() non-basic path (CompositeDictGenerator)", () => {
     await runHegelTest(
       async () => {
         const filteredKeys = integers(0, 10).filter((x) => x > 5);
-        const result = (await dicts(filteredKeys, booleans(), 1, 3).generate()) as Map<
-          number,
-          boolean
-        >;
+        const result = (await draw(dicts(filteredKeys, booleans(), 1, 3))) as Map<number, boolean>;
         expect(result.size).toBeGreaterThanOrEqual(1);
         expect(result.size).toBeLessThanOrEqual(3);
       },
@@ -1510,7 +1518,7 @@ describe("dicts() non-basic path (CompositeDictGenerator)", () => {
     await runHegelTest(
       async () => {
         const filteredKeys = text(1, 3).filter((s) => s.length > 0);
-        const result = (await dicts(filteredKeys, integers(), 0).generate()) as Map<string, number>;
+        const result = (await draw(dicts(filteredKeys, integers(), 0))) as Map<string, number>;
         expect(result.size).toBeLessThanOrEqual(10);
       },
       { testCases: 20 },
@@ -1565,7 +1573,7 @@ describe("oneOf() — Path 1 (all basic, no transforms)", () => {
   it("generates values from one of the branches via live server", async () => {
     await runHegelTest(
       async () => {
-        const v = await oneOf(integers(0, 10), integers(100, 200)).generate();
+        const v = await draw(oneOf(integers(0, 10), integers(100, 200)));
         if (typeof v !== "number") throw new Error(`Expected number, got ${typeof v}`);
         if (!((v >= 0 && v <= 10) || (v >= 100 && v <= 200))) {
           throw new Error(`Value ${v} not in expected ranges`);
@@ -1580,7 +1588,7 @@ describe("oneOf() — Path 1 (all basic, no transforms)", () => {
     const high: number[] = [];
     await runHegelTest(
       async () => {
-        const v = await oneOf(integers(0, 10), integers(100, 200)).generate();
+        const v = await draw(oneOf(integers(0, 10), integers(100, 200)));
         if ((v as number) <= 10) low.push(v as number);
         else high.push(v as number);
       },
@@ -1625,7 +1633,7 @@ describe("oneOf() — Path 2 (all basic, with transforms)", () => {
         const gen1 = just(1).map((x) => x * 2);
         const gen2 = just(2).map((x) => x * 3);
         const combined = oneOf(gen1, gen2);
-        const v = await combined.generate();
+        const v = await draw(combined);
         if (v !== 2 && v !== 6) {
           throw new Error(`Expected 2 or 6, got ${v}`);
         }
@@ -1653,7 +1661,7 @@ describe("oneOf() — Path 2 (all basic, with transforms)", () => {
         const gen1 = just(1).map((x) => x * 2); // branch 0 → 2
         const gen2 = just(99); // branch 1 → 99, but const schema gives null → transform returns constant
         const combined = oneOf(gen1, gen2);
-        const v = await combined.generate();
+        const v = await draw(combined);
         if (v !== 2 && v !== 99) {
           throw new Error(`Expected 2 or 99, got ${v}`);
         }
@@ -1687,7 +1695,7 @@ describe("oneOf() — Path 3 (composite, non-basic)", () => {
     await runHegelTest(
       async () => {
         const filtered = integers(0, 10).filter(() => true);
-        const v = await oneOf(filtered, text(0, 5)).generate();
+        const v = await draw(oneOf(filtered, text(0, 5)));
         if (typeof v !== "number" && typeof v !== "string") {
           throw new Error(`Expected number or string, got ${typeof v}`);
         }
@@ -1702,7 +1710,7 @@ describe("oneOf() — Path 3 (composite, non-basic)", () => {
     await runHegelTest(
       async () => {
         const filtered = integers(0, 100).filter(() => true);
-        const v = await oneOf(filtered, text(1, 10)).generate();
+        const v = await draw(oneOf(filtered, text(1, 10)));
         if (typeof v === "number") seenInt = true;
         if (typeof v === "string") seenString = true;
       },
@@ -1733,7 +1741,7 @@ describe("optional()", () => {
   it("generates null or a value from the element via live server", async () => {
     await runHegelTest(
       async () => {
-        const v = await optional(integers(0, 100)).generate();
+        const v = await draw(optional(integers(0, 100)));
         if (v !== null && typeof v !== "number") {
           throw new Error(`Expected null or number, got ${typeof v}`);
         }
@@ -1747,7 +1755,7 @@ describe("optional()", () => {
     let seenValue = false;
     await runHegelTest(
       async () => {
-        const v = await optional(integers(0, 10)).generate();
+        const v = await draw(optional(integers(0, 10)));
         if (v === null) seenNull = true;
         else seenValue = true;
       },
@@ -1763,7 +1771,7 @@ describe("optional()", () => {
     await runHegelTest(
       async () => {
         const filtered = integers(0, 10).filter(() => true);
-        const v = await optional(filtered).generate();
+        const v = await draw(optional(filtered));
         if (v === null) seenNull = true;
         else seenValue = true;
       },
@@ -1802,7 +1810,7 @@ describe("ipAddresses()", () => {
   it("v4: generates strings with dots (IPv4 format) via live server", async () => {
     await runHegelTest(
       async () => {
-        const ip = await ipAddresses(4).generate();
+        const ip = await draw(ipAddresses(4));
         if (typeof ip !== "string" || !ip.includes(".")) {
           throw new Error(`Expected IPv4 with dots, got: ${String(ip)}`);
         }
@@ -1824,7 +1832,7 @@ describe("ipAddresses()", () => {
   it("v6: generates strings with colons (IPv6 format) via live server", async () => {
     await runHegelTest(
       async () => {
-        const ip = await ipAddresses(6).generate();
+        const ip = await draw(ipAddresses(6));
         if (typeof ip !== "string" || !ip.includes(":")) {
           throw new Error(`Expected IPv6 with colons, got: ${String(ip)}`);
         }
@@ -1838,7 +1846,7 @@ describe("ipAddresses()", () => {
     let seenV6 = false;
     await runHegelTest(
       async () => {
-        const ip = await ipAddresses().generate();
+        const ip = await draw(ipAddresses());
         if (typeof ip !== "string") throw new Error(`Expected string, got ${typeof ip}`);
         if (ip.includes(".") && !ip.includes(":")) seenV4 = true;
         if (ip.includes(":")) seenV6 = true;
@@ -1905,7 +1913,7 @@ describe("lists()", () => {
   it("lists(integers(0, 100)): all elements in range", async () => {
     await runHegelTest(
       async () => {
-        const xs = await lists(integers(0, 100)).generate();
+        const xs = await draw(lists(integers(0, 100)));
         if (!Array.isArray(xs)) throw new Error("Expected array");
         for (const x of xs) {
           if (typeof x !== "number" || x < 0 || x > 100) {
@@ -1920,7 +1928,7 @@ describe("lists()", () => {
   it("lists(booleans(), 3, 5): length in [3, 5] and all boolean", async () => {
     await runHegelTest(
       async () => {
-        const xs = await lists(booleans(), 3, 5).generate();
+        const xs = await draw(lists(booleans(), 3, 5));
         if (!Array.isArray(xs)) throw new Error("Expected array");
         if (xs.length < 3 || xs.length > 5) {
           throw new Error(`Expected length 3-5, got ${xs.length}`);
@@ -1936,11 +1944,13 @@ describe("lists()", () => {
   it("basic element with transform via live server: transform applied to each item", async () => {
     await runHegelTest(
       async () => {
-        const xs = await lists(
-          integers(0, 5).map((x) => x * 2),
-          0,
-          5,
-        ).generate();
+        const xs = await draw(
+          lists(
+            integers(0, 5).map((x) => x * 2),
+            0,
+            5,
+          ),
+        );
         if (!Array.isArray(xs)) throw new Error("Expected array");
         for (const x of xs) {
           if (typeof x !== "number" || x % 2 !== 0 || x < 0 || x > 10) {
@@ -1955,11 +1965,13 @@ describe("lists()", () => {
   it("non-basic elements: all > 5", async () => {
     await runHegelTest(
       async () => {
-        const xs = await lists(
-          integers(0, 10).filter((x) => x > 5),
-          1,
-          5,
-        ).generate();
+        const xs = await draw(
+          lists(
+            integers(0, 10).filter((x) => x > 5),
+            1,
+            5,
+          ),
+        );
         if (!Array.isArray(xs)) throw new Error("Expected array");
         if (xs.length < 1 || xs.length > 5) {
           throw new Error(`Expected length 1-5, got ${xs.length}`);
@@ -1977,7 +1989,7 @@ describe("lists()", () => {
   it("nested lists: list of lists of booleans", async () => {
     await runHegelTest(
       async () => {
-        const xss = await lists(lists(booleans(), 0, 3), 0, 3).generate();
+        const xss = await draw(lists(lists(booleans(), 0, 3), 0, 3));
         if (!Array.isArray(xss)) throw new Error("Expected outer array");
         for (const xs of xss) {
           if (!Array.isArray(xs)) throw new Error("Expected inner array");
@@ -1993,7 +2005,7 @@ describe("lists()", () => {
   it("CompositeListGenerator with no max: returns a list of integers in range", async () => {
     await runHegelTest(
       async () => {
-        const xs = await lists(integers(0, 10).filter(() => true)).generate();
+        const xs = await draw(lists(integers(0, 10).filter(() => true)));
         if (!Array.isArray(xs)) throw new Error("Expected array");
         for (const x of xs) {
           if (typeof x !== "number" || x < 0 || x > 10) {
@@ -2012,7 +2024,7 @@ describe("lists()", () => {
     const session = new HS();
     try {
       await session.runTest(async () => {
-        const xs = await lists(integers(0, 10).filter(() => true)).generate();
+        const xs = await draw(lists(integers(0, 10).filter(() => true)));
         void xs;
       }, 5);
     } finally {
@@ -2032,7 +2044,7 @@ describe("lists()", () => {
     const session = new HS();
     try {
       await session.runTest(async () => {
-        const xs = await lists(integers(0, 10).filter(() => true)).generate();
+        const xs = await draw(lists(integers(0, 10).filter(() => true)));
         void xs;
       }, 5);
     } finally {

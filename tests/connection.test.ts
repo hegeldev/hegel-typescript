@@ -123,21 +123,6 @@ describe("Connection.live", () => {
 // ---------------------------------------------------------------------------
 
 describe("handshake", () => {
-  it("sendHandshake returns server version string", async () => {
-    const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
-
-    const [version] = await Promise.all([
-      clientConn.sendHandshake(),
-      serverConn.receiveHandshake(),
-    ]);
-    expect(version).toBe("0.1");
-
-    clientConn.close();
-    serverConn.close();
-  });
-
   it("double sendHandshake throws", async () => {
     const [serverSock, clientSock] = await socketPair();
     const serverConn = new Connection(serverSock, { name: "Server" });

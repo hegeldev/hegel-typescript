@@ -10,13 +10,14 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Channel, Connection, RequestError } from "./connection.js";
+import type { Generator } from "./generators.js";
 
 // ---------------------------------------------------------------------------
 // Supported protocol version range
 // ---------------------------------------------------------------------------
 
 const SUPPORTED_PROTOCOL_LO = 0.1;
-const SUPPORTED_PROTOCOL_HI = 0.1;
+const SUPPORTED_PROTOCOL_HI = 0.3;
 
 // ---------------------------------------------------------------------------
 // Error classes
@@ -79,7 +80,7 @@ export const Labels = {
  * Per-test-case context stored in AsyncLocalStorage.
  * Holds the current data channel and flags for the active test case.
  */
-export interface TestContext {
+export interface TestCaseData {
   /** The data channel for the current test case. */
   channel: Channel;
   /** Whether this is the final (shrunk) replay of a failing test. */
@@ -94,9 +95,9 @@ export interface TestContext {
 /**
  * AsyncLocalStorage for the current test context.
  * `getStore()` returns `undefined` outside a session call stack,
- * `null` when explicitly cleared, or a `TestContext` inside `_runTestCase`.
+ * `null` when explicitly cleared, or a `TestCaseData` inside `_runTestCase`.
  */
-export const _testContextStorage = new AsyncLocalStorage<TestContext | null>();
+export const _testContextStorage = new AsyncLocalStorage<TestCaseData | null>();
 
 // ---------------------------------------------------------------------------
 // Client
@@ -249,9 +250,9 @@ export class Client {
       throw new RuntimeError("Cannot nest test cases - already inside a test case");
     }
 
-    const ctx: TestContext = { channel, isFinal, testAborted: false };
+    const data: TestCaseData = { channel, isFinal, testAborted: false };
 
-    await _testContextStorage.run(ctx, async () => {
+    await _testContextStorage.run(data, async () => {
       let alreadyComplete = false;
       let status = "VALID";
       let origin: string | null = null;
@@ -298,11 +299,11 @@ export class Client {
  * @throws {RuntimeError} If called outside a test function.
  */
 export function _getChannel(): Channel {
-  const ctx = _testContextStorage.getStore();
-  if (!ctx) {
+  const data = _testContextStorage.getStore();
+  if (!data) {
     throw new RuntimeError("Not in a test context - must be called from within a test function");
   }
-  return ctx.channel;
+  return data.channel;
 }
 
 // ---------------------------------------------------------------------------
@@ -321,14 +322,16 @@ export function _getChannel(): Channel {
  * @throws {DataExhausted} If the server sends StopTest.
  * @throws {RequestError} For any other server error.
  */
-export async function generateFromSchema(schema: Record<string, unknown>): Promise<unknown> {
-  const channel = _getChannel();
-  const ctx = _testContextStorage.getStore()!;
+export async function generateFromSchema(
+  schema: Record<string, unknown>,
+  data: TestCaseData,
+): Promise<unknown> {
+  const channel = data.channel;
   try {
     return await channel.request({ command: "generate", schema }).get();
   } catch (e) {
     if (e instanceof RequestError && e.errorType === "StopTest") {
-      ctx.testAborted = true;
+      data.testAborted = true;
       throw new DataExhausted("Server ran out of data");
     }
     throw e;
@@ -341,6 +344,10 @@ export async function generateFromSchema(schema: Record<string, unknown>): Promi
  * @throws {AssumeRejected} When condition is false.
  */
 export function assume(condition: boolean): void {
+  const data = _testContextStorage.getStore();
+  if (!data) {
+    throw new RuntimeError("assume() cannot be called outside of a Hegel test");
+  }
   if (!condition) {
     throw new AssumeRejected();
   }
@@ -354,8 +361,11 @@ export function assume(condition: boolean): void {
  * @param message - The message to print.
  */
 export function note(message: string): void {
-  const ctx = _testContextStorage.getStore();
-  if (ctx?.isFinal) {
+  const data = _testContextStorage.getStore();
+  if (!data) {
+    throw new RuntimeError("note() cannot be called outside of a Hegel test");
+  }
+  if (data.isFinal) {
     process.stderr.write(message + "\n");
   }
 }
@@ -367,7 +377,11 @@ export function note(message: string): void {
  * @param label - Optional label for this target.
  */
 export async function target(value: number, label = ""): Promise<void> {
-  const channel = _getChannel();
+  const data = _testContextStorage.getStore();
+  if (!data) {
+    throw new RuntimeError("target() cannot be called outside of a Hegel test");
+  }
+  const channel = data.channel;
   await channel.request({ command: "target", value, label }).get();
 }
 
@@ -378,10 +392,9 @@ export async function target(value: number, label = ""): Promise<void> {
  *
  * @param label - Span label constant (see `Labels`).
  */
-export async function startSpan(label = 0): Promise<void> {
-  const ctx = _testContextStorage.getStore();
-  if (ctx?.testAborted) return;
-  const channel = _getChannel();
+export async function startSpan(label: number, data: TestCaseData): Promise<void> {
+  if (data.testAborted) return;
+  const channel = data.channel;
   await channel.request({ command: "start_span", label }).get();
 }
 
@@ -392,11 +405,32 @@ export async function startSpan(label = 0): Promise<void> {
  *
  * @param opts.discard - If true, the span is discarded (not counted toward coverage).
  */
-export async function stopSpan(opts: { discard?: boolean } = {}): Promise<void> {
-  const ctx = _testContextStorage.getStore();
-  if (ctx?.testAborted) return;
-  const channel = _getChannel();
+export async function stopSpan(opts: { discard?: boolean }, data: TestCaseData): Promise<void> {
+  if (data.testAborted) return;
+  const channel = data.channel;
   await channel.request({ command: "stop_span", discard: opts.discard ?? false }).get();
+}
+
+// ---------------------------------------------------------------------------
+// draw — primary API for generating values
+// ---------------------------------------------------------------------------
+
+/**
+ * Draw a value from a generator.
+ *
+ * This is the primary way to get values from generators inside a Hegel test.
+ * It retrieves the current test context and delegates to the generator's
+ * `doDraw` method.
+ *
+ * @param gen - The generator to draw from.
+ * @throws {RuntimeError} If called outside a Hegel test.
+ */
+export async function draw<T>(gen: Generator<T>): Promise<T> {
+  const data = _testContextStorage.getStore();
+  if (!data) {
+    throw new RuntimeError("draw() cannot be called outside of a Hegel test");
+  }
+  return gen.doDraw(data);
 }
 
 // ---------------------------------------------------------------------------

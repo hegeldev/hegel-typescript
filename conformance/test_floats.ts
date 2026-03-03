@@ -10,6 +10,7 @@
 
 import { getTestCases, writeMetrics } from "../src/conformance.js";
 import { floats } from "../src/generators.js";
+import { draw } from "../src/runner.js";
 import { runHegelTest } from "../src/session.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
@@ -28,7 +29,7 @@ const gen = floats(minValue, maxValue, allowNan, allowInfinity, excludeMin, excl
 
 await runHegelTest(
   async function conformance_floats() {
-    const value = await gen.generate();
+    const value = await draw(gen);
     const isNan = Number.isNaN(value);
     const isInfinite = !isNan && !Number.isFinite(value);
     writeMetrics({

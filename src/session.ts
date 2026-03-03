@@ -221,8 +221,8 @@ const _session = new HegelSession();
  * @example
  * ```typescript
  * await runHegelTest(async () => {
- *   const x = await integers(0, 100).generate();
- *   const y = await integers(0, 100).generate();
+ *   const x = await draw(integers(0, 100));
+ *   const y = await draw(integers(0, 100));
  *   expect(x + y).toBe(y + x);
  * }, { testCases: 200 });
  * ```
@@ -245,8 +245,8 @@ export async function runHegelTest(
  * @example
  * ```typescript
  * it("addition is commutative", hegel({ testCases: 200 })(async () => {
- *   const a = await integers().generate();
- *   const b = await integers().generate();
+ *   const a = await draw(integers());
+ *   const b = await draw(integers());
  *   expect(a + b).toBe(b + a);
  * }));
  * ```

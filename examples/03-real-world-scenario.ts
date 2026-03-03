@@ -11,6 +11,7 @@
 
 import {
   runHegelTest,
+  draw,
   integers,
   floats,
   text,
@@ -132,7 +133,7 @@ async function check(name: string, fn: () => Promise<void>): Promise<void> {
 
 // 1. Empty cart has zero totals
 await check("empty cart: all totals are zero", async () => {
-  const coupon = await optional(couponGen).generate();
+  const coupon = await draw(optional(couponGen));
   const summary = cartSummary([], coupon as Coupon | null);
   if (summary.subtotal !== 0) throw new Error(`Empty cart subtotal: ${summary.subtotal}`);
   if (summary.discounted !== 0) throw new Error(`Empty cart discounted: ${summary.discounted}`);
@@ -141,13 +142,13 @@ await check("empty cart: all totals are zero", async () => {
 
 // 2. Total with no coupon ≥ subtotal (tax only adds, never removes)
 await check("no coupon: total >= subtotal", async () => {
-  const itemCount = await integers(1, 5).generate();
+  const itemCount = await draw(integers(1, 5));
   const items: CartItem[] = [];
   for (let i = 0; i < itemCount; i++) {
-    const base = await productGen.generate();
-    const catVal = await categoryGen.generate();
+    const base = await draw(productGen);
+    const catVal = await draw(categoryGen);
     const product: Product = { ...base, category: catVal.type };
-    const { quantity } = await cartItemGen.generate();
+    const { quantity } = await draw(cartItemGen);
     items.push({ product, quantity });
   }
   const summary = cartSummary(items, null);
@@ -158,15 +159,15 @@ await check("no coupon: total >= subtotal", async () => {
 // 3. Discount reduces total (or keeps it equal for food with 0% tax, rounding)
 await check("coupon: discounted <= subtotal", async () => {
   const items: CartItem[] = [];
-  const itemCount = await integers(1, 5).generate();
+  const itemCount = await draw(integers(1, 5));
   for (let i = 0; i < itemCount; i++) {
-    const base = await productGen.generate();
-    const catVal = await categoryGen.generate();
+    const base = await draw(productGen);
+    const catVal = await draw(categoryGen);
     const product: Product = { ...base, category: catVal.type };
-    const { quantity } = await cartItemGen.generate();
+    const { quantity } = await draw(cartItemGen);
     items.push({ product, quantity });
   }
-  const coupon = await couponGen.generate();
+  const coupon = await draw(couponGen);
   const summary = cartSummary(items, coupon as Coupon);
   if (summary.discounted > summary.subtotal)
     throw new Error(`discounted (${summary.discounted}) > subtotal (${summary.subtotal})`);
@@ -175,15 +176,15 @@ await check("coupon: discounted <= subtotal", async () => {
 // 4. Totals are non-negative integers
 await check("all totals are non-negative integers", async () => {
   const items: CartItem[] = [];
-  const itemCount = await integers(0, 5).generate();
+  const itemCount = await draw(integers(0, 5));
   for (let i = 0; i < itemCount; i++) {
-    const base = await productGen.generate();
-    const catVal = await categoryGen.generate();
+    const base = await draw(productGen);
+    const catVal = await draw(categoryGen);
     const product: Product = { ...base, category: catVal.type };
-    const { quantity } = await cartItemGen.generate();
+    const { quantity } = await draw(cartItemGen);
     items.push({ product, quantity });
   }
-  const coupon = await optional(couponGen).generate();
+  const coupon = await draw(optional(couponGen));
   const summary = cartSummary(items, coupon as Coupon | null);
 
   if (!Number.isInteger(summary.subtotal) || summary.subtotal < 0)
@@ -197,19 +198,19 @@ await check("all totals are non-negative integers", async () => {
 // 5. Adding an item increases subtotal by at least the item's price
 await check("adding item increases subtotal", async () => {
   const items: CartItem[] = [];
-  const itemCount = await integers(0, 4).generate();
+  const itemCount = await draw(integers(0, 4));
   for (let i = 0; i < itemCount; i++) {
-    const base = await productGen.generate();
-    const catVal = await categoryGen.generate();
+    const base = await draw(productGen);
+    const catVal = await draw(categoryGen);
     const product: Product = { ...base, category: catVal.type };
-    const { quantity } = await cartItemGen.generate();
+    const { quantity } = await draw(cartItemGen);
     items.push({ product, quantity });
   }
 
-  const base = await productGen.generate();
-  const catVal = await categoryGen.generate();
+  const base = await draw(productGen);
+  const catVal = await draw(categoryGen);
   const newProduct: Product = { ...base, category: catVal.type };
-  const newQty = await integers(1, 5).generate();
+  const newQty = await draw(integers(1, 5));
   const newItem: CartItem = { product: newProduct, quantity: newQty };
 
   const before = subtotal(items);
@@ -224,10 +225,10 @@ await check("adding item increases subtotal", async () => {
 
 // 6. Tax category: food has zero tax
 await check("food items have zero tax", async () => {
-  const priceInCents = await integers(100, 10_000).generate();
-  const quantity = await integers(1, 5).generate();
-  const name = await text(1, 20).generate();
-  const id = await text(1, 5).generate();
+  const priceInCents = await draw(integers(100, 10_000));
+  const quantity = await draw(integers(1, 5));
+  const name = await draw(text(1, 20));
+  const id = await draw(text(1, 5));
 
   const foodProduct: Product = { id, name, priceInCents, category: "food" };
   const items: CartItem[] = [{ product: foodProduct, quantity }];
@@ -243,17 +244,17 @@ await check("food items have zero tax", async () => {
 // 7. Ordering of items doesn't affect total (commutativity)
 await check("cart total is order-independent", async () => {
   const items: CartItem[] = [];
-  const itemCount = await integers(2, 5).generate();
+  const itemCount = await draw(integers(2, 5));
   for (let i = 0; i < itemCount; i++) {
-    const base = await productGen.generate();
-    const catVal = await categoryGen.generate();
+    const base = await draw(productGen);
+    const catVal = await draw(categoryGen);
     const product: Product = { ...base, category: catVal.type };
-    const { quantity } = await cartItemGen.generate();
+    const { quantity } = await draw(cartItemGen);
     items.push({ product, quantity });
   }
   assume(items.length >= 2);
 
-  const coupon = await optional(couponGen).generate();
+  const coupon = await draw(optional(couponGen));
 
   const total1 = cartSummary(items, coupon as Coupon | null).total;
   const total2 = cartSummary([...items].reverse(), coupon as Coupon | null).total;

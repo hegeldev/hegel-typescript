@@ -7,6 +7,7 @@
 
 import { getTestCases, writeMetrics } from "../src/conformance.js";
 import { binary } from "../src/generators.js";
+import { draw } from "../src/runner.js";
 import { runHegelTest } from "../src/session.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
@@ -19,7 +20,7 @@ const gen = binary(minSize, maxSize);
 
 await runHegelTest(
   async function conformance_binary() {
-    const value = await gen.generate();
+    const value = await draw(gen);
     writeMetrics({ length: value.length });
   },
   { testCases },

@@ -26,7 +26,7 @@
  * }
  *
  * const gen = deriveGenerator(Point);
- * // gen.generate() returns a Point instance with random x, y
+ * // draw(gen) returns a Point instance with random x, y
  * ```
  *
  * @packageDocumentation
@@ -34,6 +34,7 @@
 
 import { Generator, BasicGenerator } from "./generators.js";
 import { startSpan, stopSpan, Labels } from "./runner.js";
+import type { TestCaseData } from "./runner.js";
 
 // ---------------------------------------------------------------------------
 // Metadata storage
@@ -140,16 +141,16 @@ export class DerivedGenerator<T> extends Generator<T> {
     this._fields = [...fields].sort((a, b) => a.order - b.order);
   }
 
-  async generate(): Promise<T> {
-    await startSpan(Labels.FIXED_DICT);
+  async doDraw(data: TestCaseData): Promise<T> {
+    await startSpan(Labels.FIXED_DICT, data);
     try {
       const instance = new this._ctor();
       for (const f of this._fields) {
-        (instance as Record<string | symbol, unknown>)[f.name] = await f.generator.generate();
+        (instance as Record<string | symbol, unknown>)[f.name] = await f.generator.doDraw(data);
       }
       return instance;
     } finally {
-      await stopSpan();
+      await stopSpan({}, data);
     }
   }
 }
@@ -175,7 +176,7 @@ export class DerivedGenerator<T> extends Generator<T> {
  *   \@field(integers(1, 65535)) port!: number;
  * }
  * const gen = deriveGenerator(Config);
- * const cfg = await gen.generate(); // Config { debug: true, port: 8080 }
+ * const cfg = await draw(gen); // Config { debug: true, port: 8080 }
  * ```
  */
 export function deriveGenerator<T>(ctor: new () => T): DerivedGenerator<T> {
@@ -209,16 +210,16 @@ export class RecordDerivedGenerator<T> extends Generator<T> {
     this._entries = entries;
   }
 
-  async generate(): Promise<T> {
-    await startSpan(Labels.FIXED_DICT);
+  async doDraw(data: TestCaseData): Promise<T> {
+    await startSpan(Labels.FIXED_DICT, data);
     try {
       const result: Record<string, unknown> = {};
       for (const [key, gen] of this._entries) {
-        result[key] = await gen.generate();
+        result[key] = await gen.doDraw(data);
       }
       return result as T;
     } finally {
-      await stopSpan();
+      await stopSpan({}, data);
     }
   }
 }
@@ -237,7 +238,7 @@ export class RecordDerivedGenerator<T> extends Generator<T> {
  *   x: floats(-100, 100),
  *   y: floats(-100, 100),
  * });
- * const pt = await pointGen.generate(); // { x: 42.5, y: -3.14 }
+ * const pt = await draw(pointGen); // { x: 42.5, y: -3.14 }
  * ```
  *
  * @param schema - Mapping from field name to its generator.
@@ -301,18 +302,18 @@ export class VariantGenerator<T> extends Generator<T> {
     });
   }
 
-  async generate(): Promise<T> {
-    await startSpan(Labels.ENUM_VARIANT);
+  async doDraw(data: TestCaseData): Promise<T> {
+    await startSpan(Labels.ENUM_VARIANT, data);
     try {
-      const index = await this._indexGen.generate();
+      const index = await this._indexGen.doDraw(data);
       const variant = this._variants[index]!;
       if (variant.fields !== null) {
-        const fields = await variant.fields.generate();
+        const fields = await variant.fields.doDraw(data);
         return { [this._discriminant]: variant.tag, ...(fields as object) } as T;
       }
       return { [this._discriminant]: variant.tag } as T;
     } finally {
-      await stopSpan();
+      await stopSpan({}, data);
     }
   }
 }
@@ -338,7 +339,7 @@ export class VariantGenerator<T> extends Generator<T> {
  *   }),
  * });
  *
- * const shape = await shapeGen.generate();
+ * const shape = await draw(shapeGen);
  * // { type: "circle", radius: 42.5 }  or  { type: "rectangle", width: 10, height: 20 }
  * ```
  *

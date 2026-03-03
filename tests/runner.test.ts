@@ -20,6 +20,7 @@ import {
   _getChannel,
   _testContextStorage,
   assume,
+  draw,
   extractOrigin,
   generateFromSchema,
   note,
@@ -27,6 +28,7 @@ import {
   stopSpan,
   target,
 } from "../src/runner.js";
+import { BasicGenerator } from "../src/generators.js";
 import { HegelSession, runHegelTest } from "../src/session.js";
 
 // ---------------------------------------------------------------------------
@@ -212,8 +214,8 @@ describe("_getChannel", () => {
 
   it("returns channel when inside context", async () => {
     const fakeChannel = {} as Channel;
-    const ctx = { channel: fakeChannel, isFinal: false, testAborted: false };
-    await _testContextStorage.run(ctx, async () => {
+    const data = { channel: fakeChannel, isFinal: false, testAborted: false };
+    await _testContextStorage.run(data, async () => {
       const ch = _getChannel();
       expect(ch).toBe(fakeChannel);
     });
@@ -225,12 +227,24 @@ describe("_getChannel", () => {
 // ---------------------------------------------------------------------------
 
 describe("assume", () => {
-  it("true is a no-op", () => {
-    expect(() => assume(true)).not.toThrow();
+  it("throws RuntimeError outside test context", () => {
+    expect(() => assume(true)).toThrow("assume() cannot be called outside of a Hegel test");
   });
 
-  it("false throws AssumeRejected", () => {
-    expect(() => assume(false)).toThrow(AssumeRejected);
+  it("true is a no-op inside context", async () => {
+    const fakeChannel = {} as Channel;
+    const data = { channel: fakeChannel, isFinal: false, testAborted: false };
+    await _testContextStorage.run(data, async () => {
+      expect(() => assume(true)).not.toThrow();
+    });
+  });
+
+  it("false throws AssumeRejected inside context", async () => {
+    const fakeChannel = {} as Channel;
+    const data = { channel: fakeChannel, isFinal: false, testAborted: false };
+    await _testContextStorage.run(data, async () => {
+      expect(() => assume(false)).toThrow(AssumeRejected);
+    });
   });
 });
 
@@ -239,27 +253,21 @@ describe("assume", () => {
 // ---------------------------------------------------------------------------
 
 describe("note", () => {
-  it("is silent when not in any context", () => {
-    const spy = vi.spyOn(process.stderr, "write").mockReturnValue(true);
-    note("should not print");
-    expect(spy).not.toHaveBeenCalled();
-    spy.mockRestore();
+  it("throws RuntimeError outside test context", () => {
+    expect(() => note("msg")).toThrow("note() cannot be called outside of a Hegel test");
   });
 
-  it("is silent when context is null", async () => {
-    const spy = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+  it("throws RuntimeError when context is null", async () => {
     await _testContextStorage.run(null, async () => {
-      note("should not print");
-      expect(spy).not.toHaveBeenCalled();
+      expect(() => note("msg")).toThrow("note() cannot be called outside of a Hegel test");
     });
-    spy.mockRestore();
   });
 
   it("is silent when isFinal=false", async () => {
     const fakeChannel = {} as Channel;
-    const ctx = { channel: fakeChannel, isFinal: false, testAborted: false };
+    const data = { channel: fakeChannel, isFinal: false, testAborted: false };
     const spy = vi.spyOn(process.stderr, "write").mockReturnValue(true);
-    await _testContextStorage.run(ctx, async () => {
+    await _testContextStorage.run(data, async () => {
       note("should not print");
       expect(spy).not.toHaveBeenCalled();
     });
@@ -268,13 +276,23 @@ describe("note", () => {
 
   it("prints when isFinal=true", async () => {
     const fakeChannel = {} as Channel;
-    const ctx = { channel: fakeChannel, isFinal: true, testAborted: false };
+    const data = { channel: fakeChannel, isFinal: true, testAborted: false };
     const spy = vi.spyOn(process.stderr, "write").mockReturnValue(true);
-    await _testContextStorage.run(ctx, async () => {
+    await _testContextStorage.run(data, async () => {
       note("test message");
       expect(spy).toHaveBeenCalledWith("test message\n");
     });
     spy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// target
+// ---------------------------------------------------------------------------
+
+describe("target", () => {
+  it("throws RuntimeError outside test context", async () => {
+    await expect(target(1.0)).rejects.toThrow("target() cannot be called outside of a Hegel test");
   });
 });
 
@@ -285,12 +303,10 @@ describe("note", () => {
 describe("startSpan / stopSpan when testAborted", () => {
   it("are no-ops when testAborted=true", async () => {
     const fakeChannel = { request: vi.fn() } as unknown as Channel;
-    const ctx = { channel: fakeChannel, isFinal: false, testAborted: true };
-    await _testContextStorage.run(ctx, async () => {
-      await startSpan(1);
-      await stopSpan();
-      expect(fakeChannel.request).not.toHaveBeenCalled();
-    });
+    const data = { channel: fakeChannel, isFinal: false, testAborted: true };
+    await startSpan(1, data);
+    await stopSpan({}, data);
+    expect(fakeChannel.request).not.toHaveBeenCalled();
   });
 });
 
@@ -335,7 +351,7 @@ describe("runHegelTest integration", () => {
   it("passes when all test cases are INVALID (assume false)", async () => {
     await runHegelTest(async () => {
       // Generate something so the server knows we're running
-      await generateFromSchema({ type: "boolean" });
+      await generateFromSchema({ type: "boolean" }, _testContextStorage.getStore()!);
       assume(false);
     });
   });
@@ -343,11 +359,14 @@ describe("runHegelTest integration", () => {
   it("re-raises original exception for a single interesting failure", async () => {
     await expect(
       runHegelTest(async () => {
-        const x = (await generateFromSchema({
-          type: "integer",
-          min_value: 0,
-          max_value: 100,
-        })) as number;
+        const x = (await generateFromSchema(
+          {
+            type: "integer",
+            min_value: 0,
+            max_value: 100,
+          },
+          _testContextStorage.getStore()!,
+        )) as number;
         if (x >= 50) throw new Error("x is too large");
       }),
     ).rejects.toThrow("x is too large");
@@ -433,7 +452,10 @@ describe("runHegelTest integration", () => {
 
   it("target() completes without error", async () => {
     await runHegelTest(async () => {
-      const b = (await generateFromSchema({ type: "boolean" })) as boolean;
+      const b = (await generateFromSchema(
+        { type: "boolean" },
+        _testContextStorage.getStore()!,
+      )) as boolean;
       await target(b ? 1.0 : 0.0, "bool_score");
     });
   });
@@ -442,7 +464,7 @@ describe("runHegelTest integration", () => {
     const spy = vi.spyOn(process.stderr, "write").mockReturnValue(true);
     try {
       await runHegelTest(async () => {
-        await generateFromSchema({ type: "boolean" });
+        await generateFromSchema({ type: "boolean" }, _testContextStorage.getStore()!);
         note("should not print");
       });
     } finally {
@@ -459,11 +481,14 @@ describe("runHegelTest integration", () => {
     });
     await expect(
       runHegelTest(async () => {
-        const x = (await generateFromSchema({
-          type: "integer",
-          min_value: 0,
-          max_value: 100,
-        })) as number;
+        const x = (await generateFromSchema(
+          {
+            type: "integer",
+            min_value: 0,
+            max_value: 100,
+          },
+          _testContextStorage.getStore()!,
+        )) as number;
         note("final note message");
         if (x >= 50) throw new Error("fail");
       }),
@@ -478,7 +503,10 @@ describe("runHegelTest integration", () => {
     await runHegelTest(
       async () => {
         try {
-          await generateFromSchema({ type: "completely_invalid_schema_type_xyz" });
+          await generateFromSchema(
+            { type: "completely_invalid_schema_type_xyz" },
+            _testContextStorage.getStore()!,
+          );
         } catch (e) {
           caughtError = e;
           // Don't re-throw so the test "passes" (we just check it was a RequestError)
@@ -522,7 +550,7 @@ describe("HEGEL_PROTOCOL_TEST_MODE tests", () => {
   it("stop_test_on_generate: completes without error", async () => {
     await withTestMode("stop_test_on_generate", async (session) => {
       await session.runTest(async () => {
-        await generateFromSchema({ type: "boolean" });
+        await generateFromSchema({ type: "boolean" }, _testContextStorage.getStore()!);
       }, 5);
     });
   });
@@ -530,7 +558,7 @@ describe("HEGEL_PROTOCOL_TEST_MODE tests", () => {
   it("stop_test_on_mark_complete: completes without error", async () => {
     await withTestMode("stop_test_on_mark_complete", async (session) => {
       await session.runTest(async () => {
-        await generateFromSchema({ type: "boolean" });
+        await generateFromSchema({ type: "boolean" }, _testContextStorage.getStore()!);
       }, 5);
     });
   });
@@ -542,7 +570,7 @@ describe("HEGEL_PROTOCOL_TEST_MODE tests", () => {
     // so from the SDK's perspective the test "passed" (no interesting failures).
     await withTestMode("error_response", async (session) => {
       await session.runTest(async () => {
-        await generateFromSchema({ type: "boolean" });
+        await generateFromSchema({ type: "boolean" }, _testContextStorage.getStore()!);
       }, 5);
     });
   });
@@ -562,9 +590,9 @@ describe("nested test case raises", () => {
   it("raises RuntimeError when _runTestCase called while already in a test", async () => {
     // Set up a context as if we're already inside a test case
     const fakeChannel = {} as Channel;
-    const ctx = { channel: fakeChannel, isFinal: false, testAborted: false };
+    const data = { channel: fakeChannel, isFinal: false, testAborted: false };
 
-    await _testContextStorage.run(ctx, async () => {
+    await _testContextStorage.run(data, async () => {
       // Create a Client with a manual socket pair (handshake needed for Client constructor)
       const [serverSock, clientSock] = await socketPair();
       const serverConn = new Connection(serverSock, { name: "Server" });
@@ -825,11 +853,11 @@ describe("generateFromSchema", () => {
     await withTestMode("stop_test_on_generate", async (session) => {
       await session.runTest(async () => {
         try {
-          await generateFromSchema({ type: "boolean" });
+          await generateFromSchema({ type: "boolean" }, _testContextStorage.getStore()!);
         } catch (e) {
           if (e instanceof DataExhausted) {
-            const ctx = _testContextStorage.getStore();
-            wasAborted = ctx?.testAborted ?? false;
+            const data = _testContextStorage.getStore();
+            wasAborted = data?.testAborted ?? false;
             throw e; // re-throw so runner handles it
           }
           throw e;
@@ -837,5 +865,16 @@ describe("generateFromSchema", () => {
       }, 5);
     });
     expect(wasAborted).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// draw
+// ---------------------------------------------------------------------------
+
+describe("draw", () => {
+  it("throws RuntimeError outside test context", async () => {
+    const gen = new BasicGenerator({ type: "boolean" });
+    await expect(draw(gen)).rejects.toThrow("draw() cannot be called outside of a Hegel test");
   });
 });

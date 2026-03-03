@@ -8,7 +8,7 @@
 
 import { describe, it } from "vitest";
 import { hegel, runHegelTest } from "../src/session.js";
-import { assume, generateFromSchema } from "../src/runner.js";
+import { assume, draw, generateFromSchema, _testContextStorage } from "../src/runner.js";
 import {
   integers,
   floats,
@@ -43,7 +43,10 @@ import { field, deriveGenerator, recordGenerator, variantGenerator } from "../sr
 it(
   "boolean double negation is identity",
   hegel({ testCases: 50 })(async () => {
-    const b = (await generateFromSchema({ type: "boolean" })) as boolean;
+    const b = (await generateFromSchema(
+      { type: "boolean" },
+      _testContextStorage.getStore()!,
+    )) as boolean;
     if (!!b !== b) {
       throw new Error(`!!b !== b for b=${String(b)}`);
     }
@@ -61,8 +64,14 @@ it(
 it("boolean OR is commutative", async () => {
   await runHegelTest(
     async () => {
-      const a = (await generateFromSchema({ type: "boolean" })) as boolean;
-      const b = (await generateFromSchema({ type: "boolean" })) as boolean;
+      const a = (await generateFromSchema(
+        { type: "boolean" },
+        _testContextStorage.getStore()!,
+      )) as boolean;
+      const b = (await generateFromSchema(
+        { type: "boolean" },
+        _testContextStorage.getStore()!,
+      )) as boolean;
       if ((a || b) !== (b || a)) {
         throw new Error(`OR not commutative: a=${String(a)}, b=${String(b)}`);
       }
@@ -82,8 +91,8 @@ it("boolean OR is commutative", async () => {
 it("integer addition is commutative", async () => {
   await runHegelTest(
     async () => {
-      const x = await integers(-100, 100).generate();
-      const y = await integers(-100, 100).generate();
+      const x = await draw(integers(-100, 100));
+      const y = await draw(integers(-100, 100));
       if (x + y !== y + x) {
         throw new Error(`x + y !== y + x for x=${x}, y=${y}`);
       }
@@ -104,7 +113,10 @@ describe("property: filtered assume", () => {
   it("assume() filters to only true booleans", async () => {
     await runHegelTest(
       async () => {
-        const b = (await generateFromSchema({ type: "boolean" })) as boolean;
+        const b = (await generateFromSchema(
+          { type: "boolean" },
+          _testContextStorage.getStore()!,
+        )) as boolean;
         assume(b); // Only continue when b is true
         // b must be true here — if it were false, assume() would have thrown
         if (!b) {
@@ -127,7 +139,7 @@ describe("property: filtered assume", () => {
 it("just() always returns the constant value", async () => {
   await runHegelTest(
     async () => {
-      const v = await just(42).generate();
+      const v = await draw(just(42));
       if (v !== 42) {
         throw new Error(`Expected 42, got ${v}`);
       }
@@ -149,7 +161,7 @@ it("sampledFrom() only returns elements from the input list", async () => {
   const colorSet = new Set<string>(colors);
   await runHegelTest(
     async () => {
-      const v = await sampledFrom(colors).generate();
+      const v = await draw(sampledFrom(colors));
       if (!colorSet.has(v)) {
         throw new Error(`Unexpected value: ${v}`);
       }
@@ -171,7 +183,7 @@ it("fromRegex() generates strings matching the pattern", async () => {
   const re = new RegExp(`^${pattern}$`);
   await runHegelTest(
     async () => {
-      const v = await fromRegex(pattern).generate();
+      const v = await draw(fromRegex(pattern));
       if (!re.test(v)) {
         throw new Error(`"${v}" does not match pattern /${pattern}/`);
       }
@@ -190,7 +202,7 @@ it("fromRegex() generates strings matching the pattern", async () => {
 it("email addresses contain exactly one '@' with non-empty parts", async () => {
   await runHegelTest(
     async () => {
-      const email = await emails().generate();
+      const email = await draw(emails());
       const atIndex = email.indexOf("@");
       if (atIndex <= 0) {
         throw new Error(`Email has no local part before '@': ${email}`);
@@ -214,7 +226,7 @@ it("email addresses contain exactly one '@' with non-empty parts", async () => {
 it("URLs have a valid http/https scheme and a host", async () => {
   await runHegelTest(
     async () => {
-      const rawUrl = await urls().generate();
+      const rawUrl = await draw(urls());
       let parsed: URL;
       try {
         parsed = new URL(rawUrl);
@@ -243,7 +255,7 @@ it("URLs have a valid http/https scheme and a host", async () => {
 it("generated dates round-trip through Date parsing", async () => {
   await runHegelTest(
     async () => {
-      const dateStr = await dates().generate();
+      const dateStr = await draw(dates());
       // Parse as midnight UTC to avoid timezone shifts
       const parsed = new Date(dateStr + "T00:00:00Z");
       if (isNaN(parsed.getTime())) {
@@ -268,7 +280,7 @@ it("generated dates round-trip through Date parsing", async () => {
 it("datetimes contain both date part and time part separated by T", async () => {
   await runHegelTest(
     async () => {
-      const dtStr = await datetimes().generate();
+      const dtStr = await draw(datetimes());
       const tIndex = dtStr.indexOf("T");
       if (tIndex <= 0) {
         throw new Error(`Datetime has no date part before 'T': ${dtStr}`);
@@ -297,8 +309,8 @@ it("datetimes contain both date part and time part separated by T", async () => 
 it("triangle inequality holds for finite floats", async () => {
   await runHegelTest(
     async () => {
-      const x = await floats(-1e6, 1e6).generate();
-      const y = await floats(-1e6, 1e6).generate();
+      const x = await draw(floats(-1e6, 1e6));
+      const y = await draw(floats(-1e6, 1e6));
       // Both are finite (no NaN/Inf due to bounded range)
       const lhs = Math.abs(x + y);
       const rhs = Math.abs(x) + Math.abs(y);
@@ -322,8 +334,8 @@ it("triangle inequality holds for finite floats", async () => {
 it("De Morgan's law: !(a && b) === !a || !b", async () => {
   await runHegelTest(
     async () => {
-      const a = await booleans().generate();
-      const b = await booleans().generate();
+      const a = await draw(booleans());
+      const b = await draw(booleans());
       const lhs = !(a && b);
       const rhs = !a || !b;
       if (lhs !== rhs) {
@@ -347,7 +359,7 @@ it("De Morgan's law: !(a && b) === !a || !b", async () => {
 it("reversing a string twice is the identity", async () => {
   await runHegelTest(
     async () => {
-      const s = await text(0, 20).generate();
+      const s = await draw(text(0, 20));
       const reversed = [...s].reverse().join("");
       const doubleReversed = [...reversed].reverse().join("");
       if (doubleReversed !== s) {
@@ -369,8 +381,8 @@ it("reversing a string twice is the identity", async () => {
 it("byte array concatenation length is additive", async () => {
   await runHegelTest(
     async () => {
-      const a = await binary(0, 10).generate();
-      const b = await binary(0, 10).generate();
+      const a = await draw(binary(0, 10));
+      const b = await draw(binary(0, 10));
       const combined = new Uint8Array(a.byteLength + b.byteLength);
       combined.set(a, 0);
       combined.set(b, a.byteLength);
@@ -397,12 +409,12 @@ it("flatMap: text length equals the controlling integer", async () => {
   await runHegelTest(
     async () => {
       let capturedN = 0;
-      const s = await integers(1, 5)
-        .flatMap((n) => {
+      const s = await draw(
+        integers(1, 5).flatMap((n) => {
           capturedN = n;
           return text(n, n);
-        })
-        .generate();
+        }),
+      );
       const codepoints = Array.from(s).length;
       if (codepoints !== capturedN) {
         throw new Error(
@@ -427,16 +439,8 @@ it("flatMap: array length matches the generated width", async () => {
   await runHegelTest(
     async () => {
       // Generate width n, then produce a list of exactly n integers
-      const gen = integers(2, 4).flatMap((n) => ({
-        async generate(): Promise<number[]> {
-          const row: number[] = [];
-          for (let i = 0; i < n; i++) {
-            row.push(await integers(0, 99).generate());
-          }
-          return row;
-        },
-      }));
-      const row = await gen.generate();
+      const gen = integers(2, 4).flatMap((n) => lists(integers(0, 99), n, n));
+      const row = await draw(gen);
       // The row contains only integers in [0, 99]
       for (const elem of row) {
         if (!Number.isInteger(elem) || elem < 0 || elem > 99) {
@@ -465,7 +469,7 @@ it("flatMap: array length matches the generated width", async () => {
 it("tuples2: integer and boolean components are independent", async () => {
   await runHegelTest(
     async () => {
-      const [n, b] = await tuples2(integers(0, 10), booleans()).generate();
+      const [n, b] = await draw(tuples2(integers(0, 10), booleans()));
       // Integer constraint
       if (n < 0 || n > 10 || !Number.isInteger(n)) {
         throw new Error(`Integer component out of range [0,10]: ${n}`);
@@ -499,7 +503,7 @@ it("tuples2: integer and boolean components are independent", async () => {
 it("tuples3: per-component constraints hold independently", async () => {
   await runHegelTest(
     async () => {
-      const [s, n, f] = await tuples3(text(1, 5), integers(0, 100), floats(0, 1)).generate();
+      const [s, n, f] = await draw(tuples3(text(1, 5), integers(0, 100), floats(0, 1)));
       const codepoints = Array.from(s).length;
       if (codepoints < 1 || codepoints > 5) {
         throw new Error(`String codepoint count ${codepoints} outside [1, 5]`);
@@ -532,7 +536,7 @@ it("tuples3: per-component constraints hold independently", async () => {
 it("dicts: all keys and values satisfy their generator constraints", async () => {
   await runHegelTest(
     async () => {
-      const result = (await dicts(text(0, 5), integers(0, 100), 0, 5).generate()) as Record<
+      const result = (await draw(dicts(text(0, 5), integers(0, 100), 0, 5))) as Record<
         string,
         unknown
       >;
@@ -563,7 +567,7 @@ it("dicts: all keys and values satisfy their generator constraints", async () =>
 it("dicts: size bounds [min_size=1, max_size=3] are respected", async () => {
   await runHegelTest(
     async () => {
-      const result = (await dicts(integers(0, 10), booleans(), 1, 3).generate()) as Record<
+      const result = (await draw(dicts(integers(0, 10), booleans(), 1, 3))) as Record<
         string,
         unknown
       >;
@@ -588,7 +592,7 @@ it("dicts: size bounds [min_size=1, max_size=3] are respected", async () => {
 it("oneOf: every value satisfies the constraints of its branch", async () => {
   await runHegelTest(
     async () => {
-      const v = await oneOf(integers(0, 100), text(1, 10)).generate();
+      const v = await draw(oneOf(integers(0, 100), text(1, 10)));
       if (typeof v === "number") {
         if (!Number.isInteger(v) || v < 0 || v > 100) {
           throw new Error(`Integer branch out of range: ${v}`);
@@ -618,10 +622,12 @@ it("oneOf: every value satisfies the constraints of its branch", async () => {
 it("oneOf with map: integer branch always produces even values", async () => {
   await runHegelTest(
     async () => {
-      const v = await oneOf(
-        integers(0, 10).map((x) => x * 2),
-        booleans(),
-      ).generate();
+      const v = await draw(
+        oneOf(
+          integers(0, 10).map((x) => x * 2),
+          booleans(),
+        ),
+      );
       if (typeof v === "number") {
         if (v % 2 !== 0 || v < 0 || v > 20) {
           throw new Error(`Expected even integer in [0,20], got ${v}`);
@@ -646,7 +652,7 @@ it("oneOf with map: integer branch always produces even values", async () => {
 it("optional: null or value within bounds", async () => {
   await runHegelTest(
     async () => {
-      const v = await optional(integers(1, 100)).generate();
+      const v = await draw(optional(integers(1, 100)));
       if (v === null) {
         // null is valid — the optional case
         return;
@@ -671,7 +677,7 @@ it("optional: null or value within bounds", async () => {
 it("ipAddresses(4): every value is a valid dotted-decimal IPv4 address", async () => {
   await runHegelTest(
     async () => {
-      const ip = await ipAddresses(4).generate();
+      const ip = await draw(ipAddresses(4));
       if (typeof ip !== "string") {
         throw new Error(`Expected string, got ${typeof ip}`);
       }
@@ -693,7 +699,7 @@ it("ipAddresses(4): every value is a valid dotted-decimal IPv4 address", async (
 it("ipAddresses(): mixed v4 and v6 — all values parseable as IP addresses", async () => {
   await runHegelTest(
     async () => {
-      const ip = await ipAddresses().generate();
+      const ip = await draw(ipAddresses());
       if (typeof ip !== "string" || ip.length === 0) {
         throw new Error(`Expected non-empty IP string, got ${String(ip)}`);
       }
@@ -719,11 +725,13 @@ it("ipAddresses(): mixed v4 and v6 — all values parseable as IP addresses", as
 it("filtered list: every element satisfies the filter predicate", async () => {
   await runHegelTest(
     async () => {
-      const xs = await lists(
-        integers(0, 100).filter((x) => x % 2 === 0),
-        1,
-        5,
-      ).generate();
+      const xs = await draw(
+        lists(
+          integers(0, 100).filter((x) => x % 2 === 0),
+          1,
+          5,
+        ),
+      );
       if (!Array.isArray(xs) || xs.length < 1 || xs.length > 5) {
         throw new Error(`Expected list of length 1-5, got ${xs.length}`);
       }
@@ -748,7 +756,7 @@ it("filtered list: every element satisfies the filter predicate", async () => {
 it("reversing a list twice is the identity", async () => {
   await runHegelTest(
     async () => {
-      const xs = await lists(integers(0, 100), 0, 10).generate();
+      const xs = await draw(lists(integers(0, 100), 0, 10));
       const once = [...xs].reverse();
       const twice = [...once].reverse();
       if (xs.length !== twice.length) {
@@ -787,7 +795,7 @@ it("deriveGenerator: Vector2D magnitude is bounded by sqrt(2)*1000", async () =>
   const gen = deriveGenerator(Vector2D);
   await runHegelTest(
     async () => {
-      const v = await gen.generate();
+      const v = await draw(gen);
       if (!(v instanceof Vector2D)) {
         throw new Error("Expected instance of Vector2D");
       }
@@ -818,8 +826,8 @@ it("recordGenerator: distance between two points is non-negative", async () => {
 
   await runHegelTest(
     async () => {
-      const p1 = await pointGen.generate();
-      const p2 = await pointGen.generate();
+      const p1 = await draw(pointGen);
+      const p2 = await draw(pointGen);
       const dx = p1.x - p2.x;
       const dy = p1.y - p2.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -866,7 +874,7 @@ it("variantGenerator: every Shape has non-negative area", async () => {
 
   await runHegelTest(
     async () => {
-      const shape = await shapeGen.generate();
+      const shape = await draw(shapeGen);
       seen.add(shape.type);
 
       let area: number;
@@ -923,7 +931,7 @@ it("variantGenerator: nested records in message protocol", async () => {
 
   await runHegelTest(
     async () => {
-      const msg = await msgGen.generate();
+      const msg = await draw(msgGen);
       if (msg.kind === "text") {
         if (typeof msg.body !== "string" || msg.body.length === 0) {
           throw new Error("Text message body must be non-empty");

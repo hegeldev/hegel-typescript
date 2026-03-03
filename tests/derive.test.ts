@@ -7,6 +7,7 @@
 
 import { describe, it, expect } from "vitest";
 import { runHegelTest } from "../src/session.js";
+import { draw } from "../src/runner.js";
 import { integers, booleans, text, floats, just } from "../src/generators.js";
 import {
   field,
@@ -133,7 +134,7 @@ describe("deriveGenerator", () => {
 
     await runHegelTest(
       async () => {
-        const pt = await gen.generate();
+        const pt = await draw(gen);
         expect(pt).toBeInstanceOf(Point);
         expect(typeof pt.x).toBe("number");
         expect(typeof pt.y).toBe("number");
@@ -162,7 +163,7 @@ describe("deriveGenerator", () => {
 
     await runHegelTest(
       async () => {
-        const user = await gen.generate();
+        const user = await draw(gen);
         expect(user).toBeInstanceOf(User);
         expect(typeof user.name).toBe("string");
         expect(Array.from(user.name).length).toBeGreaterThanOrEqual(1);
@@ -186,7 +187,7 @@ describe("deriveGenerator", () => {
 
     await runHegelTest(
       async () => {
-        const w = await gen.generate();
+        const w = await draw(gen);
         expect(w).toBeInstanceOf(Wrapper);
         expect(w.value).toBeGreaterThanOrEqual(0);
         expect(w.value).toBeLessThanOrEqual(999);
@@ -208,7 +209,7 @@ describe("deriveGenerator", () => {
 
     await runHegelTest(
       async () => {
-        const sum = await gen.generate();
+        const sum = await draw(gen);
         expect(typeof sum).toBe("number");
         expect(sum).toBeGreaterThanOrEqual(2);
         expect(sum).toBeLessThanOrEqual(20);
@@ -240,7 +241,7 @@ describe("recordGenerator", () => {
 
     await runHegelTest(
       async () => {
-        const pt = await gen.generate();
+        const pt = await draw(gen);
         expect(typeof pt.x).toBe("number");
         expect(typeof pt.y).toBe("number");
         expect(pt.x).toBeGreaterThanOrEqual(-10);
@@ -257,7 +258,7 @@ describe("recordGenerator", () => {
 
     await runHegelTest(
       async () => {
-        const obj = await gen.generate();
+        const obj = await draw(gen);
         expect(typeof obj.name).toBe("string");
         expect(Array.from(obj.name).length).toBeGreaterThanOrEqual(1);
       },
@@ -274,7 +275,7 @@ describe("recordGenerator", () => {
 
     await runHegelTest(
       async () => {
-        const obj = await gen.generate();
+        const obj = await draw(gen);
         expect(typeof obj.id).toBe("number");
         expect(typeof obj.label).toBe("string");
         expect(typeof obj.enabled).toBe("boolean");
@@ -291,7 +292,7 @@ describe("recordGenerator", () => {
 
     await runHegelTest(
       async () => {
-        const area = await gen.generate();
+        const area = await draw(gen);
         expect(typeof area).toBe("number");
         expect(area).toBeGreaterThan(0);
       },
@@ -336,7 +337,7 @@ describe("variantGenerator", () => {
 
     await runHegelTest(
       async () => {
-        const v = await gen.generate();
+        const v = await draw(gen);
         expect(typeof v.type).toBe("string");
         expect(["red", "yellow", "green"]).toContain(v.type);
         seen.add(v.type);
@@ -365,7 +366,7 @@ describe("variantGenerator", () => {
 
     await runHegelTest(
       async () => {
-        const shape = await gen.generate();
+        const shape = await draw(gen);
         seen.add(shape.type);
 
         if (shape.type === "circle") {
@@ -395,7 +396,7 @@ describe("variantGenerator", () => {
 
     await runHegelTest(
       async () => {
-        const r = await gen.generate();
+        const r = await draw(gen);
         seen.add(r.type);
 
         if (r.type === "ok") {
@@ -421,7 +422,7 @@ describe("variantGenerator", () => {
 
     await runHegelTest(
       async () => {
-        const a = await gen.generate();
+        const a = await draw(gen);
         expect(["cat", "dog"]).toContain(a.kind);
       },
       { testCases: 20 },
@@ -481,7 +482,7 @@ describe("nested derivation", () => {
 
     await runHegelTest(
       async () => {
-        const person = await personGen.generate();
+        const person = await draw(personGen);
         expect(typeof person.name).toBe("string");
         expect(typeof person.address).toBe("object");
         expect(typeof person.address.city).toBe("string");

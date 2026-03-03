@@ -16,9 +16,8 @@ import {
   Labels,
   startSpan,
   stopSpan,
-  _getChannel,
-  _testContextStorage,
 } from "./runner.js";
+import type { TestCaseData } from "./runner.js";
 
 // ---------------------------------------------------------------------------
 // Generator base class
@@ -27,7 +26,7 @@ import {
 /**
  * Base class for all generators.
  *
- * Subclasses implement {@link generate} to produce a value. The {@link map},
+ * Subclasses implement `doDraw` to produce a value. The {@link map},
  * {@link flatMap}, and {@link filter} combinators produce new generators.
  *
  * {@link BasicGenerator} is special: its {@link BasicGenerator.map} preserves
@@ -35,8 +34,8 @@ import {
  * better shrinking.
  */
 export abstract class Generator<T = unknown> {
-  /** Generate a single value. */
-  abstract generate(): Promise<T>;
+  /** @internal */
+  abstract doDraw(data: TestCaseData): Promise<T>;
 
   /**
    * Transform each generated value with `f`.
@@ -93,9 +92,9 @@ export class BasicGenerator<T = unknown> extends Generator<T> {
     return this._rawSchema;
   }
 
-  /** Generate a value: fetch from server and apply the optional transform. */
-  async generate(): Promise<T> {
-    const raw = await generateFromSchema(this._rawSchema);
+  /** @internal */
+  async doDraw(data: TestCaseData): Promise<T> {
+    const raw = await generateFromSchema(this._rawSchema, data);
     if (this._transform !== null) {
       return this._transform(raw);
     }
@@ -134,13 +133,13 @@ export class MappedGenerator<T, U> extends Generator<U> {
     this._f = f;
   }
 
-  async generate(): Promise<U> {
-    await startSpan(Labels.MAPPED);
+  async doDraw(data: TestCaseData): Promise<U> {
+    await startSpan(Labels.MAPPED, data);
     try {
-      const value = await this._source.generate();
+      const value = await this._source.doDraw(data);
       return this._f(value);
     } finally {
-      await stopSpan();
+      await stopSpan({}, data);
     }
   }
 }
@@ -163,14 +162,14 @@ export class FlatMappedGenerator<T, U> extends Generator<U> {
     this._f = f;
   }
 
-  async generate(): Promise<U> {
-    await startSpan(Labels.FLAT_MAP);
+  async doDraw(data: TestCaseData): Promise<U> {
+    await startSpan(Labels.FLAT_MAP, data);
     try {
-      const first = await this._source.generate();
+      const first = await this._source.doDraw(data);
       const secondGen = this._f(first);
-      return await secondGen.generate();
+      return await secondGen.doDraw(data);
     } finally {
-      await stopSpan();
+      await stopSpan({}, data);
     }
   }
 }
@@ -198,15 +197,15 @@ export class FilteredGenerator<T> extends Generator<T> {
     this._predicate = predicate;
   }
 
-  async generate(): Promise<T> {
+  async doDraw(data: TestCaseData): Promise<T> {
     for (let i = 0; i < FILTER_MAX_ATTEMPTS; i++) {
-      await startSpan(Labels.FILTER);
-      const value = await this._source.generate();
+      await startSpan(Labels.FILTER, data);
+      const value = await this._source.doDraw(data);
       if (this._predicate(value)) {
-        await stopSpan();
+        await stopSpan({}, data);
         return value;
       }
-      await stopSpan({ discard: true });
+      await stopSpan({ discard: true }, data);
     }
     assume(false);
     // unreachable (assume(false) always throws)
@@ -227,12 +226,16 @@ export class FilteredGenerator<T> extends Generator<T> {
  * @param label - Span label constant (see `Labels`).
  * @param fn - Function to run inside the span.
  */
-export async function group<T>(label: number, fn: () => T | Promise<T>): Promise<T> {
-  await startSpan(label);
+export async function group<T>(
+  label: number,
+  fn: () => T | Promise<T>,
+  data: TestCaseData,
+): Promise<T> {
+  await startSpan(label, data);
   try {
     return await fn();
   } finally {
-    await stopSpan();
+    await stopSpan({}, data);
   }
 }
 
@@ -245,8 +248,12 @@ export async function group<T>(label: number, fn: () => T | Promise<T>): Promise
  * @param label - Span label constant (see `Labels`).
  * @param fn - Function to run inside the span.
  */
-export async function discardableGroup<T>(label: number, fn: () => T | Promise<T>): Promise<T> {
-  await startSpan(label);
+export async function discardableGroup<T>(
+  label: number,
+  fn: () => T | Promise<T>,
+  data: TestCaseData,
+): Promise<T> {
+  await startSpan(label, data);
   let discard = false;
   try {
     return await fn();
@@ -254,7 +261,7 @@ export async function discardableGroup<T>(label: number, fn: () => T | Promise<T
     discard = true;
     throw e;
   } finally {
-    await stopSpan({ discard });
+    await stopSpan({ discard }, data);
   }
 }
 
@@ -266,8 +273,8 @@ export async function discardableGroup<T>(label: number, fn: () => T | Promise<T
  * Server-managed collection for generating variable-length sequences.
  *
  * The server decides how many elements to generate based on the configured
- * size constraints. Call {@link more} in a loop; when it returns false, the
- * collection is done. Call {@link reject} to discard the most recently
+ * size constraints. Call `more()` in a loop; when it returns false, the
+ * collection is done. Call `reject()` to discard the most recently
  * generated element.
  *
  * StopTest errors from any collection command propagate as {@link DataExhausted}
@@ -294,11 +301,10 @@ export class Collection {
    * Get (or lazily initialize) the server-side collection name.
    * Sends `new_collection` on first call.
    */
-  private async _getServerName(): Promise<unknown> {
+  private async _getServerName(data: TestCaseData): Promise<unknown> {
     if (!this._serverNameResolved) {
       this._serverNameResolved = true;
-      const channel = _getChannel();
-      const ctx = _testContextStorage.getStore()!;
+      const channel = data.channel;
       try {
         this._serverName = await channel
           .request({
@@ -310,7 +316,7 @@ export class Collection {
           .get();
       } catch (e) {
         if (isStopTest(e)) {
-          ctx.testAborted = true;
+          data.testAborted = true;
           throw new DataExhausted("Server ran out of data");
         }
         throw e;
@@ -319,25 +325,17 @@ export class Collection {
     return this._serverName;
   }
 
-  /**
-   * Should we generate another element?
-   *
-   * Returns `true` if the server wants another element, `false` when done.
-   * Once it returns `false`, subsequent calls return `false` immediately.
-   *
-   * @throws {DataExhausted} If the server sends StopTest.
-   */
-  async more(): Promise<boolean> {
+  /** @internal */
+  async more(data: TestCaseData): Promise<boolean> {
     if (this._finished) return false;
-    const serverName = await this._getServerName();
-    const channel = _getChannel();
-    const ctx = _testContextStorage.getStore()!;
+    const serverName = await this._getServerName(data);
+    const channel = data.channel;
     let result: unknown;
     try {
       result = await channel.request({ command: "collection_more", collection: serverName }).get();
     } catch (e) {
       if (isStopTest(e)) {
-        ctx.testAborted = true;
+        data.testAborted = true;
         throw new DataExhausted("Server ran out of data");
       }
       throw e;
@@ -348,18 +346,11 @@ export class Collection {
     return result as boolean;
   }
 
-  /**
-   * Discard the most recently generated element.
-   *
-   * Tells the server not to count this element toward the collection size.
-   * No-op if the collection is already finished.
-   *
-   * @param why - Optional reason for rejection.
-   */
-  async reject(why: string | null = null): Promise<void> {
+  /** @internal */
+  async reject(data: TestCaseData, why: string | null = null): Promise<void> {
     if (this._finished) return;
-    const serverName = await this._getServerName();
-    const channel = _getChannel();
+    const serverName = await this._getServerName(data);
+    const channel = data.channel;
     await channel
       .request({
         command: "collection_reject",
@@ -421,7 +412,7 @@ export function floats(
   const hasMax = maxValue !== null;
   const resolvedAllowNan = allowNan !== null ? allowNan : !hasMin && !hasMax;
   const resolvedAllowInfinity = allowInfinity !== null ? allowInfinity : !hasMin || !hasMax;
-  const schema: Record<string, unknown> = { type: "number" };
+  const schema: Record<string, unknown> = { type: "float" };
   if (hasMin) schema["min_value"] = minValue;
   if (hasMax) schema["max_value"] = maxValue;
   schema["allow_nan"] = resolvedAllowNan;
@@ -586,16 +577,16 @@ export class CompositeTupleGenerator<T extends unknown[]> extends Generator<T> {
     this._elements = elements;
   }
 
-  async generate(): Promise<T> {
-    await startSpan(Labels.TUPLE);
+  async doDraw(data: TestCaseData): Promise<T> {
+    await startSpan(Labels.TUPLE, data);
     try {
       const result: unknown[] = [];
       for (const elem of this._elements) {
-        result.push(await elem.generate());
+        result.push(await elem.doDraw(data));
       }
       return result as T;
     } finally {
-      await stopSpan();
+      await stopSpan({}, data);
     }
   }
 }
@@ -697,19 +688,19 @@ export class CompositeListGenerator<T = unknown> extends Generator<T[]> {
     this._maxSize = maxSize;
   }
 
-  async generate(): Promise<T[]> {
-    // Create a fresh Collection for each generate() call so that _finished
+  async doDraw(data: TestCaseData): Promise<T[]> {
+    // Create a fresh Collection for each doDraw() call so that _finished
     // state from prior calls does not carry over.
     const collection = new Collection("composite_list", this._minSize, this._maxSize);
-    await startSpan(Labels.LIST);
+    await startSpan(Labels.LIST, data);
     try {
       const result: T[] = [];
-      while (await collection.more()) {
-        result.push(await this._elements.generate());
+      while (await collection.more(data)) {
+        result.push(await this._elements.doDraw(data));
       }
       return result;
     } finally {
-      await stopSpan();
+      await stopSpan({}, data);
     }
   }
 }
@@ -808,17 +799,20 @@ export class CompositeOneOfGenerator<T = unknown> extends Generator<T> {
     this._generators = generators;
   }
 
-  async generate(): Promise<T> {
-    await startSpan(Labels.ONE_OF);
+  async doDraw(data: TestCaseData): Promise<T> {
+    await startSpan(Labels.ONE_OF, data);
     try {
-      const index = (await generateFromSchema({
-        type: "integer",
-        min_value: 0,
-        max_value: this._generators.length - 1,
-      })) as number;
-      return await this._generators[index].generate();
+      const index = (await generateFromSchema(
+        {
+          type: "integer",
+          min_value: 0,
+          max_value: this._generators.length - 1,
+        },
+        data,
+      )) as number;
+      return await this._generators[index].doDraw(data);
     } finally {
-      await stopSpan();
+      await stopSpan({}, data);
     }
   }
 }
@@ -948,26 +942,29 @@ export class CompositeDictGenerator<K, V> extends Generator<Map<K, V>> {
     this._maxSize = maxSize;
   }
 
-  async generate(): Promise<Map<K, V>> {
-    await startSpan(Labels.MAP);
+  async doDraw(data: TestCaseData): Promise<Map<K, V>> {
+    await startSpan(Labels.MAP, data);
     try {
       const maxSz = this._maxSize !== null ? this._maxSize : this._minSize + 10;
-      const size = (await generateFromSchema({
-        type: "integer",
-        min_value: this._minSize,
-        max_value: maxSz,
-      })) as number;
+      const size = (await generateFromSchema(
+        {
+          type: "integer",
+          min_value: this._minSize,
+          max_value: maxSz,
+        },
+        data,
+      )) as number;
       const result = new Map<K, V>();
       for (let i = 0; i < size; i++) {
-        await startSpan(Labels.MAP_ENTRY);
-        const key = await this._keys.generate();
-        const value = await this._values.generate();
+        await startSpan(Labels.MAP_ENTRY, data);
+        const key = await this._keys.doDraw(data);
+        const value = await this._values.doDraw(data);
         result.set(key, value);
-        await stopSpan();
+        await stopSpan({}, data);
       }
       return result;
     } finally {
-      await stopSpan();
+      await stopSpan({}, data);
     }
   }
 }
