@@ -22,7 +22,6 @@ import {
   CompositeTupleGenerator,
   FilteredGenerator,
   FlatMappedGenerator,
-  Generator,
   MappedGenerator,
   discardableGroup,
   group,

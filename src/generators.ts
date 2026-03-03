@@ -26,7 +26,7 @@ import type { TestCaseData } from "./runner.js";
 /**
  * Base class for all generators.
  *
- * Subclasses implement {@link doDraw} to produce a value. The {@link map},
+ * Subclasses implement `doDraw` to produce a value. The {@link map},
  * {@link flatMap}, and {@link filter} combinators produce new generators.
  *
  * {@link BasicGenerator} is special: its {@link BasicGenerator.map} preserves
@@ -92,7 +92,7 @@ export class BasicGenerator<T = unknown> extends Generator<T> {
     return this._rawSchema;
   }
 
-  /** Generate a value: fetch from server and apply the optional transform. */
+  /** @internal */
   async doDraw(data: TestCaseData): Promise<T> {
     const raw = await generateFromSchema(this._rawSchema, data);
     if (this._transform !== null) {
@@ -273,8 +273,8 @@ export async function discardableGroup<T>(
  * Server-managed collection for generating variable-length sequences.
  *
  * The server decides how many elements to generate based on the configured
- * size constraints. Call {@link more} in a loop; when it returns false, the
- * collection is done. Call {@link reject} to discard the most recently
+ * size constraints. Call `more()` in a loop; when it returns false, the
+ * collection is done. Call `reject()` to discard the most recently
  * generated element.
  *
  * StopTest errors from any collection command propagate as {@link DataExhausted}
@@ -325,14 +325,7 @@ export class Collection {
     return this._serverName;
   }
 
-  /**
-   * Should we generate another element?
-   *
-   * Returns `true` if the server wants another element, `false` when done.
-   * Once it returns `false`, subsequent calls return `false` immediately.
-   *
-   * @throws {DataExhausted} If the server sends StopTest.
-   */
+  /** @internal */
   async more(data: TestCaseData): Promise<boolean> {
     if (this._finished) return false;
     const serverName = await this._getServerName(data);
@@ -353,14 +346,7 @@ export class Collection {
     return result as boolean;
   }
 
-  /**
-   * Discard the most recently generated element.
-   *
-   * Tells the server not to count this element toward the collection size.
-   * No-op if the collection is already finished.
-   *
-   * @param why - Optional reason for rejection.
-   */
+  /** @internal */
   async reject(data: TestCaseData, why: string | null = null): Promise<void> {
     if (this._finished) return;
     const serverName = await this._getServerName(data);

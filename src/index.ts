@@ -22,15 +22,13 @@ export {
 export { runHegelTest, hegel, HegelSession } from "./session.js";
 
 // Test helpers
-export { assume, draw, note, target, startSpan, stopSpan } from "./runner.js";
+export { assume, draw, note, target } from "./runner.js";
 
 // Generators
 export {
   Generator,
   BasicGenerator,
   Collection,
-  group,
-  discardableGroup,
   integers,
   floats,
   booleans,
