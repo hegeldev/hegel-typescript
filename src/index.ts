@@ -22,7 +22,7 @@ export {
 export { runHegelTest, hegel, HegelSession } from "./session.js";
 
 // Test helpers
-export { assume, note, target, startSpan, stopSpan } from "./runner.js";
+export { assume, draw, note, target, startSpan, stopSpan } from "./runner.js";
 
 // Generators
 export {

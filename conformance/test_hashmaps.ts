@@ -13,6 +13,7 @@
 
 import { getTestCases, writeMetrics } from "../src/conformance.js";
 import { dicts, integers, text } from "../src/generators.js";
+import { draw } from "../src/runner.js";
 import { runHegelTest } from "../src/session.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
@@ -33,7 +34,7 @@ const gen = dicts(keysGen, valsGen, minSize, maxSize);
 
 await runHegelTest(
   async function conformance_hashmaps() {
-    const dict = await gen.generate();
+    const dict = await draw(gen);
     const entries = Object.entries(dict);
     const size = entries.length;
 

@@ -7,6 +7,7 @@
 
 import { getTestCases, writeMetrics } from "../src/conformance.js";
 import { integers } from "../src/generators.js";
+import { draw } from "../src/runner.js";
 import { runHegelTest } from "../src/session.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
@@ -19,7 +20,7 @@ const gen = integers(minValue, maxValue);
 
 await runHegelTest(
   async function conformance_integers() {
-    const value = await gen.generate();
+    const value = await draw(gen);
     writeMetrics({ value });
   },
   { testCases },

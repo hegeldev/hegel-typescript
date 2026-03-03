@@ -13,6 +13,7 @@
 
 import { getTestCases, writeMetrics } from "../src/conformance.js";
 import { integers, lists } from "../src/generators.js";
+import { draw } from "../src/runner.js";
 import { runHegelTest } from "../src/session.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
@@ -30,7 +31,7 @@ const gen = lists(elemGen, minSize, maxSize);
 
 await runHegelTest(
   async function conformance_lists() {
-    const items = await gen.generate();
+    const items = await draw(gen);
     const size = items.length;
 
     let minElement: number | null = null;

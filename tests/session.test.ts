@@ -11,7 +11,7 @@ import * as net from "node:net";
 import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { _findHegeld, HegelSession, hegel, runHegelTest } from "../src/session.js";
-import { generateFromSchema } from "../src/runner.js";
+import { generateFromSchema, _testContextStorage } from "../src/runner.js";
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks for ESM modules
@@ -380,11 +380,14 @@ describe("HegelSession integration", () => {
     const session = new HegelSession();
     try {
       await session.runTest(async () => {
-        const x = (await generateFromSchema({
-          type: "integer",
-          min_value: 0,
-          max_value: 10,
-        })) as number;
+        const x = (await generateFromSchema(
+          {
+            type: "integer",
+            min_value: 0,
+            max_value: 10,
+          },
+          _testContextStorage.getStore()!,
+        )) as number;
         if (x < 0 || x > 10) throw new Error("out of range");
       }, 5);
     } finally {
@@ -404,7 +407,7 @@ describe("runHegelTest", () => {
 
   it("uses function name as test name", async () => {
     async function myNamedTest() {
-      await generateFromSchema({ type: "boolean" });
+      await generateFromSchema({ type: "boolean" }, _testContextStorage.getStore()!);
     }
     await runHegelTest(myNamedTest);
   });
@@ -429,14 +432,14 @@ describe("runHegelTest", () => {
 describe("hegel decorator", () => {
   it("wraps a function that passes", async () => {
     const wrapped = hegel()(async () => {
-      await generateFromSchema({ type: "boolean" });
+      await generateFromSchema({ type: "boolean" }, _testContextStorage.getStore()!);
     });
     await wrapped();
   });
 
   it("wraps a function and uses test_cases option", async () => {
     const wrapped = hegel({ testCases: 5 })(async () => {
-      await generateFromSchema({ type: "boolean" });
+      await generateFromSchema({ type: "boolean" }, _testContextStorage.getStore()!);
     });
     await wrapped();
   });
