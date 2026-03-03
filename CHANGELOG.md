@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 - 2026-03-03
+
+Replace `gen.generate()` with `draw(gen)`.
+
+
 ## 0.2.0 - 2026-02-27
 
 Complete rewrite of the TypeScript SDK with full protocol implementation,
