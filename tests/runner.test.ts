@@ -8,7 +8,7 @@
 
 import * as net from "node:net";
 import { describe, expect, it, vi } from "vitest";
-import { Channel, Connection, RequestError } from "../src/connection.js";
+import { Channel, Connection, ConnectionState, RequestError } from "../src/connection.js";
 import {
   AssertionError,
   AssumeRejected,
@@ -34,6 +34,20 @@ import { HegelSession, runHegelTest } from "../src/session.js";
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Raw handshake responder: reads the handshake request from the control channel
+ * and replies with "Hegel/0.3". Sets the connection to CLIENT state with a high
+ * channel ID base to avoid collisions with the actual client side.
+ */
+async function rawHandshakeResponder(conn: Connection): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (conn as any)._connectionState = ConnectionState.CLIENT;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (conn as any)._nextChannelId = 1000;
+  const [msgId] = await conn.controlChannel.receiveRequestRaw();
+  await conn.controlChannel.sendResponseRaw(msgId, Buffer.from("Hegel/0.3"));
+}
 
 /** Create a connected TCP socket pair for in-process tests. */
 function socketPair(): Promise<[net.Socket, net.Socket]> {
@@ -379,7 +393,7 @@ describe("runHegelTest integration", () => {
     const clientConn = new Connection(clientSock, { name: "Client" });
 
     const serverTask = (async () => {
-      await serverConn.receiveHandshake();
+      await rawHandshakeResponder(serverConn);
       const control = serverConn.controlChannel;
       const [msgId, message] = await control.receiveRequest();
       const msg = message as Record<string, unknown>;
@@ -599,9 +613,7 @@ describe("nested test case raises", () => {
       const clientConn = new Connection(clientSock, { name: "Client" });
 
       // Do handshake in parallel
-      const serverHandshake = serverConn.receiveHandshake();
-      const clientHandshake = clientConn.sendHandshake();
-      await Promise.all([serverHandshake, clientHandshake]);
+      await Promise.all([rawHandshakeResponder(serverConn), clientConn.sendHandshake()]);
 
       const client = new Client(clientConn);
 
@@ -632,7 +644,7 @@ describe("_runTestCase mark_complete failure", () => {
     const [serverSock, clientSock] = await socketPair();
     const serverConn = new Connection(serverSock, { name: "Server" });
     const clientConn = new Connection(clientSock, { name: "Client" });
-    await Promise.all([serverConn.receiveHandshake(), clientConn.sendHandshake()]);
+    await Promise.all([rawHandshakeResponder(serverConn), clientConn.sendHandshake()]);
     const client = new Client(clientConn);
 
     // _runTestCase will try sendRequest(mark_complete) → rejects → .catch fires
@@ -654,7 +666,7 @@ describe("unrecognised event in runTest", () => {
     const clientConn = new Connection(clientSock, { name: "Client" });
 
     const serverTask = (async () => {
-      await serverConn.receiveHandshake();
+      await rawHandshakeResponder(serverConn);
       const control = serverConn.controlChannel;
 
       // Receive run_test command
@@ -705,7 +717,7 @@ describe("final test case passes unexpectedly", () => {
     const clientConn = new Connection(clientSock, { name: "Client" });
 
     const serverTask = (async () => {
-      await serverConn.receiveHandshake();
+      await rawHandshakeResponder(serverConn);
       const control = serverConn.controlChannel;
       const [msgId, message] = await control.receiveRequest();
       const msg = message as Record<string, unknown>;
@@ -784,7 +796,7 @@ describe("final test case passes unexpectedly", () => {
     const N_INTERESTING = 2;
 
     const serverTask = (async () => {
-      await serverConn.receiveHandshake();
+      await rawHandshakeResponder(serverConn);
       const control = serverConn.controlChannel;
       const [msgId, message] = await control.receiveRequest();
       const msg = message as Record<string, unknown>;
