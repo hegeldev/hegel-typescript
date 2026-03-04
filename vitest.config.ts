@@ -1,6 +1,12 @@
 import { defineConfig } from "vitest/config";
+import { fileURLToPath } from "url";
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      hegel: fileURLToPath(new URL("./src/index.ts", import.meta.url)),
+    },
+  },
   test: {
     include: ["tests/**/*.test.ts"],
     testTimeout: 30000,

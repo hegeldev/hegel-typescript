@@ -51,7 +51,7 @@ export {
   optional,
   ipAddresses,
   dicts,
-} from "./generators.js";
+} from "./generators/index.js";
 
 // Type-directed derivation
 export {

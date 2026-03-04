@@ -7,9 +7,11 @@
  */
 
 import { describe, it } from "vitest";
-import { hegel, runHegelTest } from "../src/session.js";
-import { assume, draw, generateFromSchema, _testContextStorage } from "../src/runner.js";
 import {
+  hegel,
+  runHegelTest,
+  assume,
+  draw,
   integers,
   floats,
   booleans,
@@ -29,8 +31,12 @@ import {
   ipAddresses,
   dicts,
   lists,
-} from "../src/generators.js";
-import { field, deriveGenerator, recordGenerator, variantGenerator } from "../src/derive.js";
+  field,
+  deriveGenerator,
+  recordGenerator,
+  variantGenerator,
+} from "hegel";
+import { generateFromSchema, _testContextStorage } from "../src/runner.js";
 
 // ---------------------------------------------------------------------------
 // Showcase 1: boolean double-negation (decorator form)

@@ -6,7 +6,7 @@
  */
 
 import { getTestCases, writeMetrics } from "../src/conformance.js";
-import { sampledFrom } from "../src/generators.js";
+import { sampledFrom } from "../src/generators/index.js";
 import { draw } from "../src/runner.js";
 import { runHegelTest } from "../src/session.js";
 

@@ -32,7 +32,7 @@
  * @packageDocumentation
  */
 
-import { Generator, BasicGenerator } from "./generators.js";
+import { Generator, BasicGenerator } from "./generators/index.js";
 import { startSpan, stopSpan, Labels } from "./runner.js";
 import type { TestCaseData } from "./runner.js";
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { version } from "../src/index.js";
+import { version } from "hegel";
 
 describe("version", () => {
   it("returns the SDK version string", () => {

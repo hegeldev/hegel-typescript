@@ -12,7 +12,7 @@
  */
 
 import { getTestCases, writeMetrics } from "../src/conformance.js";
-import { dicts, integers, text } from "../src/generators.js";
+import { dicts, integers, text } from "../src/generators/index.js";
 import { draw } from "../src/runner.js";
 import { runHegelTest } from "../src/session.js";
 

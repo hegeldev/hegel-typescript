@@ -22,7 +22,7 @@ pip install "hegel @ git+ssh://git@github.com/antithesishq/hegel-core.git"
 ## Quick Start
 
 ```typescript
-import { runHegelTest, integers } from "hegel-typescript";
+import { runHegelTest, integers } from "hegel";
 
 it("addition is commutative", async () => {
   await runHegelTest(async () => {
