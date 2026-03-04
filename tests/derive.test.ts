@@ -6,10 +6,14 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { runHegelTest } from "../src/session.js";
-import { draw } from "../src/runner.js";
-import { integers, booleans, text, floats, just } from "../src/generators.js";
 import {
+  runHegelTest,
+  draw,
+  integers,
+  booleans,
+  text,
+  floats,
+  just,
   field,
   deriveGenerator,
   DerivedGenerator,
@@ -17,9 +21,8 @@ import {
   RecordDerivedGenerator,
   variantGenerator,
   VariantGenerator,
-  _classFieldMeta,
-  _resetFieldOrder,
-} from "../src/derive.js";
+} from "hegel";
+import { _classFieldMeta, _resetFieldOrder } from "../src/derive.js";
 
 // ---------------------------------------------------------------------------
 // @field decorator — metadata registration

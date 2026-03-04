@@ -11,10 +11,7 @@
  * stop_test_on_new_collection conformance tests to work correctly.
  */
 
-import { getTestCases, writeMetrics } from "../src/conformance.js";
-import { integers, lists } from "../src/generators.js";
-import { draw } from "../src/runner.js";
-import { runHegelTest } from "../src/session.js";
+import { getTestCases, writeMetrics, integers, lists, draw, runHegelTest } from "hegel";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
 

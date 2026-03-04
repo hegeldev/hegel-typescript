@@ -10,7 +10,8 @@ import * as fs from "node:fs";
 import * as net from "node:net";
 import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { _findHegeld, HegelSession, hegel, runHegelTest } from "../src/session.js";
+import { HegelSession, hegel, runHegelTest } from "hegel";
+import { _findHegeld } from "../src/session.js";
 import { generateFromSchema, _testContextStorage } from "../src/runner.js";
 
 // ---------------------------------------------------------------------------

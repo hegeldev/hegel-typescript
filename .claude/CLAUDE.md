@@ -82,7 +82,7 @@ plain-object types. Three mechanisms are available:
 ### 1. Class-based derivation with `@field` decorator
 
 ```typescript
-import { field, deriveGenerator, integers, text, booleans } from "hegel-typescript";
+import { field, deriveGenerator, integers, text, booleans } from "hegel";
 
 class User {
   @field(text(1, 50))
@@ -104,7 +104,7 @@ Requires `"experimentalDecorators": true` in `tsconfig.json`.
 ### 2. Plain-object records with `recordGenerator`
 
 ```typescript
-import { recordGenerator, floats } from "hegel-typescript";
+import { recordGenerator, floats } from "hegel";
 
 const pointGen = recordGenerator({
   x: floats(-100, 100),
@@ -116,7 +116,7 @@ const pointGen = recordGenerator({
 ### 3. Discriminated unions with `variantGenerator`
 
 ```typescript
-import { variantGenerator, recordGenerator, floats } from "hegel-typescript";
+import { variantGenerator, recordGenerator, floats } from "hegel";
 
 type Shape =
   | { type: "circle"; radius: number }

@@ -5,10 +5,7 @@
  * Metrics: { value: boolean }
  */
 
-import { getTestCases, writeMetrics } from "../src/conformance.js";
-import { booleans } from "../src/generators.js";
-import { draw } from "../src/runner.js";
-import { runHegelTest } from "../src/session.js";
+import { getTestCases, writeMetrics, booleans, draw, runHegelTest } from "hegel";
 
 const testCases = getTestCases();
 const gen = booleans();

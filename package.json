@@ -1,5 +1,5 @@
 {
-  "name": "hegel-typescript",
+  "name": "hegel",
   "version": "0.2.1",
   "description": "Hegel property-based testing SDK for TypeScript",
   "type": "module",

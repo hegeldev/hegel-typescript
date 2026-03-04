@@ -11,7 +11,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Channel, Connection, RequestError } from "./connection.js";
 import { encodeValue } from "./protocol.js";
-import type { Generator } from "./generators.js";
+import type { Generator } from "./generators/index.js";
 
 // ---------------------------------------------------------------------------
 // Supported protocol version range
@@ -138,7 +138,7 @@ export class Client {
     const version = parseFloat(versionStr);
     if (version < SUPPORTED_PROTOCOL_LO || version > SUPPORTED_PROTOCOL_HI) {
       throw new ConnectionError(
-        `hegel-typescript supports protocol versions ${SUPPORTED_PROTOCOL_LO} through ` +
+        `hegel supports protocol versions ${SUPPORTED_PROTOCOL_LO} through ` +
           `${SUPPORTED_PROTOCOL_HI}, but got server version ${version}.`,
       );
     }

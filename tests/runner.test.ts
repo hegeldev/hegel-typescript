@@ -8,28 +8,31 @@
 
 import * as net from "node:net";
 import { describe, expect, it, vi } from "vitest";
-import { Channel, Connection, ConnectionState, RequestError } from "../src/connection.js";
 import {
   AssertionError,
   AssumeRejected,
-  Client,
   ConnectionError,
   DataExhausted,
-  Labels,
   RuntimeError,
-  _getChannel,
-  _testContextStorage,
+  BasicGenerator,
+  HegelSession,
+  runHegelTest,
   assume,
   draw,
+  note,
+  target,
+} from "hegel";
+import { Channel, Connection, ConnectionState, RequestError } from "../src/connection.js";
+import {
+  Client,
+  Labels,
+  _getChannel,
+  _testContextStorage,
   extractOrigin,
   generateFromSchema,
-  note,
   startSpan,
   stopSpan,
-  target,
 } from "../src/runner.js";
-import { BasicGenerator } from "../src/generators.js";
-import { HegelSession, runHegelTest } from "../src/session.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -344,7 +347,7 @@ describe("Client.create", () => {
 
     const clientTask = Client.create(clientConn);
 
-    await expect(clientTask).rejects.toThrow("hegel-typescript supports protocol versions");
+    await expect(clientTask).rejects.toThrow("hegel supports protocol versions");
     await serverTask;
     clientConn.close();
     serverConn.close();
