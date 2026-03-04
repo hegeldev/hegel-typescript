@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3 - 2026-03-04
+
+Reorganize generators, and rename package from `hegel-typescript` to `hegel`.
+
 ## 0.2.2 - 2026-03-04
 
 Remove some unnecessary code only present for testing.
