@@ -1,10 +1,3 @@
-/**
- * Tests for HegelSession, _findHegeld, runHegelTest, and the hegel decorator.
- *
- * Unit tests mock the filesystem and subprocess where possible.
- * Integration tests use the real hegel binary.
- */
-
 import * as childProcess from "node:child_process";
 import * as fs from "node:fs";
 import * as net from "node:net";
