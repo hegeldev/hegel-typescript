@@ -4,7 +4,7 @@ import * as net from "node:net";
 import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HegelSession, hegel, runHegelTest } from "hegel";
-import { _findHegeld } from "../src/session.js";
+import { _findHegeld, _resetCachedHegelPath } from "../src/session.js";
 import { generateFromSchema, _testContextStorage } from "../src/runner.js";
 
 // ---------------------------------------------------------------------------
@@ -58,6 +58,7 @@ describe("_findHegeld", () => {
     } else {
       delete process.env["HEGEL_CMD"];
     }
+    _resetCachedHegelPath();
     vi.mocked(fs.existsSync).mockRestore();
     vi.mocked(fs.readFileSync).mockRestore();
     vi.mocked(fs.writeFileSync).mockRestore();
@@ -75,6 +76,32 @@ describe("_findHegeld", () => {
     process.env["HEGEL_CMD"] = "";
     const result = _findHegeld();
     expect(result).toBe("");
+  });
+
+  it("throws when uv pip install fails", () => {
+    delete process.env["HEGEL_CMD"];
+    vi.mocked(fs.readFileSync).mockImplementation(() => {
+      throw new Error("ENOENT");
+    });
+    vi.mocked(fs.mkdirSync).mockReturnValue(undefined as unknown as string);
+    vi.mocked(childProcess.execSync).mockImplementation((cmd) => {
+      if (typeof cmd === "string" && cmd.includes("uv pip")) {
+        throw new Error("pip install failed");
+      }
+      return Buffer.from("");
+    });
+    expect(() => _findHegeld()).toThrow("Failed to install hegel");
+  });
+
+  it("throws when hegel binary not found after install", () => {
+    delete process.env["HEGEL_CMD"];
+    vi.mocked(fs.readFileSync).mockImplementation(() => {
+      throw new Error("ENOENT");
+    });
+    vi.mocked(fs.mkdirSync).mockReturnValue(undefined as unknown as string);
+    vi.mocked(childProcess.execSync).mockReturnValue(Buffer.from(""));
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    expect(() => _findHegeld()).toThrow("hegel not found at");
   });
 });
 

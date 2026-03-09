@@ -35,6 +35,11 @@ function hegelPipSpec(): string {
 
 let cachedHegelPath: string | null = null;
 
+/** @internal Reset cached hegel path (for testing only). */
+export function _resetCachedHegelPath(): void {
+  cachedHegelPath = null;
+}
+
 function ensureHegelInstalled(): string {
   // Check cached version
   try {
