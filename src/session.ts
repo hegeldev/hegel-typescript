@@ -20,7 +20,7 @@ import { Client } from "./runner.js";
 // ---------------------------------------------------------------------------
 
 /** The hegel-core commit this SDK is designed to work with. */
-const HEGEL_VERSION = "6e327df2dd42553de12ace94cfbddfbbd9e4bf50";
+const HEGEL_VERSION = "v0.3.3";
 
 const HEGEL_CMD_ENV = "HEGEL_CMD";
 
@@ -53,7 +53,7 @@ function ensureHegelInstalled(): string {
 
   fs.mkdirSync(HEGEL_DIR, { recursive: true });
 
-  process.stderr.write(`Installing hegel (${HEGEL_VERSION.slice(0, 12)}) into ${VENV_DIR}...\n`);
+  process.stderr.write(`Installing hegel (${HEGEL_VERSION}) into ${VENV_DIR}...\n`);
 
   childProcess.execSync(`uv venv --clear "${VENV_DIR}"`, {
     stdio: ["ignore", "inherit", "inherit"],
