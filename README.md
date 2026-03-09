@@ -13,11 +13,22 @@ shrinks them to minimal counterexamples.
 npm install "git+ssh://git@github.com/antithesishq/hegel-typescript.git"
 ```
 
-The SDK requires the `hegel` CLI on your PATH:
+### Hegel server
+
+The SDK automatically manages the `hegel` server binary. On first use it
+creates a project-local `.hegel/venv` virtualenv and installs the pinned
+version of [hegel-core](https://github.com/antithesishq/hegel-core) into it.
+Subsequent runs reuse the cached binary unless the pinned version changes.
+
+To use your own `hegel` binary instead (e.g. a local development build), set
+the `HEGEL_CMD` environment variable:
 
 ```bash
-pip install "hegel @ git+ssh://git@github.com/antithesishq/hegel-core.git"
+export HEGEL_CMD=/path/to/hegel
 ```
+
+The SDK requires [`uv`](https://docs.astral.sh/uv/) to be installed for
+automatic server management.
 
 ## Quick Start
 
@@ -41,8 +52,8 @@ For a full walkthrough, see [guide/getting-started.md](guide/getting-started.md)
 ## Development
 
 ```bash
-just setup   # Install dependencies + hegel binary
+just setup   # Install npm dependencies
 just check   # Full CI: lint + docs + tests with 100% coverage
-just test    # Run tests only
+just test    # Run tests only (auto-installs hegel on first run)
 just format  # Auto-format code
 ```

@@ -58,6 +58,7 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-latest
+    environment: ci
     permissions:
       contents: read
     steps:
@@ -69,8 +70,6 @@ jobs:
         with:
           ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
 
-      - name: Install just
-        run: sudo apt-get update && sudo apt-get install -y just
       - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -78,7 +77,6 @@ jobs:
           node-version: "22"
 
       - run: npm ci
-      - run: just setup
       - name: Run tests
         run: npm run test
 
@@ -103,6 +101,7 @@ jobs:
   conformance:
     name: conformance
     runs-on: ubuntu-latest
+    environment: ci
     permissions:
       contents: read
     steps:
@@ -114,8 +113,6 @@ jobs:
         with:
           ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
 
-      - name: Install just
-        run: sudo apt-get update && sudo apt-get install -y just
       - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -126,15 +123,20 @@ jobs:
         with:
           node-version: "22"
 
-      - run: just setup
+      - name: Install just
+        run: sudo apt-get update && sudo apt-get install -y just
+
+      - run: npm ci
       - run: pip install pytest
-      - run: just conformance
+      - name: Run conformance tests
+        run: just conformance
 
   release:
     name: release
     if: github.event_name == 'push' && github.repository == 'antithesishq/hegel-typescript'
     needs: [lint, test, docs, conformance]
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: write
       checks: read

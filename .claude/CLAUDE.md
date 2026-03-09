@@ -3,7 +3,7 @@
 ## Build Commands
 
 ```bash
-just setup   # Install dependencies and hegel binary
+just setup   # Install npm dependencies
 just test    # Run tests with coverage (fails if coverage < 100%)
 just format  # Auto-format code
 just lint    # Check formatting + linting
@@ -11,7 +11,7 @@ just docs    # Build API documentation
 just check   # Run lint + docs + test (full CI check)
 ```
 
-Tests must use `PATH=".venv/bin:$PATH"` so the `hegel` binary is found.
+The SDK automatically manages the hegel binary in `.hegel/venv`. Set `HEGEL_CMD` to override.
 
 ## What This Is
 

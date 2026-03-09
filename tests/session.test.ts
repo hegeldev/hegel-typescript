@@ -19,6 +19,9 @@ vi.mock("node:fs", async (importOriginal) => {
   return {
     ...actual,
     existsSync: vi.fn(actual.existsSync),
+    readFileSync: vi.fn(actual.readFileSync),
+    writeFileSync: vi.fn(actual.writeFileSync),
+    mkdirSync: vi.fn(actual.mkdirSync),
     mkdtempSync: vi.fn(actual.mkdtempSync),
     rmSync: vi.fn(actual.rmSync),
   };
@@ -29,6 +32,7 @@ vi.mock("node:child_process", async (importOriginal) => {
   return {
     ...actual,
     spawn: vi.fn(actual.spawn),
+    execSync: vi.fn(actual.execSync),
   };
 });
 
@@ -45,60 +49,32 @@ vi.mock("node:net", async (importOriginal) => {
 // ---------------------------------------------------------------------------
 
 describe("_findHegeld", () => {
+  const origHegelCmd = process.env["HEGEL_CMD"];
+
   afterEach(() => {
+    // Restore HEGEL_CMD
+    if (origHegelCmd !== undefined) {
+      process.env["HEGEL_CMD"] = origHegelCmd;
+    } else {
+      delete process.env["HEGEL_CMD"];
+    }
     vi.mocked(fs.existsSync).mockRestore();
+    vi.mocked(fs.readFileSync).mockRestore();
+    vi.mocked(fs.writeFileSync).mockRestore();
+    vi.mocked(fs.mkdirSync).mockRestore();
+    vi.mocked(childProcess.execSync).mockRestore();
   });
 
-  it("returns .venv/bin/hegel when it exists in cwd", () => {
-    vi.mocked(fs.existsSync).mockImplementation((p) => {
-      return String(p).includes(".venv") && String(p).endsWith("hegel");
-    });
+  it("returns HEGEL_CMD when set", () => {
+    process.env["HEGEL_CMD"] = "/usr/local/bin/my-hegel";
     const result = _findHegeld();
-    expect(result).toContain("hegel");
-    expect(result).toContain(".venv");
+    expect(result).toBe("/usr/local/bin/my-hegel");
   });
 
-  it("returns hegel from PATH when .venv not found", () => {
-    const origPath = process.env["PATH"];
-    process.env["PATH"] =
-      "/usr/local/bin" + (process.platform === "win32" ? ";" : ":") + "/usr/bin";
-    vi.mocked(fs.existsSync).mockImplementation((p) => {
-      const s = String(p);
-      // .venv/bin/hegel does NOT exist, but /usr/local/bin/hegel does
-      return !s.includes(".venv") && s.endsWith("hegel");
-    });
+  it("returns empty string HEGEL_CMD when set to empty", () => {
+    process.env["HEGEL_CMD"] = "";
     const result = _findHegeld();
-    expect(result).toContain("hegel");
-    expect(result).not.toContain(".venv");
-    process.env["PATH"] = origPath;
-  });
-
-  it("falls back to python3 -m hegel when not found anywhere", () => {
-    vi.mocked(fs.existsSync).mockReturnValue(false);
-    const result = _findHegeld();
-    expect(result).toBe("python3 -m hegel");
-  });
-
-  it("handles undefined PATH (falls back to python3 -m hegel)", () => {
-    const origPath = process.env["PATH"];
-    delete process.env["PATH"];
-    vi.mocked(fs.existsSync).mockReturnValue(false);
-    const result = _findHegeld();
-    expect(result).toBe("python3 -m hegel");
-    process.env["PATH"] = origPath;
-  });
-
-  it("skips empty PATH entries", () => {
-    const origPath = process.env["PATH"];
-    // PATH with a leading colon produces an empty entry
-    process.env["PATH"] = ":/usr/local/bin";
-    vi.mocked(fs.existsSync).mockImplementation((p) => {
-      const s = String(p);
-      return !s.includes(".venv") && s.endsWith("hegel");
-    });
-    const result = _findHegeld();
-    expect(result).toContain("hegel");
-    process.env["PATH"] = origPath;
+    expect(result).toBe("");
   });
 });
 

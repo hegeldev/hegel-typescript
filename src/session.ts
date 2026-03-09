@@ -16,36 +16,87 @@ import { Connection } from "./connection.js";
 import { Client } from "./runner.js";
 
 // ---------------------------------------------------------------------------
+// Pinned hegel-core version
+// ---------------------------------------------------------------------------
+
+/** The hegel-core commit this SDK is designed to work with. */
+const HEGEL_VERSION = "6e327df2dd42553de12ace94cfbddfbbd9e4bf50";
+
+const HEGEL_CMD_ENV = "HEGEL_CMD";
+
+const HEGEL_DIR = ".hegel";
+const VENV_DIR = path.join(HEGEL_DIR, "venv");
+const VERSION_FILE = path.join(VENV_DIR, "hegel-version");
+const HEGEL_BIN = path.join(VENV_DIR, "bin", "hegel");
+
+function hegelPipSpec(): string {
+  return `hegel @ git+ssh://git@github.com/antithesishq/hegel-core.git@${HEGEL_VERSION}`;
+}
+
+let cachedHegelPath: string | null = null;
+
+function ensureHegelInstalled(): string {
+  // Check cached version
+  try {
+    const cached = fs.readFileSync(VERSION_FILE, "utf-8").trim();
+    if (cached === HEGEL_VERSION && fs.existsSync(HEGEL_BIN)) {
+      return HEGEL_BIN;
+    }
+  } catch {
+    // Version file doesn't exist, need to install
+  }
+
+  fs.mkdirSync(HEGEL_DIR, { recursive: true });
+
+  process.stderr.write(`Installing hegel (${HEGEL_VERSION.slice(0, 12)}) into ${VENV_DIR}...\n`);
+
+  childProcess.execSync(`uv venv --clear "${VENV_DIR}"`, {
+    stdio: ["ignore", "inherit", "inherit"],
+  });
+
+  try {
+    childProcess.execSync(`uv pip install --python "${VENV_DIR}/bin/python" "${hegelPipSpec()}"`, {
+      stdio: ["ignore", "inherit", "inherit"],
+    });
+  } catch {
+    throw new Error(
+      `Failed to install hegel (version: ${HEGEL_VERSION}). ` +
+        `Set ${HEGEL_CMD_ENV} to a hegel binary path to skip installation.`,
+    );
+  }
+
+  if (!fs.existsSync(HEGEL_BIN)) {
+    throw new Error(`hegel not found at ${HEGEL_BIN} after installation`);
+  }
+
+  fs.writeFileSync(VERSION_FILE, HEGEL_VERSION);
+
+  return HEGEL_BIN;
+}
+
+// ---------------------------------------------------------------------------
 // Binary discovery
 // ---------------------------------------------------------------------------
 
 /**
  * Locate the hegel binary.
  *
- * Search order:
- * 1. `.venv/bin/hegel` relative to the current working directory
- * 2. `hegel` on the system PATH
- * 3. Fallback: `"python3 -m hegel"`
+ * If `HEGEL_CMD` is set, uses that path directly (the user is responsible
+ * for providing the right binary).
+ *
+ * Otherwise, ensures hegel is installed in `.hegel/venv` at the version
+ * specified by `HEGEL_VERSION` and returns the path to that binary.
  */
 export function _findHegeld(): string {
-  // 1. Check .venv/bin/hegel relative to cwd (typical project setup)
-  const venvHegel = path.join(process.cwd(), ".venv", "bin", "hegel");
-  if (fs.existsSync(venvHegel)) {
-    return venvHegel;
+  // HEGEL_CMD override
+  const override = process.env[HEGEL_CMD_ENV];
+  if (override !== undefined) {
+    return override;
   }
 
-  // 2. Search PATH directories
-  const pathEnv = process.env["PATH"] ?? "";
-  for (const dir of pathEnv.split(path.delimiter)) {
-    if (!dir) continue;
-    const candidate = path.join(dir, "hegel");
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-
-  // 3. Fallback
-  return "python3 -m hegel";
+  if (cachedHegelPath) return cachedHegelPath;
+  cachedHegelPath = ensureHegelInstalled();
+  return cachedHegelPath;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,11 +150,8 @@ export class HegelSession {
     const socketPath = path.join(this._tempDir, "hegel.sock");
 
     const hegelCmd = _findHegeld();
-    const cmdParts = hegelCmd.split(" ");
-    const binary = cmdParts[0]!;
-    const args = [...cmdParts.slice(1), socketPath];
 
-    this._process = childProcess.spawn(binary, args, {
+    this._process = childProcess.spawn(hegelCmd, [socketPath], {
       stdio: ["ignore", "pipe", "pipe"],
     });
 
