@@ -64,6 +64,24 @@ def add_changelog(path: Path, *, version: str, content: str) -> None:
     path.write_text(f"# Changelog\n\n{entry}{rest}")
 
 
+def pin_hegel_version(session_ts: Path) -> None:
+    """Pin HEGEL_VERSION to the current HEAD of hegel-core main."""
+    sha = subprocess.check_output(
+        ["gh", "api", "repos/antithesishq/hegel-core/commits/main", "--jq", ".sha"],
+        text=True,
+    ).strip()
+
+    text = session_ts.read_text()
+    new_text = re.sub(
+        r'^const HEGEL_VERSION = ".*"',
+        f'const HEGEL_VERSION = "{sha}"',
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    session_ts.write_text(new_text)
+
+
 def check(base_ref: str) -> None:
     output = subprocess.check_output(
         ["git", "diff", "--name-only", f"origin/{base_ref}...HEAD"],
@@ -119,11 +137,14 @@ def release() -> None:
 
     set_version(package_json, new_version)
 
+    session_ts = ROOT / "src" / "session.ts"
+    pin_hegel_version(session_ts)
+
     add_changelog(ROOT / "CHANGELOG.md", version=new_version, content=content)
 
     git("config", "user.name", "hegel-release[bot]", cwd=ROOT)
     git("config", "user.email", "noreply@github.com", cwd=ROOT)
-    git("add", "package.json", "CHANGELOG.md", cwd=ROOT)
+    git("add", "package.json", "src/session.ts", "CHANGELOG.md", cwd=ROOT)
     git("rm", "RELEASE.md", cwd=ROOT)
     git(
         "commit",
