@@ -214,12 +214,22 @@ describe("HegelSession._cleanup", () => {
 // ---------------------------------------------------------------------------
 
 describe("HegelSession timeout", () => {
+  const origHegelCmd = process.env["HEGEL_CMD"];
+
   beforeEach(() => {
     vi.useFakeTimers();
+    // Set HEGEL_CMD so _findHegeld() skips ensureHegelInstalled()
+    process.env["HEGEL_CMD"] = "/usr/bin/false";
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    // Restore HEGEL_CMD
+    if (origHegelCmd !== undefined) {
+      process.env["HEGEL_CMD"] = origHegelCmd;
+    } else {
+      delete process.env["HEGEL_CMD"];
+    }
     vi.mocked(fs.existsSync).mockRestore();
     vi.mocked(fs.mkdtempSync).mockRestore();
     vi.mocked(fs.rmSync).mockRestore();
