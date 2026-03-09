@@ -67,7 +67,7 @@ jobs:
 
       - uses: ./.github/actions/base
         with:
-          ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }} # zizmor: ignore[secrets-outside-env]
+          ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
 
       - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
 
@@ -109,7 +109,7 @@ jobs:
 
       - uses: ./.github/actions/base
         with:
-          ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }} # zizmor: ignore[secrets-outside-env]
+          ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
 
       - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
 
