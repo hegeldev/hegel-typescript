@@ -69,6 +69,15 @@ export function lists<T>(
   minSize = 0,
   maxSize: number | null = null,
 ): Generator<T[]> {
+  if (minSize < 0) {
+    throw new Error(`min_size=${minSize} must be non-negative`);
+  }
+  if (maxSize !== null && maxSize < 0) {
+    throw new Error(`max_size=${maxSize} must be non-negative`);
+  }
+  if (maxSize !== null && minSize > maxSize) {
+    throw new Error(`Cannot have max_size=${maxSize} < min_size=${minSize}`);
+  }
   if (elements instanceof BasicGenerator) {
     const rawSchema: Record<string, unknown> = {
       type: "list",
@@ -167,6 +176,15 @@ export function dicts<K, V>(
   minSize = 0,
   maxSize: number | null = null,
 ): Generator<Record<string, unknown>> | Generator<Map<K, V>> {
+  if (minSize < 0) {
+    throw new Error(`min_size=${minSize} must be non-negative`);
+  }
+  if (maxSize !== null && maxSize < 0) {
+    throw new Error(`max_size=${maxSize} must be non-negative`);
+  }
+  if (maxSize !== null && minSize > maxSize) {
+    throw new Error(`Cannot have max_size=${maxSize} < min_size=${minSize}`);
+  }
   if (keys instanceof BasicGenerator && values instanceof BasicGenerator) {
     const rawSchema: Record<string, unknown> = {
       type: "dict",

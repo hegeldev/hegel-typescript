@@ -399,23 +399,11 @@ describe("runHegelTest", () => {
     await runHegelTest(() => {});
   });
 
-  it("uses function name as test name", async () => {
+  it("runs a named function", async () => {
     async function myNamedTest() {
       await generateFromSchema({ type: "boolean" }, _testContextStorage.getStore()!);
     }
     await runHegelTest(myNamedTest);
-  });
-
-  it("falls back to 'test' when function has no name", async () => {
-    const session = new HegelSession();
-    try {
-      // Create an object whose .name property is undefined
-      const anonFn = (() => {}) as unknown as () => void;
-      Object.defineProperty(anonFn, "name", { value: undefined });
-      await session.runTest(anonFn, 1);
-    } finally {
-      session._cleanup();
-    }
   });
 });
 

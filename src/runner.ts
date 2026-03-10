@@ -18,7 +18,7 @@ import type { Generator } from "./generators/index.js";
 // ---------------------------------------------------------------------------
 
 const SUPPORTED_PROTOCOL_LO = 0.1;
-const SUPPORTED_PROTOCOL_HI = 0.3;
+const SUPPORTED_PROTOCOL_HI = 0.4;
 
 // ---------------------------------------------------------------------------
 // Error classes
@@ -152,12 +152,10 @@ export class Client {
    * Re-raises the original exception for a single failure, or raises
    * `AggregateError` for multiple distinct failures.
    *
-   * @param name - Test name shown in failure reports.
    * @param testFn - The test body (may be async).
    * @param opts - Options: `testCases` (default 100).
    */
   async runTest(
-    name: string,
     testFn: () => void | Promise<void>,
     opts: { testCases?: number } = {},
   ): Promise<void> {
@@ -167,7 +165,6 @@ export class Client {
     await this._control
       .request({
         command: "run_test",
-        name,
         test_cases: testCases,
         channel_id: testChannel.channelId,
       })
