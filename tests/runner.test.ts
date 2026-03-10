@@ -452,9 +452,7 @@ describe("runHegelTest integration", () => {
       ch.close();
     };
 
-    await expect(client.runTest(() => {}, { testCases: 1 })).rejects.toThrow(
-      AggregateError,
-    );
+    await expect(client.runTest(() => {}, { testCases: 1 })).rejects.toThrow(AggregateError);
 
     await serverTask;
     clientConn.close();
@@ -848,9 +846,7 @@ describe("final test case passes unexpectedly", () => {
       ch.close();
     };
 
-    await expect(
-      client.runTest(() => {}, { testCases: 1 }),
-    ).rejects.toThrow(AggregateError);
+    await expect(client.runTest(() => {}, { testCases: 1 })).rejects.toThrow(AggregateError);
 
     await serverTask;
     clientConn.close();

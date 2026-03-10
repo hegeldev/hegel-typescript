@@ -39,7 +39,6 @@ describe("argument validation", () => {
     });
   });
 
-
   describe("text()", () => {
     it("throws when minSize < 0", () => {
       expect(() => text(-1)).toThrow("min_size");
