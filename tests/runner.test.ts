@@ -452,9 +452,7 @@ describe("runHegelTest integration", () => {
       ch.close();
     };
 
-    await expect(client.runTest("test_multi_fail", () => {}, { testCases: 1 })).rejects.toThrow(
-      AggregateError,
-    );
+    await expect(client.runTest(() => {}, { testCases: 1 })).rejects.toThrow(AggregateError);
 
     await serverTask;
     clientConn.close();
@@ -701,7 +699,7 @@ describe("unrecognised event in runTest", () => {
     await clientConn.sendHandshake();
     const client = new Client(clientConn);
     // Call without testCases to exercise the `opts.testCases ?? 100` default
-    await client.runTest("test_bogus", () => {});
+    await client.runTest(() => {});
 
     await serverTask;
     clientConn.close();
@@ -781,7 +779,7 @@ describe("final test case passes unexpectedly", () => {
       return origRunTestCase(ch, fn, isFinal);
     };
 
-    await expect(client.runTest("test_final_pass", () => {}, { testCases: 1 })).rejects.toThrow(
+    await expect(client.runTest(() => {}, { testCases: 1 })).rejects.toThrow(
       "Expected test case to fail but it didn't",
     );
 
@@ -848,9 +846,7 @@ describe("final test case passes unexpectedly", () => {
       ch.close();
     };
 
-    await expect(
-      client.runTest("test_multi_final_pass", () => {}, { testCases: 1 }),
-    ).rejects.toThrow(AggregateError);
+    await expect(client.runTest(() => {}, { testCases: 1 })).rejects.toThrow(AggregateError);
 
     await serverTask;
     clientConn.close();

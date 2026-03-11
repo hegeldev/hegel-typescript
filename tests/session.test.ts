@@ -1,10 +1,3 @@
-/**
- * Tests for HegelSession, _findHegeld, runHegelTest, and the hegel decorator.
- *
- * Unit tests mock the filesystem and subprocess where possible.
- * Integration tests use the real hegel binary.
- */
-
 import * as childProcess from "node:child_process";
 import * as fs from "node:fs";
 import * as net from "node:net";
@@ -406,23 +399,11 @@ describe("runHegelTest", () => {
     await runHegelTest(() => {});
   });
 
-  it("uses function name as test name", async () => {
+  it("runs a named function", async () => {
     async function myNamedTest() {
       await generateFromSchema({ type: "boolean" }, _testContextStorage.getStore()!);
     }
     await runHegelTest(myNamedTest);
-  });
-
-  it("falls back to 'test' when function has no name", async () => {
-    const session = new HegelSession();
-    try {
-      // Create an object whose .name property is undefined
-      const anonFn = (() => {}) as unknown as () => void;
-      Object.defineProperty(anonFn, "name", { value: undefined });
-      await session.runTest(anonFn, 1);
-    } finally {
-      session._cleanup();
-    }
   });
 });
 

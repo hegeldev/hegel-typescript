@@ -193,8 +193,7 @@ export class HegelSession {
   async runTest(testFn: () => void | Promise<void>, testCases: number): Promise<void> {
     await this._start();
     const client = this._client!;
-    const name = testFn.name || "test";
-    await client.runTest(name, testFn, { testCases });
+    await client.runTest(testFn, { testCases });
   }
 }
 

@@ -106,15 +106,10 @@ describe("floats()", () => {
 });
 
 describe("booleans()", () => {
-  it("returns a BasicGenerator with type=boolean and default p=0.5", () => {
+  it("returns a BasicGenerator with type=boolean", () => {
     const gen = booleans();
     expect(gen).toBeInstanceOf(BasicGenerator);
-    expect(gen.schema()).toEqual({ type: "boolean", p: 0.5 });
-  });
-
-  it("uses custom probability when provided", () => {
-    const gen = booleans(0.8);
-    expect(gen.schema()["p"]).toBe(0.8);
+    expect(gen.schema()).toEqual({ type: "boolean" });
   });
 });
 
@@ -538,15 +533,9 @@ describe("booleans()", () => {
     expect(booleans()).toBeInstanceOf(BasicGenerator);
   });
 
-  it("schema has type=boolean and p=0.5 by default", () => {
+  it("schema has type=boolean", () => {
     const schema = booleans().schema();
     expect(schema["type"]).toBe("boolean");
-    expect(schema["p"]).toBe(0.5);
-  });
-
-  it("schema has custom p value", () => {
-    const schema = booleans(0.8).schema();
-    expect(schema["p"]).toBe(0.8);
   });
 
   it("generates booleans via live server", async () => {

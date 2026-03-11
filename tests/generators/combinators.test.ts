@@ -297,8 +297,12 @@ describe("oneOf() — Path 1 (all basic, no transforms)", () => {
     if (high.length === 0) throw new Error("Second branch never chosen");
   });
 
-  it("throws if fewer than 2 generators provided", () => {
-    expect(() => oneOf(integers())).toThrow("oneOf requires at least 2 generators");
+  it("throws if 0 generators provided", () => {
+    expect(() => oneOf()).toThrow("oneOf requires at least one generator");
+  });
+
+  it("accepts 1 generator", () => {
+    expect(() => oneOf(integers())).not.toThrow();
   });
 });
 

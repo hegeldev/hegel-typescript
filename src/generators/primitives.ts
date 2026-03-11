@@ -21,6 +21,9 @@ export function integers(
   minValue: number | null = null,
   maxValue: number | null = null,
 ): BasicGenerator<number> {
+  if (minValue !== null && maxValue !== null && minValue > maxValue) {
+    throw new Error(`Cannot have max_value=${maxValue} < min_value=${minValue}`);
+  }
   const schema: Record<string, unknown> = { type: "integer" };
   if (minValue !== null) schema["min_value"] = minValue;
   if (maxValue !== null) schema["max_value"] = maxValue;
@@ -53,6 +56,15 @@ export function floats(
   const hasMax = maxValue !== null;
   const resolvedAllowNan = allowNan !== null ? allowNan : !hasMin && !hasMax;
   const resolvedAllowInfinity = allowInfinity !== null ? allowInfinity : !hasMin || !hasMax;
+  if (resolvedAllowNan && (hasMin || hasMax)) {
+    throw new Error("Cannot have allow_nan=true with min_value or max_value");
+  }
+  if (hasMin && hasMax && minValue! > maxValue!) {
+    throw new Error(`There are no floats between min_value=${minValue} and max_value=${maxValue}`);
+  }
+  if (resolvedAllowInfinity && hasMin && hasMax) {
+    throw new Error("Cannot have allow_infinity=true with both min_value and max_value");
+  }
   const schema: Record<string, unknown> = { type: "float" };
   if (hasMin) schema["min_value"] = minValue;
   if (hasMax) schema["max_value"] = maxValue;
@@ -68,11 +80,9 @@ export function floats(
 
 /**
  * Generate booleans.
- *
- * @param p - Probability of generating `true`. Defaults to 0.5.
  */
-export function booleans(p = 0.5): BasicGenerator<boolean> {
-  return new BasicGenerator<boolean>({ type: "boolean", p });
+export function booleans(): BasicGenerator<boolean> {
+  return new BasicGenerator<boolean>({ type: "boolean" });
 }
 
 /**
@@ -82,6 +92,15 @@ export function booleans(p = 0.5): BasicGenerator<boolean> {
  * @param maxSize - Maximum number of Unicode codepoints, or null for unbounded.
  */
 export function text(minSize = 0, maxSize: number | null = null): BasicGenerator<string> {
+  if (minSize < 0) {
+    throw new Error(`min_size=${minSize} must be non-negative`);
+  }
+  if (maxSize !== null && maxSize < 0) {
+    throw new Error(`max_size=${maxSize} must be non-negative`);
+  }
+  if (maxSize !== null && minSize > maxSize) {
+    throw new Error(`Cannot have max_size=${maxSize} < min_size=${minSize}`);
+  }
   const schema: Record<string, unknown> = { type: "string", min_size: minSize };
   if (maxSize !== null) schema["max_size"] = maxSize;
   return new BasicGenerator<string>(schema);
@@ -97,6 +116,15 @@ export function text(minSize = 0, maxSize: number | null = null): BasicGenerator
  * @param maxSize - Maximum byte length, or null for unbounded.
  */
 export function binary(minSize = 0, maxSize: number | null = null): BasicGenerator<Uint8Array> {
+  if (minSize < 0) {
+    throw new Error(`min_size=${minSize} must be non-negative`);
+  }
+  if (maxSize !== null && maxSize < 0) {
+    throw new Error(`max_size=${maxSize} must be non-negative`);
+  }
+  if (maxSize !== null && minSize > maxSize) {
+    throw new Error(`Cannot have max_size=${maxSize} < min_size=${minSize}`);
+  }
   const schema: Record<string, unknown> = { type: "binary", min_size: minSize };
   if (maxSize !== null) schema["max_size"] = maxSize;
   return new BasicGenerator<Uint8Array>(schema);
@@ -168,6 +196,9 @@ export function urls(): BasicGenerator<string> {
  * @param maxLength - Optional maximum length for generated domain names.
  */
 export function domains(maxLength: number | null = null): BasicGenerator<string> {
+  if (maxLength !== null && (maxLength < 4 || maxLength > 255)) {
+    throw new Error(`max_length=${maxLength} must be between 4 and 255`);
+  }
   const schema: Record<string, unknown> = { type: "domain" };
   if (maxLength !== null) schema["max_length"] = maxLength;
   return new BasicGenerator<string>(schema);

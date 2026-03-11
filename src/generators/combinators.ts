@@ -208,8 +208,8 @@ export class CompositeOneOfGenerator<T = unknown> extends Generator<T> {
  * @throws {Error} If fewer than 2 generators are provided.
  */
 export function oneOf<T>(...generators: Generator<T>[]): Generator<T> {
-  if (generators.length < 2) {
-    throw new Error("oneOf requires at least 2 generators");
+  if (generators.length === 0) {
+    throw new Error("oneOf requires at least one generator");
   }
 
   // Check if all generators are BasicGenerator instances
