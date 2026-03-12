@@ -11,7 +11,7 @@ just docs    # Build API documentation
 just check   # Run lint + docs + test (full CI check)
 ```
 
-The SDK automatically manages the hegel binary in `.hegel/venv`. Set `HEGEL_CMD` to override.
+The SDK automatically manages the hegel binary in `.hegel/venv`. Set `HEGEL_SERVER_COMMAND` to override.
 
 ## What This Is
 

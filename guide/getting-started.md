@@ -11,10 +11,10 @@ creates a project-local `.hegel/venv` virtualenv and installs the pinned
 version of [hegel-core](https://github.com/antithesishq/hegel-core) into it.
 You need [`uv`](https://docs.astral.sh/uv/) on your PATH for this to work.
 
-To use your own `hegel` binary instead, set `HEGEL_CMD`:
+To use your own `hegel` binary instead, set `HEGEL_SERVER_COMMAND`:
 
 ```bash
-export HEGEL_CMD=/path/to/hegel
+export HEGEL_SERVER_COMMAND=/path/to/hegel
 ```
 
 ## Write your first test

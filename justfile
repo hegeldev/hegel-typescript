@@ -2,13 +2,13 @@
 # This justfile provides the standard build recipes.
 
 # Install dependencies.
-# If HEGEL_BINARY is set, uses it as the hegel binary via HEGEL_CMD.
+# If HEGEL_BINARY is set, uses it as the hegel binary via HEGEL_SERVER_COMMAND.
 setup:
     #!/usr/bin/env bash
     set -euo pipefail
     npm install
     if [ -n "${HEGEL_BINARY:-}" ]; then
-        export HEGEL_CMD="$HEGEL_BINARY"
+        export HEGEL_SERVER_COMMAND="$HEGEL_BINARY"
     fi
 
 # Run tests with coverage enforcement (100% required).

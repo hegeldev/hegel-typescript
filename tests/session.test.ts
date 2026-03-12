@@ -49,14 +49,14 @@ vi.mock("node:net", async (importOriginal) => {
 // ---------------------------------------------------------------------------
 
 describe("_findHegeld", () => {
-  const origHegelCmd = process.env["HEGEL_CMD"];
+  const origHegelServerCommand = process.env["HEGEL_SERVER_COMMAND"];
 
   afterEach(() => {
-    // Restore HEGEL_CMD
-    if (origHegelCmd !== undefined) {
-      process.env["HEGEL_CMD"] = origHegelCmd;
+    // Restore HEGEL_SERVER_COMMAND
+    if (origHegelServerCommand !== undefined) {
+      process.env["HEGEL_SERVER_COMMAND"] = origHegelServerCommand;
     } else {
-      delete process.env["HEGEL_CMD"];
+      delete process.env["HEGEL_SERVER_COMMAND"];
     }
     _resetCachedHegelPath();
     vi.mocked(fs.existsSync).mockRestore();
@@ -66,20 +66,20 @@ describe("_findHegeld", () => {
     vi.mocked(childProcess.execSync).mockRestore();
   });
 
-  it("returns HEGEL_CMD when set", () => {
-    process.env["HEGEL_CMD"] = "/usr/local/bin/my-hegel";
+  it("returns HEGEL_SERVER_COMMAND when set", () => {
+    process.env["HEGEL_SERVER_COMMAND"] = "/usr/local/bin/my-hegel";
     const result = _findHegeld();
     expect(result).toBe("/usr/local/bin/my-hegel");
   });
 
-  it("returns empty string HEGEL_CMD when set to empty", () => {
-    process.env["HEGEL_CMD"] = "";
+  it("returns empty string HEGEL_SERVER_COMMAND when set to empty", () => {
+    process.env["HEGEL_SERVER_COMMAND"] = "";
     const result = _findHegeld();
     expect(result).toBe("");
   });
 
   it("throws when uv pip install fails", () => {
-    delete process.env["HEGEL_CMD"];
+    delete process.env["HEGEL_SERVER_COMMAND"];
     vi.mocked(fs.readFileSync).mockImplementation(() => {
       throw new Error("ENOENT");
     });
@@ -94,7 +94,7 @@ describe("_findHegeld", () => {
   });
 
   it("throws when hegel binary not found after install", () => {
-    delete process.env["HEGEL_CMD"];
+    delete process.env["HEGEL_SERVER_COMMAND"];
     vi.mocked(fs.readFileSync).mockImplementation(() => {
       throw new Error("ENOENT");
     });
@@ -241,21 +241,21 @@ describe("HegelSession._cleanup", () => {
 // ---------------------------------------------------------------------------
 
 describe("HegelSession timeout", () => {
-  const origHegelCmd = process.env["HEGEL_CMD"];
+  const origHegelServerCommand = process.env["HEGEL_SERVER_COMMAND"];
 
   beforeEach(() => {
     vi.useFakeTimers();
-    // Set HEGEL_CMD so _findHegeld() skips ensureHegelInstalled()
-    process.env["HEGEL_CMD"] = "/usr/bin/false";
+    // Set HEGEL_SERVER_COMMAND so _findHegeld() skips ensureHegelInstalled()
+    process.env["HEGEL_SERVER_COMMAND"] = "/usr/bin/false";
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    // Restore HEGEL_CMD
-    if (origHegelCmd !== undefined) {
-      process.env["HEGEL_CMD"] = origHegelCmd;
+    // Restore HEGEL_SERVER_COMMAND
+    if (origHegelServerCommand !== undefined) {
+      process.env["HEGEL_SERVER_COMMAND"] = origHegelServerCommand;
     } else {
-      delete process.env["HEGEL_CMD"];
+      delete process.env["HEGEL_SERVER_COMMAND"];
     }
     vi.mocked(fs.existsSync).mockRestore();
     vi.mocked(fs.mkdtempSync).mockRestore();

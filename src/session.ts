@@ -22,7 +22,7 @@ import { Client } from "./runner.js";
 /** The hegel-core commit this SDK is designed to work with. */
 const HEGEL_VERSION = "v0.3.3";
 
-const HEGEL_CMD_ENV = "HEGEL_CMD";
+const HEGEL_SERVER_COMMAND_ENV = "HEGEL_SERVER_COMMAND";
 
 const HEGEL_DIR = ".hegel";
 const VENV_DIR = path.join(HEGEL_DIR, "venv");
@@ -66,7 +66,7 @@ function ensureHegelInstalled(): string {
   } catch {
     throw new Error(
       `Failed to install hegel (version: ${HEGEL_VERSION}). ` +
-        `Set ${HEGEL_CMD_ENV} to a hegel binary path to skip installation.`,
+        `Set ${HEGEL_SERVER_COMMAND_ENV} to a hegel binary path to skip installation.`,
     );
   }
 
@@ -86,15 +86,15 @@ function ensureHegelInstalled(): string {
 /**
  * Locate the hegel binary.
  *
- * If `HEGEL_CMD` is set, uses that path directly (the user is responsible
+ * If `HEGEL_SERVER_COMMAND` is set, uses that path directly (the user is responsible
  * for providing the right binary).
  *
  * Otherwise, ensures hegel is installed in `.hegel/venv` at the version
  * specified by `HEGEL_VERSION` and returns the path to that binary.
  */
 export function _findHegeld(): string {
-  // HEGEL_CMD override
-  const override = process.env[HEGEL_CMD_ENV];
+  // HEGEL_SERVER_COMMAND override
+  const override = process.env[HEGEL_SERVER_COMMAND_ENV];
   if (override !== undefined) {
     return override;
   }
