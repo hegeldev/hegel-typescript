@@ -156,9 +156,17 @@ export class HegelSession {
 
     const hegelCmd = _findHegeld();
 
+    // Log server output to .hegel/server.log
+    const hegelLogDir = path.join(process.cwd(), HEGEL_DIR);
+    fs.mkdirSync(hegelLogDir, { recursive: true });
+    const logFd = fs.openSync(path.join(hegelLogDir, "server.log"), "a");
+
     this._process = childProcess.spawn(hegelCmd, [socketPath], {
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["ignore", logFd, logFd],
+      env: { ...process.env, PYTHONUNBUFFERED: "1" },
     });
+
+    fs.closeSync(logFd);
 
     // Wait up to 50 × 100 ms = 5 s for the socket to appear and accept
     let connected = false;
