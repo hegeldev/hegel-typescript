@@ -11,7 +11,7 @@ setup:
         mkdir -p .venv/bin
         ln -sf "$HEGEL_BINARY" .venv/bin/hegel
     else
-        uv pip install --python .venv/bin/python hegel@git+ssh://git@github.com/antithesishq/hegel-core.git
+        uv pip install --python .venv/bin/python hegel@git+ssh://git@github.com/hegeldev/hegel-core.git
     fi
     npm install
 
