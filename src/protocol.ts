@@ -1,5 +1,5 @@
 /**
- * Binary wire protocol for the Hegel SDK.
+ * Binary wire protocol for the Hegel library.
  *
  * Implements the 20-byte header packet format with CBOR payloads and CRC32
  * integrity checks.

@@ -1,5 +1,5 @@
 /**
- * Test runner for the Hegel SDK.
+ * Test runner for the Hegel library.
  *
  * Implements the {@link Client} class which manages the test protocol with a
  * Hegel server, and `AsyncLocalStorage`-based context state for generator
@@ -501,7 +501,7 @@ export function extractOrigin(err: Error): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Thrown when the SDK is called outside its expected context.
+ * Thrown when the library is called outside its expected context.
  * (e.g., nesting test cases, calling generator functions outside a test)
  */
 export class RuntimeError extends Error {

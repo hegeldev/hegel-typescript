@@ -1,5 +1,5 @@
 /**
- * Session management for the Hegel SDK.
+ * Session management for the Hegel library.
  *
  * Manages the lifecycle of the hegel subprocess, its Unix socket connection,
  * and the global session used by {@link runHegelTest}.
@@ -113,7 +113,7 @@ export class HegelSession {
       if (fs.existsSync(socketPath)) {
         try {
           const sock = await this._tryConnect(socketPath);
-          const connection = new Connection(sock, { name: "SDK" });
+          const connection = new Connection(sock, { name: "Client" });
           const client = await Client.create(connection);
           this._connection = connection;
           this._client = client;

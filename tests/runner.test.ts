@@ -580,9 +580,9 @@ describe("HEGEL_PROTOCOL_TEST_MODE tests", () => {
 
   it("error_response: RequestError is caught and marked INTERESTING (test completes)", async () => {
     // The error_response test mode sends RequestError on generate.
-    // The SDK catches it, marks the test case INTERESTING, and sends mark_complete.
+    // The client catches it, marks the test case INTERESTING, and sends mark_complete.
     // The test_server then sends test_done with interesting_test_cases=0,
-    // so from the SDK's perspective the test "passed" (no interesting failures).
+    // so from the client's perspective the test "passed" (no interesting failures).
     await withTestMode("error_response", async (session) => {
       await session.runTest(async () => {
         await generateFromSchema({ type: "boolean" }, _testContextStorage.getStore()!);

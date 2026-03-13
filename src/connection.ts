@@ -1,5 +1,5 @@
 /**
- * Connection and Channel abstractions for the Hegel SDK.
+ * Connection and Channel abstractions for the Hegel library.
  *
  * Implements a demand-driven multiplexed socket connection:
  * - {@link Connection} manages a single socket and routes packets to channels.

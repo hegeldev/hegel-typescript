@@ -1,4 +1,4 @@
-# Hegel SDK for typescript
+# Hegel for TypeScript
 # This justfile provides the standard build recipes.
 
 # Install dependencies and the hegel binary.
