@@ -9,7 +9,7 @@ npm install "git+ssh://git@github.com/antithesishq/hegel-typescript.git"
 The library requires the `hegel` CLI on your PATH:
 
 ```bash
-pip install "hegel @ git+https://github.com/hegeldev/hegel-core"
+pip install hegel-core
 ```
 
 If you are working inside this repository, `just setup` handles both steps.
