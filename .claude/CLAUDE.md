@@ -16,7 +16,7 @@ Tests must use `PATH=".venv/bin:$PATH"` so the `hegel` binary is found.
 ## What This Is
 
 A TypeScript implementation of the Hegel property-based testing library. Hegel is a
-universal property-based testing framework powered by Hypothesis on the backend.
+universal property-based testing protocol powered by Hypothesis on the backend.
 Client libraries communicate with the `hegel` binary (a Python server) via Unix sockets using
 a custom binary protocol.
 
