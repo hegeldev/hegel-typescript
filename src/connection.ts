@@ -1,58 +1,46 @@
 /**
- * Connection and Channel abstractions for the Hegel library.
+ * Connection and Stream abstractions for the Hegel library.
  *
- * Implements a demand-driven multiplexed socket connection:
- * - {@link Connection} manages a single socket and routes packets to channels.
- * - {@link Channel} provides request/response messaging on a logical sub-channel.
+ * - {@link Connection} manages a pair of streams (reader + writer) and routes
+ *   packets to logical sub-streams.
+ * - {@link Stream} provides request/response messaging on a logical sub-stream.
  *
  * ## Reader model
  *
- * Reading is demand-driven: a Channel that needs a message calls
- * `connection.runReader(until)`. That function acquires a reader lock so only
- * one fiber drives the socket at a time. The reader loop calls `readPacket` and
- * dispatches each packet to the appropriate channel. To avoid blocking the event
- * loop forever, `readPacket` is wrapped with a socket-level timeout: we set
- * `socket.setTimeout(100)` before each read attempt and listen for the `timeout`
- * event, which lets us check `until()` periodically.
+ * A background async loop reads packets continuously from the reader stream and
+ * dispatches them to the appropriate {@link Stream} inbox. Streams wait for data
+ * via a simple notification promise — no reader lock or polling is needed.
  *
  * @packageDocumentation
  */
 
-import * as net from "net";
+import * as stream from "node:stream";
 import {
   Packet,
   readPacket,
   writePacket,
   encodeValue,
   decodeValue,
-  CLOSE_CHANNEL_PAYLOAD,
-  CLOSE_CHANNEL_MESSAGE_ID,
-  SocketIdleTimeoutError,
+  CLOSE_STREAM_PAYLOAD,
+  CLOSE_STREAM_MESSAGE_ID,
 } from "./protocol.js";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Default timeout for channel operations (milliseconds). */
+/** Default timeout for stream operations (milliseconds). */
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 /** Handshake string sent by the client. */
 const HANDSHAKE_STRING = Buffer.from("hegel_handshake_start");
-
-/**
- * How long (ms) the reader loop waits for data before re-checking `until()`.
- * Must be short enough for timeouts to be responsive but not so short that
- * we spin-poll excessively.
- */
-const READER_POLL_MS = 50;
 
 // ---------------------------------------------------------------------------
 // SHUTDOWN sentinel
 // ---------------------------------------------------------------------------
 
 /**
- * Sentinel value placed in a channel's inbox when the connection is closed.
+ * Sentinel value placed in a stream's inbox when the connection is closed.
  * Causes any waiting `receiveRequest` / `receiveResponse` to throw.
  */
 export const SHUTDOWN: unique symbol = Symbol("SHUTDOWN");
@@ -118,19 +106,19 @@ const _notSet: unique symbol = Symbol("notSet");
  * Handle for an in-flight request. Caches the result after first resolution.
  */
 export class PendingRequest {
-  private readonly _channel: Channel;
+  private readonly _stream: Stream;
   private readonly _messageId: number;
   private _value: unknown = _notSet;
 
-  constructor(channel: Channel, messageId: number) {
-    this._channel = channel;
+  constructor(stream: Stream, messageId: number) {
+    this._stream = stream;
     this._messageId = messageId;
   }
 
   /** Await the response (cached after first call). */
   async get(): Promise<unknown> {
     if (this._value === _notSet) {
-      const raw = await this._channel.receiveResponseRaw(this._messageId);
+      const raw = await this._stream.receiveResponseRaw(this._messageId);
       this._value = decodeValue(raw) as Record<string, unknown>;
     }
     return resultOrError(this._value as Record<string, unknown>);
@@ -142,37 +130,37 @@ export class PendingRequest {
 // ---------------------------------------------------------------------------
 
 /**
- * Async-safe multiplexed socket connection.
+ * Multiplexed connection over a pair of readable/writable streams.
  *
- * Uses a demand-driven reader: when a channel needs a message it calls
- * {@link Connection.runReader} which reads packets until the supplied
- * `until` predicate returns true.
+ * A background async loop reads packets from the reader and dispatches them
+ * to the appropriate {@link Stream}. Writes are serialised via a Promise chain.
  */
 export class Connection {
   /** Human-readable name for debugging. */
   readonly name: string | undefined;
 
-  /** Map from channel ID to Channel (or "dead" marker string). */
-  readonly channels: Map<number, Channel | string> = new Map();
+  /** Map from stream ID to Stream (or "dead" marker string). */
+  readonly streams: Map<number, Stream | string> = new Map();
 
-  private readonly _socket: net.Socket;
+  private readonly _reader: stream.Readable;
+  private readonly _writer: stream.Writable;
   private _running = true;
-  private _nextChannelId = 0;
+  private _nextStreamId = 0;
   private _connectionState: ConnectionState = ConnectionState.UNRESOLVED;
-  private readonly _controlChannel: Channel;
+  private readonly _controlStream: Stream;
 
-  // Reader lock: only one async flow drives the read loop at a time.
-  private _readerActive = false;
   // Writer lock: Promise chain that serialises writes.
   private _writerChain: Promise<void> = Promise.resolve();
 
-  constructor(socket: net.Socket, opts: { name?: string } = {}) {
+  constructor(reader: stream.Readable, writer: stream.Writable, opts: { name?: string } = {}) {
     this.name = opts.name;
-    this._socket = socket;
-    // Increase max listeners to accommodate the reader loop's timeout listeners.
-    this._socket.setMaxListeners(50);
-    // Channel 0 is the control channel — created before handshake.
-    this._controlChannel = this._makeChannel(0);
+    this._reader = reader;
+    this._writer = writer;
+    // Stream 0 is the control stream — created before handshake.
+    this._controlStream = this._makeStream(0);
+    // Start the background reader loop immediately.
+    // _readLoop catches all errors internally, so the promise never rejects.
+    this._readLoop();
   }
 
   /** True while the connection has not been closed. */
@@ -180,9 +168,9 @@ export class Connection {
     return this._running;
   }
 
-  /** The control channel (channel ID 0) used for handshaking. */
-  get controlChannel(): Channel {
-    return this._controlChannel;
+  /** The control stream (stream ID 0) used for handshaking. */
+  get controlStream(): Stream {
+    return this._controlStream;
   }
 
   // ---------------------------------------------------------------------------
@@ -190,48 +178,20 @@ export class Connection {
   // ---------------------------------------------------------------------------
 
   /**
-   * Drive the socket reader until `until()` returns true or the connection closes.
-   *
-   * Acquires the reader lock (only one async fiber runs the packet-read loop at
-   * a time). If another fiber holds the lock, yields with short sleeps until
-   * the lock is free or `until()` becomes true.
-   *
-   * @param until - Predicate; when it returns true, reading stops.
+   * Background reader loop. Reads packets continuously and dispatches them
+   * to the appropriate stream. Runs until the connection is closed or the
+   * reader stream ends/errors.
    */
-  async runReader(until: () => boolean): Promise<void> {
-    if (until()) return;
-
-    // Spin-wait for the reader lock without blocking the event loop.
-    while (this._readerActive) {
-      if (until()) return;
-      await sleep(1);
-    }
-    if (until()) return;
-
-    this._readerActive = true;
-    // Enable socket timeout so the read loop can poll `until()` periodically.
-    this._socket.setTimeout(READER_POLL_MS);
+  private async _readLoop(): Promise<void> {
     try {
-      while (this._running && !until()) {
-        let packet: Packet;
-        try {
-          packet = await readPacket(this._socket);
-        } catch (e) {
-          if (e instanceof SocketIdleTimeoutError) {
-            // Idle timeout fired — just re-check `until()` and continue.
-            continue;
-          }
-          // Real connection error (EOF, ECONNRESET, etc.) — stop the connection.
-          this._running = false;
-          this._notifyChannels();
-          return;
-        }
+      while (this._running) {
+        const packet = await readPacket(this._reader);
         this._dispatch(packet);
       }
-    } finally {
-      this._readerActive = false;
-      // Clear the timeout so it doesn't fire outside the reader loop.
-      this._socket.setTimeout(0);
+    } catch {
+      // EOF, ECONNRESET, or stream destroyed — connection is dead.
+      this._running = false;
+      this._notifyStreams();
     }
   }
 
@@ -243,7 +203,7 @@ export class Connection {
    * Send a packet to the peer. Serialises concurrent writes via a chain of Promises.
    */
   sendPacket(packet: Packet): Promise<void> {
-    this._writerChain = this._writerChain.then(() => writePacket(this._socket, packet));
+    this._writerChain = this._writerChain.then(() => writePacket(this._writer, packet));
     return this._writerChain;
   }
 
@@ -257,12 +217,20 @@ export class Connection {
     this._running = false;
 
     try {
-      this._socket.destroy();
+      this._reader.destroy();
     } catch {
       // ignore
     }
+    // Guard against reader === writer (e.g. when constructed from a duplex socket in tests).
+    if (this._writer !== (this._reader as unknown)) {
+      try {
+        this._writer.destroy();
+      } catch {
+        // ignore
+      }
+    }
 
-    this._notifyChannels();
+    this._notifyStreams();
   }
 
   // ---------------------------------------------------------------------------
@@ -280,8 +248,8 @@ export class Connection {
     }
     this._connectionState = ConnectionState.CLIENT;
 
-    const msgId = await this._controlChannel.sendRequestRaw(HANDSHAKE_STRING);
-    const response = await this._controlChannel.receiveResponseRaw(msgId);
+    const msgId = await this._controlStream.sendRequestRaw(HANDSHAKE_STRING);
+    const response = await this._controlStream.receiveResponseRaw(msgId);
     const decoded = response.toString("utf-8");
     if (!decoded.startsWith("Hegel/")) {
       throw new Error(`Bad handshake response: ${JSON.stringify(decoded)}`);
@@ -290,70 +258,70 @@ export class Connection {
   }
 
   // ---------------------------------------------------------------------------
-  // Channel creation
+  // Stream creation
   // ---------------------------------------------------------------------------
 
   /**
-   * Create a new logical channel on this connection (client-initiated).
+   * Create a new logical stream on this connection (client-initiated).
    *
-   * Channel IDs for clients are odd: `(counter << 1) | 1`.
+   * Stream IDs for clients are odd: `(counter << 1) | 1`.
    *
    * @throws {Error} If called before handshake.
    */
-  newChannel(opts: { role?: string } = {}): Channel {
+  newStream(opts: { role?: string } = {}): Stream {
     if (this._connectionState === ConnectionState.UNRESOLVED) {
-      throw new Error("Cannot create a new channel before handshake has been performed.");
+      throw new Error("Cannot create a new stream before handshake has been performed.");
     }
-    const channelId = (this._nextChannelId << 1) | 1;
-    this._nextChannelId++;
-    return this._makeChannel(channelId, opts.role);
+    const streamId = (this._nextStreamId << 1) | 1;
+    this._nextStreamId++;
+    return this._makeStream(streamId, opts.role);
   }
 
   /**
-   * Connect to a channel that was created by the peer.
+   * Connect to a stream that was created by the peer.
    *
-   * @throws {Error} If called before handshake, or channel already connected.
+   * @throws {Error} If called before handshake, or stream already connected.
    */
-  connectChannel(id: number, opts: { role?: string } = {}): Channel {
+  connectStream(id: number, opts: { role?: string } = {}): Stream {
     if (this._connectionState === ConnectionState.UNRESOLVED) {
-      throw new Error("Cannot create a new channel before handshake has been performed.");
+      throw new Error("Cannot create a new stream before handshake has been performed.");
     }
-    if (this.channels.has(id)) {
-      throw new Error(`Channel already connected as ${this.channels.get(id)}`);
+    if (this.streams.has(id)) {
+      throw new Error(`Stream already connected as ${this.streams.get(id)}`);
     }
-    return this._makeChannel(id, opts.role);
+    return this._makeStream(id, opts.role);
   }
 
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
 
-  private _makeChannel(id: number, role?: string): Channel {
-    const ch = new Channel(this, id, role);
-    this.channels.set(id, ch);
+  private _makeStream(id: number, role?: string): Stream {
+    const ch = new Stream(this, id, role);
+    this.streams.set(id, ch);
     return ch;
   }
 
-  /** Dispatch a received packet to the correct channel. */
+  /** Dispatch a received packet to the correct stream. */
   private _dispatch(packet: Packet): void {
-    // Close-channel message
-    if (packet.payload.equals(CLOSE_CHANNEL_PAYLOAD)) {
-      const existing = this.channels.get(packet.channelId);
-      const deadName = existing instanceof Channel ? existing.name : `channel ${packet.channelId}`;
-      this.channels.set(packet.channelId, `dead:${String(deadName)}`);
+    // Close-stream message
+    if (packet.payload.equals(CLOSE_STREAM_PAYLOAD)) {
+      const existing = this.streams.get(packet.streamId);
+      const deadName = existing instanceof Stream ? existing.name : `stream ${packet.streamId}`;
+      this.streams.set(packet.streamId, `dead:${String(deadName)}`);
       return;
     }
 
-    const channel = this.channels.get(packet.channelId);
-    if (!(channel instanceof Channel)) {
-      // Nonexistent or dead channel — send error reply if it was a request.
+    const stream = this.streams.get(packet.streamId);
+    if (!(stream instanceof Stream)) {
+      // Nonexistent or dead stream — send error reply if it was a request.
       if (!packet.isReply) {
-        const error = `Message ${packet.messageId} sent to ${channel === undefined ? "non-existent" : "closed"} channel ${packet.channelId}`;
+        const error = `Message ${packet.messageId} sent to ${stream === undefined ? "non-existent" : "closed"} stream ${packet.streamId}`;
         this.sendPacket({
-          channelId: packet.channelId,
+          streamId: packet.streamId,
           messageId: packet.messageId,
           isReply: true,
-          payload: encodeValue({ error, type: "ChannelError" }),
+          payload: encodeValue({ error, type: "StreamError" }),
         }).catch(() => {
           // ignore send errors during cleanup
         });
@@ -361,14 +329,14 @@ export class Connection {
       return;
     }
 
-    channel.inbox.push(packet);
-    channel._notifyWaiter();
+    stream.inbox.push(packet);
+    stream._notifyWaiter();
   }
 
-  /** Put SHUTDOWN into every open channel's inbox. */
-  private _notifyChannels(): void {
-    for (const v of this.channels.values()) {
-      if (v instanceof Channel) {
+  /** Put SHUTDOWN into every open stream's inbox. */
+  private _notifyStreams(): void {
+    for (const v of this.streams.values()) {
+      if (v instanceof Stream) {
         v.inbox.push(SHUTDOWN);
         v._notifyWaiter();
       }
@@ -377,15 +345,15 @@ export class Connection {
 }
 
 // ---------------------------------------------------------------------------
-// Channel
+// Stream
 // ---------------------------------------------------------------------------
 
 /**
- * A logical communication channel over a {@link Connection}.
+ * A logical communication stream over a {@link Connection}.
  */
-export class Channel {
-  /** Channel ID on the wire. */
-  readonly channelId: number;
+export class Stream {
+  /** Stream ID on the wire. */
+  readonly streamId: number;
   /** Human-readable role label. */
   readonly name: string | undefined;
 
@@ -408,10 +376,10 @@ export class Channel {
   // When an async caller is waiting for inbox data, its wakeup lives here.
   private _waiter: (() => void) | null = null;
 
-  constructor(connection: Connection, channelId: number, role?: string) {
+  constructor(connection: Connection, streamId: number, role?: string) {
     this.connection = connection;
-    this.channelId = channelId;
-    this.name = role ?? `channel ${channelId}`;
+    this.streamId = streamId;
+    this.name = role ?? `stream ${streamId}`;
   }
 
   /** Notify a waiter (if any) that new data arrived in the inbox. */
@@ -427,10 +395,10 @@ export class Channel {
   // Close
   // ---------------------------------------------------------------------------
 
-  /** Close this channel and notify the peer. Idempotent. */
+  /** Close this stream and notify the peer. Idempotent. */
   close(): void {
     if (this._closed) return;
-    if (this.connection.channels.get(this.channelId) !== this) {
+    if (this.connection.streams.get(this.streamId) !== this) {
       this._closed = true;
       return;
     }
@@ -438,9 +406,9 @@ export class Channel {
     if (this.connection.live) {
       this.connection
         .sendPacket({
-          payload: CLOSE_CHANNEL_PAYLOAD,
-          messageId: CLOSE_CHANNEL_MESSAGE_ID,
-          channelId: this.channelId,
+          payload: CLOSE_STREAM_PAYLOAD,
+          messageId: CLOSE_STREAM_MESSAGE_ID,
+          streamId: this.streamId,
           isReply: false,
         })
         .catch(() => {
@@ -463,7 +431,7 @@ export class Channel {
     const messageId = this._nextMessageId++;
     await this.connection.sendPacket({
       payload: message,
-      channelId: this.channelId,
+      streamId: this.streamId,
       isReply: false,
       messageId,
     });
@@ -479,7 +447,7 @@ export class Channel {
     this.connection
       .sendPacket({
         payload: encodeValue(message),
-        channelId: this.channelId,
+        streamId: this.streamId,
         isReply: false,
         messageId,
       })
@@ -533,7 +501,7 @@ export class Channel {
   async sendResponseRaw(messageId: number, message: Buffer): Promise<void> {
     await this.connection.sendPacket({
       payload: message,
-      channelId: this.channelId,
+      streamId: this.streamId,
       isReply: true,
       messageId,
     });
@@ -549,15 +517,11 @@ export class Channel {
   // ---------------------------------------------------------------------------
 
   /**
-   * Drive the connection reader until `ready()` becomes true, then drain the
-   * inbox into `requests` and `responses` queues.
+   * Wait until `ready()` becomes true, draining the inbox between wakeups.
    *
-   * Two modes of waking:
-   * 1. `runReader` dispatches a packet, which calls `_notifyWaiter()`.
-   * 2. The timeout deadline fires.
-   *
-   * We use a waiter Promise that resolves when `_notifyWaiter` is called or
-   * when the deadline fires.
+   * The background reader loop dispatches packets and calls `_notifyWaiter()`
+   * when new data arrives. This method simply waits for that notification or
+   * the timeout deadline.
    */
   private async _waitForMessage(ready: () => boolean, timeoutMs: number): Promise<void> {
     if (this._closed) {
@@ -573,50 +537,26 @@ export class Channel {
 
     const deadline = Date.now() + timeoutMs;
 
-    // Track whether this wait has been satisfied, so runReader releases its lock
-    // promptly when data arrives (without holding it until the deadline).
-    let satisfied = false;
+    while (!this._closed) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
 
-    // until() for the reader: stop when data arrives, closed, or timed out.
-    const until = (): boolean => {
-      if (satisfied) return true;
-      if (this._closed) return true;
-      if (Date.now() >= deadline) return true;
-      return false;
-    };
-
-    // Kick off the reader in the background, but also wait for it via a waiter.
-    // The reader dispatches packets which call _notifyWaiter(). We wake up,
-    // drain the inbox, and check if we're done.
-    while (!until()) {
-      // Start the reader (if not already active).
-      const readerPromise = this.connection.runReader(until);
-
-      // Wait to be notified OR for the deadline.
-      await Promise.race([
-        readerPromise,
-        new Promise<void>((resolve) => {
-          this._waiter = resolve;
-          // Fallback timeout: wake on deadline to re-check until().
-          setTimeout(resolve, Math.max(1, deadline - Date.now()));
-        }),
-      ]);
-
-      // Clear stale waiter.
+      // Wait for _notifyWaiter() or the deadline, whichever comes first.
+      await new Promise<void>((resolve) => {
+        this._waiter = resolve;
+        setTimeout(resolve, remaining);
+      });
       this._waiter = null;
 
       this._drainInbox();
-      if (ready()) {
-        satisfied = true;
-        return;
-      }
+      if (ready()) return;
     }
 
-    // Final drain and check after loop exit.
+    // Final drain after loop exit.
     this._drainInbox();
 
     if (this._closed) {
-      // Distinguish SHUTDOWN (connection drop) from explicit channel close.
+      // Distinguish SHUTDOWN (connection drop) from explicit stream close.
       if (this.inbox.length > 0 && this.inbox[0] === SHUTDOWN) {
         throw new Error("Connection closed");
       }
@@ -644,12 +584,4 @@ export class Channel {
       }
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// Utility
-// ---------------------------------------------------------------------------
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

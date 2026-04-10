@@ -22,11 +22,10 @@ import {
   note,
   target,
 } from "hegel";
-import { Channel, Connection, ConnectionState, RequestError } from "../src/connection.js";
+import { Stream, Connection, ConnectionState, RequestError } from "../src/connection.js";
 import {
   Client,
   Labels,
-  _getChannel,
   _testContextStorage,
   extractOrigin,
   generateFromSchema,
@@ -39,17 +38,17 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
- * Raw handshake responder: reads the handshake request from the control channel
+ * Raw handshake responder: reads the handshake request from the control stream
  * and replies with "Hegel/0.3". Sets the connection to CLIENT state with a high
- * channel ID base to avoid collisions with the actual client side.
+ * stream ID base to avoid collisions with the actual client side.
  */
 async function rawHandshakeResponder(conn: Connection): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (conn as any)._connectionState = ConnectionState.CLIENT;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (conn as any)._nextChannelId = 1000;
-  const [msgId] = await conn.controlChannel.receiveRequestRaw();
-  await conn.controlChannel.sendResponseRaw(msgId, Buffer.from("Hegel/0.3"));
+  (conn as any)._nextStreamId = 1000;
+  const [msgId] = await conn.controlStream.receiveRequestRaw();
+  await conn.controlStream.sendResponseRaw(msgId, Buffer.from("Hegel/0.3"));
 }
 
 /** Create a connected TCP socket pair for in-process tests. */
@@ -213,33 +212,6 @@ describe("extractOrigin", () => {
 });
 
 // ---------------------------------------------------------------------------
-// _getChannel
-// ---------------------------------------------------------------------------
-
-describe("_getChannel", () => {
-  it("throws outside a test context (store undefined)", () => {
-    // Outside any run() call, store is undefined
-    expect(() => _getChannel()).toThrow("Not in a test context");
-  });
-
-  it("throws when context is null", async () => {
-    await _testContextStorage.run(null, () => {
-      expect(() => _getChannel()).toThrow("Not in a test context");
-      return Promise.resolve();
-    });
-  });
-
-  it("returns channel when inside context", async () => {
-    const fakeChannel = {} as Channel;
-    const data = { channel: fakeChannel, isFinal: false, testAborted: false };
-    await _testContextStorage.run(data, async () => {
-      const ch = _getChannel();
-      expect(ch).toBe(fakeChannel);
-    });
-  });
-});
-
-// ---------------------------------------------------------------------------
 // assume
 // ---------------------------------------------------------------------------
 
@@ -249,16 +221,16 @@ describe("assume", () => {
   });
 
   it("true is a no-op inside context", async () => {
-    const fakeChannel = {} as Channel;
-    const data = { channel: fakeChannel, isFinal: false, testAborted: false };
+    const fakeStream = {} as Stream;
+    const data = { stream: fakeStream, isFinal: false, testAborted: false };
     await _testContextStorage.run(data, async () => {
       expect(() => assume(true)).not.toThrow();
     });
   });
 
   it("false throws AssumeRejected inside context", async () => {
-    const fakeChannel = {} as Channel;
-    const data = { channel: fakeChannel, isFinal: false, testAborted: false };
+    const fakeStream = {} as Stream;
+    const data = { stream: fakeStream, isFinal: false, testAborted: false };
     await _testContextStorage.run(data, async () => {
       expect(() => assume(false)).toThrow(AssumeRejected);
     });
@@ -281,8 +253,8 @@ describe("note", () => {
   });
 
   it("is silent when isFinal=false", async () => {
-    const fakeChannel = {} as Channel;
-    const data = { channel: fakeChannel, isFinal: false, testAborted: false };
+    const fakeStream = {} as Stream;
+    const data = { stream: fakeStream, isFinal: false, testAborted: false };
     const spy = vi.spyOn(process.stderr, "write").mockReturnValue(true);
     await _testContextStorage.run(data, async () => {
       note("should not print");
@@ -292,8 +264,8 @@ describe("note", () => {
   });
 
   it("prints when isFinal=true", async () => {
-    const fakeChannel = {} as Channel;
-    const data = { channel: fakeChannel, isFinal: true, testAborted: false };
+    const fakeStream = {} as Stream;
+    const data = { stream: fakeStream, isFinal: true, testAborted: false };
     const spy = vi.spyOn(process.stderr, "write").mockReturnValue(true);
     await _testContextStorage.run(data, async () => {
       note("test message");
@@ -319,11 +291,11 @@ describe("target", () => {
 
 describe("startSpan / stopSpan when testAborted", () => {
   it("are no-ops when testAborted=true", async () => {
-    const fakeChannel = { request: vi.fn() } as unknown as Channel;
-    const data = { channel: fakeChannel, isFinal: false, testAborted: true };
+    const fakeStream = { request: vi.fn() } as unknown as Stream;
+    const data = { stream: fakeStream, isFinal: false, testAborted: true };
     await startSpan(1, data);
     await stopSpan({}, data);
-    expect(fakeChannel.request).not.toHaveBeenCalled();
+    expect(fakeStream.request).not.toHaveBeenCalled();
   });
 });
 
@@ -334,15 +306,15 @@ describe("startSpan / stopSpan when testAborted", () => {
 describe("Client.create", () => {
   it("rejects unsupported protocol version", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
 
     // Manually perform a fake handshake with a bad version
     const serverTask = (async () => {
       // Wait for client's handshake request, reply with bad version
-      const [msgId, _payload] = await serverConn.controlChannel.receiveRequestRaw();
+      const [msgId, _payload] = await serverConn.controlStream.receiveRequestRaw();
       const buf = Buffer.from("Hegel/99.0");
-      await serverConn.controlChannel.sendResponseRaw(msgId, buf);
+      await serverConn.controlStream.sendResponseRaw(msgId, buf);
     })();
 
     const clientTask = Client.create(clientConn);
@@ -392,20 +364,20 @@ describe("runHegelTest integration", () => {
   it("raises AggregateError for multiple distinct failures (manual server)", async () => {
     // Use a manual server that reports 2 interesting cases so we can test AggregateError
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
 
     const serverTask = (async () => {
       await rawHandshakeResponder(serverConn);
-      const control = serverConn.controlChannel;
+      const control = serverConn.controlStream;
       const [msgId, message] = await control.receiveRequest();
       const msg = message as Record<string, unknown>;
-      const testChannelId = msg["channel_id"] as number;
-      const testChannel = serverConn.connectChannel(testChannelId, { role: "Test" });
+      const testStreamId = msg["stream_id"] as number;
+      const testStream = serverConn.connectStream(testStreamId, { role: "Test" });
       await control.sendResponseValue(msgId, true);
 
       // Send test_done with 2 interesting cases
-      const tdReq = await testChannel.sendRequest({
+      const tdReq = await testStream.sendRequest({
         event: "test_done",
         results: {
           passed: false,
@@ -415,13 +387,13 @@ describe("runHegelTest integration", () => {
           interesting_test_cases: 2,
         },
       });
-      await testChannel.receiveResponseRaw(tdReq);
+      await testStream.receiveResponseRaw(tdReq);
 
       // Send 2 final test cases
       for (let i = 0; i < 2; i++) {
-        const dc = serverConn.newChannel({ role: `FinalData${i}` });
-        const req = await testChannel.sendRequest({ event: "test_case", channel_id: dc.channelId });
-        await testChannel.receiveResponseRaw(req);
+        const dc = serverConn.newStream({ role: `FinalData${i}` });
+        const req = await testStream.sendRequest({ event: "test_case", stream_id: dc.streamId });
+        await testStream.receiveResponseRaw(req);
         const [mcId] = await dc.receiveRequest({ timeoutMs: 5000 });
         await dc.sendResponseValue(mcId, null);
         dc.close();
@@ -433,11 +405,7 @@ describe("runHegelTest integration", () => {
 
     // Each final run throws — first an Error, second a non-Error string
     let callCount = 0;
-    client._runTestCase = async (
-      ch: Channel,
-      _fn: () => void | Promise<void>,
-      isFinal: boolean,
-    ) => {
+    client._runTestCase = async (ch: Stream, _fn: () => void | Promise<void>, isFinal: boolean) => {
       if (isFinal) {
         ch.sendRequest({ command: "mark_complete", status: "INTERESTING", origin: null }).catch(
           () => {},
@@ -604,14 +572,14 @@ describe("HEGEL_PROTOCOL_TEST_MODE tests", () => {
 describe("nested test case raises", () => {
   it("raises RuntimeError when _runTestCase called while already in a test", async () => {
     // Set up a context as if we're already inside a test case
-    const fakeChannel = {} as Channel;
-    const data = { channel: fakeChannel, isFinal: false, testAborted: false };
+    const fakeStream = {} as Stream;
+    const data = { stream: fakeStream, isFinal: false, testAborted: false };
 
     await _testContextStorage.run(data, async () => {
       // Create a Client with a manual socket pair (handshake needed for Client constructor)
       const [serverSock, clientSock] = await socketPair();
-      const serverConn = new Connection(serverSock, { name: "Server" });
-      const clientConn = new Connection(clientSock, { name: "Client" });
+      const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+      const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
 
       // Do handshake in parallel
       await Promise.all([rawHandshakeResponder(serverConn), clientConn.sendHandshake()]);
@@ -619,7 +587,7 @@ describe("nested test case raises", () => {
       const client = new Client(clientConn);
 
       // _runTestCase should throw immediately because context is already set
-      await expect(client._runTestCase(fakeChannel, () => {}, false)).rejects.toThrow(
+      await expect(client._runTestCase(fakeStream, () => {}, false)).rejects.toThrow(
         "Cannot nest test cases",
       );
 
@@ -635,21 +603,21 @@ describe("nested test case raises", () => {
 
 describe("_runTestCase mark_complete failure", () => {
   it("silently ignores sendRequest rejection in finally", async () => {
-    // Build a fake channel whose sendRequest always rejects.
+    // Build a fake stream whose sendRequest always rejects.
     // This exercises the `.catch(() => {})` handler at the end of _runTestCase.
-    const fakeChannel = {
+    const fakeStream = {
       sendRequest: () => Promise.reject(new Error("socket dead")),
       close: () => {},
-    } as unknown as Channel;
+    } as unknown as Stream;
 
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
     await Promise.all([rawHandshakeResponder(serverConn), clientConn.sendHandshake()]);
     const client = new Client(clientConn);
 
     // _runTestCase will try sendRequest(mark_complete) → rejects → .catch fires
-    await client._runTestCase(fakeChannel, () => {}, false);
+    await client._runTestCase(fakeStream, () => {}, false);
 
     clientConn.close();
     serverConn.close();
@@ -663,26 +631,26 @@ describe("_runTestCase mark_complete failure", () => {
 describe("unrecognised event in runTest", () => {
   it("sends InvalidMessage error and continues to test_done", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
 
     const serverTask = (async () => {
       await rawHandshakeResponder(serverConn);
-      const control = serverConn.controlChannel;
+      const control = serverConn.controlStream;
 
       // Receive run_test command
       const [msgId, message] = await control.receiveRequest();
       const msg = message as Record<string, unknown>;
-      const testChannelId = msg["channel_id"] as number;
-      const testChannel = serverConn.connectChannel(testChannelId, { role: "Test" });
+      const testStreamId = msg["stream_id"] as number;
+      const testStream = serverConn.connectStream(testStreamId, { role: "Test" });
       await control.sendResponseValue(msgId, true);
 
       // Send a bogus event and read the error response
-      const reqId = await testChannel.sendRequest({ event: "bogus_event" });
-      await testChannel.receiveResponseRaw(reqId);
+      const reqId = await testStream.sendRequest({ event: "bogus_event" });
+      await testStream.receiveResponseRaw(reqId);
 
       // Send test_done
-      await testChannel
+      await testStream
         .request({
           event: "test_done",
           results: {
@@ -714,32 +682,32 @@ describe("unrecognised event in runTest", () => {
 describe("final test case passes unexpectedly", () => {
   it("raises AssertionError when single interesting test case passes in final run", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
 
     const serverTask = (async () => {
       await rawHandshakeResponder(serverConn);
-      const control = serverConn.controlChannel;
+      const control = serverConn.controlStream;
       const [msgId, message] = await control.receiveRequest();
       const msg = message as Record<string, unknown>;
-      const testChannelId = msg["channel_id"] as number;
-      const testChannel = serverConn.connectChannel(testChannelId, { role: "Test" });
+      const testStreamId = msg["stream_id"] as number;
+      const testStream = serverConn.connectStream(testStreamId, { role: "Test" });
       await control.sendResponseValue(msgId, true);
 
       // Send one test_case (exploration — will pass)
-      const dataChannel = serverConn.newChannel({ role: "Data" });
-      const req1 = await testChannel.sendRequest({
+      const dataStream = serverConn.newStream({ role: "Data" });
+      const req1 = await testStream.sendRequest({
         event: "test_case",
-        channel_id: dataChannel.channelId,
+        stream_id: dataStream.streamId,
       });
-      await testChannel.receiveResponseRaw(req1);
+      await testStream.receiveResponseRaw(req1);
       // Wait for mark_complete from client (they'll send VALID since test passes)
-      await dataChannel.receiveRequest({ timeoutMs: 5000 });
-      await dataChannel.sendResponseValue(0, null);
-      dataChannel.close();
+      await dataStream.receiveRequest({ timeoutMs: 5000 });
+      await dataStream.sendResponseValue(0, null);
+      dataStream.close();
 
       // Send test_done with 1 interesting case
-      const req2 = await testChannel.sendRequest({
+      const req2 = await testStream.sendRequest({
         event: "test_done",
         results: {
           passed: false,
@@ -749,19 +717,19 @@ describe("final test case passes unexpectedly", () => {
           interesting_test_cases: 1,
         },
       });
-      await testChannel.receiveResponseRaw(req2);
+      await testStream.receiveResponseRaw(req2);
 
       // Send final test_case (the "shrunk" replay)
-      const finalDataChannel = serverConn.newChannel({ role: "FinalData" });
-      const req3 = await testChannel.sendRequest({
+      const finalDataStream = serverConn.newStream({ role: "FinalData" });
+      const req3 = await testStream.sendRequest({
         event: "test_case",
-        channel_id: finalDataChannel.channelId,
+        stream_id: finalDataStream.streamId,
       });
-      await testChannel.receiveResponseRaw(req3);
+      await testStream.receiveResponseRaw(req3);
       // Wait for mark_complete from client
-      await finalDataChannel.receiveRequest({ timeoutMs: 5000 });
-      await finalDataChannel.sendResponseValue(0, null);
-      finalDataChannel.close();
+      await finalDataStream.receiveRequest({ timeoutMs: 5000 });
+      await finalDataStream.sendResponseValue(0, null);
+      finalDataStream.close();
     })();
 
     await clientConn.sendHandshake();
@@ -769,7 +737,7 @@ describe("final test case passes unexpectedly", () => {
 
     // Override _runTestCase so the final run doesn't throw (test "passes" when it shouldn't)
     const origRunTestCase = client._runTestCase.bind(client);
-    client._runTestCase = async (ch: Channel, fn: () => void | Promise<void>, isFinal: boolean) => {
+    client._runTestCase = async (ch: Stream, fn: () => void | Promise<void>, isFinal: boolean) => {
       if (isFinal) {
         // Don't run fn — suppress the throw
         await ch.sendRequest({ command: "mark_complete", status: "VALID", origin: null });
@@ -790,23 +758,23 @@ describe("final test case passes unexpectedly", () => {
 
   it("raises AggregateError with 'Expected test case N to fail' for multiple interesting", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
 
     // N_INTERESTING = 2: both final runs pass
     const N_INTERESTING = 2;
 
     const serverTask = (async () => {
       await rawHandshakeResponder(serverConn);
-      const control = serverConn.controlChannel;
+      const control = serverConn.controlStream;
       const [msgId, message] = await control.receiveRequest();
       const msg = message as Record<string, unknown>;
-      const testChannelId = msg["channel_id"] as number;
-      const testChannel = serverConn.connectChannel(testChannelId, { role: "Test" });
+      const testStreamId = msg["stream_id"] as number;
+      const testStream = serverConn.connectStream(testStreamId, { role: "Test" });
       await control.sendResponseValue(msgId, true);
 
       // Send test_done immediately with 2 interesting cases
-      const req2 = await testChannel.sendRequest({
+      const req2 = await testStream.sendRequest({
         event: "test_done",
         results: {
           passed: false,
@@ -816,20 +784,20 @@ describe("final test case passes unexpectedly", () => {
           interesting_test_cases: N_INTERESTING,
         },
       });
-      await testChannel.receiveResponseRaw(req2);
+      await testStream.receiveResponseRaw(req2);
 
       // Send 2 final test cases
       for (let i = 0; i < N_INTERESTING; i++) {
-        const finalDataChannel = serverConn.newChannel({ role: `FinalData${i}` });
-        const req = await testChannel.sendRequest({
+        const finalDataStream = serverConn.newStream({ role: `FinalData${i}` });
+        const req = await testStream.sendRequest({
           event: "test_case",
-          channel_id: finalDataChannel.channelId,
+          stream_id: finalDataStream.streamId,
         });
-        await testChannel.receiveResponseRaw(req);
+        await testStream.receiveResponseRaw(req);
         // Client will send mark_complete before we signal them to; just read it
-        const [mcMsgId] = await finalDataChannel.receiveRequest({ timeoutMs: 5000 });
-        await finalDataChannel.sendResponseValue(mcMsgId, null);
-        finalDataChannel.close();
+        const [mcMsgId] = await finalDataStream.receiveRequest({ timeoutMs: 5000 });
+        await finalDataStream.sendResponseValue(mcMsgId, null);
+        finalDataStream.close();
       }
     })();
 
@@ -838,7 +806,7 @@ describe("final test case passes unexpectedly", () => {
 
     // Override so final runs always pass (no throw)
     client._runTestCase = async (
-      ch: Channel,
+      ch: Stream,
       _fn: () => void | Promise<void>,
       _isFinal: boolean,
     ) => {

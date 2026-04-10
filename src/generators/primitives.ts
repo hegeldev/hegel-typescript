@@ -136,7 +136,7 @@ export function binary(minSize = 0, maxSize: number | null = null): BasicGenerat
  * @param value - The constant to always return.
  */
 export function just<T>(value: T): BasicGenerator<T> {
-  return new BasicGenerator<T>({ const: null }, (_raw) => value);
+  return new BasicGenerator<T>({ type: "constant", value: null }, (_raw) => value);
 }
 
 /**

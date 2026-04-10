@@ -1,6 +1,6 @@
 /**
  * Core tests for the Generator infrastructure: BasicGenerator, MappedGenerator,
- * FlatMappedGenerator, FilteredGenerator, Collection, span helpers, and group/discardableGroup.
+ * FlatMappedGenerator, FilteredGenerator, Collection, and span helpers.
  *
  * Integration tests run against the real hegel binary via runHegelTest.
  * Unit tests for generator class structure use mocked context.
@@ -17,15 +17,13 @@ import {
   draw,
   runHegelTest,
 } from "hegel";
-import { Channel, RequestError } from "../../src/connection.js";
+import { Stream, RequestError } from "../../src/connection.js";
 import { _testContextStorage, generateFromSchema, startSpan, stopSpan } from "../../src/runner.js";
 import type { TestCaseData } from "../../src/runner.js";
 import {
   FilteredGenerator,
   FlatMappedGenerator,
   MappedGenerator,
-  discardableGroup,
-  group,
 } from "../../src/generators/index.js";
 
 // ---------------------------------------------------------------------------
@@ -231,86 +229,6 @@ describe("FilteredGenerator", () => {
 });
 
 // ---------------------------------------------------------------------------
-// span helpers: group and discardableGroup
-// ---------------------------------------------------------------------------
-
-describe("group()", () => {
-  it("calls start_span and stop_span around fn", async () => {
-    await runHegelTest(
-      async () => {
-        const data = _testContextStorage.getStore()!;
-        // group() runs fn inside a span — verify it works end-to-end
-        const result = await group(
-          1,
-          async () => {
-            return await generateFromSchema({ type: "boolean" }, data);
-          },
-          data,
-        );
-        if (typeof result !== "boolean") {
-          throw new Error("Expected boolean");
-        }
-      },
-      { testCases: 5 },
-    );
-  });
-});
-
-describe("discardableGroup()", () => {
-  it("stops with discard=false when fn succeeds", async () => {
-    await runHegelTest(
-      async () => {
-        const data = _testContextStorage.getStore()!;
-        const result = await discardableGroup(
-          1,
-          async () => {
-            return await generateFromSchema({ type: "boolean" }, data);
-          },
-          data,
-        );
-        if (typeof result !== "boolean") throw new Error("Expected boolean");
-      },
-      { testCases: 5 },
-    );
-  });
-
-  it("stops with discard=true and re-throws when fn throws", async () => {
-    // Use mock context to avoid needing a live server for this unit test
-    const fakeRequests: unknown[] = [];
-    const fakeChannel = {
-      request: (msg: unknown) => {
-        fakeRequests.push(msg);
-        return {
-          get: () => Promise.resolve(null),
-        };
-      },
-    } as unknown as Channel;
-    const data: TestCaseData = { channel: fakeChannel, isFinal: false, testAborted: false };
-
-    const err = new Error("fn failed");
-    await expect(
-      discardableGroup(
-        1,
-        async () => {
-          throw err;
-        },
-        data,
-      ),
-    ).rejects.toBe(err);
-
-    // Check that stop_span was called with discard=true
-    const stopMsg = fakeRequests.find(
-      (m) =>
-        typeof m === "object" &&
-        m !== null &&
-        (m as Record<string, unknown>)["command"] === "stop_span" &&
-        (m as Record<string, unknown>)["discard"] === true,
-    );
-    expect(stopMsg).toBeDefined();
-  });
-});
-
-// ---------------------------------------------------------------------------
 // startSpan / stopSpan (non-aborted path, via live server)
 // ---------------------------------------------------------------------------
 
@@ -337,7 +255,7 @@ describe("Collection", () => {
     await runHegelTest(
       async () => {
         const data = _testContextStorage.getStore()!;
-        const coll = new Collection("test_coll", 0, 1);
+        const coll = new Collection(0, 1);
         while (await coll.more(data)) {
           await generateFromSchema({ type: "integer" }, data);
         }
@@ -353,7 +271,7 @@ describe("Collection", () => {
     await runHegelTest(
       async () => {
         const data = _testContextStorage.getStore()!;
-        const coll = new Collection("test_coll", 1, 5);
+        const coll = new Collection(1, 5);
         while (await coll.more(data)) {
           const val = (await generateFromSchema(
             {
@@ -376,7 +294,7 @@ describe("Collection", () => {
     await runHegelTest(
       async () => {
         const data = _testContextStorage.getStore()!;
-        const coll = new Collection("test_coll", 0, 1);
+        const coll = new Collection(0, 1);
         while (await coll.more(data)) {
           await generateFromSchema({ type: "integer" }, data);
         }
@@ -398,7 +316,7 @@ describe("Collection", () => {
     try {
       await session.runTest(async () => {
         const data = _testContextStorage.getStore()!;
-        const coll = new Collection("test_coll", 0, 5);
+        const coll = new Collection(0, 5);
         await coll.more(data);
       }, 5);
     } finally {
@@ -419,7 +337,7 @@ describe("Collection", () => {
     try {
       await session.runTest(async () => {
         const data = _testContextStorage.getStore()!;
-        const coll = new Collection("test_coll", 0, 5);
+        const coll = new Collection(0, 5);
         await coll.more(data);
       }, 5);
     } finally {
@@ -457,7 +375,7 @@ describe("Generator base class", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Collection non-StopTest error paths (unit tests with fake channel)
+// Collection non-StopTest error paths (unit tests with fake stream)
 // ---------------------------------------------------------------------------
 
 describe("Collection non-StopTest errors", () => {
@@ -468,21 +386,21 @@ describe("Collection non-StopTest errors", () => {
 
   it("_getServerName: non-StopTest error is re-thrown", async () => {
     // new_collection fails with a non-StopTest error
-    const fakeChannel = {
+    const fakeStream = {
       request: (_msg: unknown) => ({
         get: () => Promise.reject(makeRequestError("InvalidSchema")),
       }),
-    } as unknown as Channel;
-    const data: TestCaseData = { channel: fakeChannel, isFinal: false, testAborted: false };
+    } as unknown as Stream;
+    const data: TestCaseData = { stream: fakeStream, isFinal: false, testAborted: false };
 
-    const coll = new Collection("test_coll", 0, 5);
+    const coll = new Collection(0, 5);
     await expect(coll.more(data)).rejects.toBeInstanceOf(RequestError);
   });
 
   it("more(): non-StopTest error is re-thrown", async () => {
     // First request (new_collection) succeeds, second (collection_more) fails
     let callCount = 0;
-    const fakeChannel = {
+    const fakeStream = {
       request: (_msg: unknown) => ({
         get: () => {
           callCount++;
@@ -490,10 +408,10 @@ describe("Collection non-StopTest errors", () => {
           return Promise.reject(makeRequestError("InvalidSchema")); // collection_more fails
         },
       }),
-    } as unknown as Channel;
-    const data: TestCaseData = { channel: fakeChannel, isFinal: false, testAborted: false };
+    } as unknown as Stream;
+    const data: TestCaseData = { stream: fakeStream, isFinal: false, testAborted: false };
 
-    const coll = new Collection("test_coll", 0, 5);
+    const coll = new Collection(0, 5);
     await expect(coll.more(data)).rejects.toBeInstanceOf(RequestError);
   });
 });

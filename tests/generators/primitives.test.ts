@@ -318,16 +318,16 @@ describe("just()", () => {
     expect(gen).toBeInstanceOf(BasicGenerator);
   });
 
-  it("schema has 'const' key with null value", () => {
+  it("schema has type 'const' with value null", () => {
     const gen = just("hello");
-    expect(gen.schema()).toEqual({ const: null });
+    expect(gen.schema()).toEqual({ type: "constant", value: null });
   });
 
   it("transform always returns the constant regardless of raw value", () => {
     const gen = just(99);
     // map() on a BasicGenerator exposes the composed transform
     // We can test this via the live server: every generated value should be 99
-    expect(gen.schema()).toHaveProperty("const");
+    expect(gen.schema()["type"]).toBe("constant");
   });
 
   it("returns constant value via live server", async () => {

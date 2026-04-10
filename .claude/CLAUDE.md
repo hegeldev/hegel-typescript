@@ -25,7 +25,7 @@ a custom binary protocol.
 The library is structured in layers, each building on the previous:
 
 1. **Protocol Layer** — Binary wire protocol with 20-byte header, CBOR payload, CRC32
-2. **Connection & Channels** — Unix socket multiplexing with demand-driven reader
+2. **Connection & Streams** — Unix socket multiplexing with demand-driven reader
 3. **Test Runner** — Spawns `hegel` subprocess, manages test lifecycle
 4. **Generators** — Type-safe generator abstraction, span system, collection protocol
 5. **Derivation** — Type-directed generator derivation via decorators, record schemas, and variant generators
@@ -33,15 +33,15 @@ The library is structured in layers, each building on the previous:
 
 ### Key Pattern: Demand-Driven Reader
 
-The Connection uses a demand-driven model: when a Channel needs a message, it
+The Connection uses a demand-driven model: when a Stream needs a message, it
 acquires a reader lock and reads packets from the socket until its inbox has data.
 No background threads — reading is triggered by the consumer that needs data.
 
-### Key Pattern: Thread-Local Channel State
+### Key Pattern: Thread-Local Stream State
 
-The current data channel is stored in thread-local (or context-var) state so that
+The current data stream is stored in thread-local (or context-var) state so that
 generator functions (`generate()`, `assume()`, `note()`, `target()`) don't need a
-channel parameter. The test runner sets the current channel before calling the test
+stream parameter. The test runner sets the current stream before calling the test
 body.
 
 ### Key Pattern: Global Lazy Session
@@ -58,7 +58,7 @@ or sessions manually — `run_hegel_test()` is a plain free function.
   The real binary runs as a subprocess, so there is zero threading contention.
   In-process mocks with threads cause deadlocks — they have wasted hundreds of
   agent turns in previous library generations.
-- **Socket pairs** (`socketpair()`) for unit testing Connection/Channel in isolation.
+- **Socket pairs** (`socketpair()`) for unit testing Connection/Stream in isolation.
 
 ### HEGEL_PROTOCOL_TEST_MODE — Error Injection
 
@@ -145,12 +145,12 @@ Failing to handle StopTest correctly causes `FlakyStrategyDefinition` errors.
 
 ## Wire Protocol
 
-- **Header**: 5 big-endian uint32: `magic(0x4845474C)`, `CRC32`, `channel_id`,
+- **Header**: 5 big-endian uint32: `magic(0x4845474C)`, `CRC32`, `stream_id`,
   `message_id`, `payload_length`
 - **Payload**: CBOR-encoded bytes
 - **Terminator**: single byte `0x0A`
 - **Reply bit**: `message_id | (1 << 31)` marks a message as a reply
-- **Client channel IDs**: odd — allocated as `(counter << 1) | 1`
+- **Client stream IDs**: odd — allocated as `(counter << 1) | 1`
 - **CRC32**: computed over the full 20-byte header (checksum field zeroed) + payload
 
 ## Tooling Choices
@@ -180,7 +180,7 @@ Failing to handle StopTest correctly causes `FlakyStrategyDefinition` errors.
 src/                 — Library source code (all production code)
   index.ts           — Public API entry point
   protocol.ts        — Binary wire protocol (header, CBOR, CRC32)
-  connection.ts      — Unix socket connection and channel multiplexing
+  connection.ts      — Unix socket connection and stream multiplexing
   runner.ts          — Test runner (Client, AsyncLocalStorage context, error classes)
   session.ts         — Global lazy session (HegelSession, runHegelTest, hegel)
   generators.ts      — Generator base class, combinators, all built-in generators
@@ -282,9 +282,9 @@ varsIgnorePattern: "^_" }` to `@typescript-eslint/no-unused-vars` rule options s
   `@throws {Foo}` appears in JSDoc but `Foo` is not in the public API, TypeDoc emits a
   warning that fails the docs build. Either export the symbol from `index.ts` or remove
   the reference from the JSDoc comment.
-- **Hegel protocol field name is `channel_id`, not `channel`.** The `run_test` command
-  must use `channel_id: testChannel.channelId`, and `test_case` events send `channel_id`.
-  Using the wrong key causes the server to never find the test channel and the connection
+- **Hegel protocol field name is `stream_id`, not `stream`.** The `run_test` command
+  must use `stream_id: testStream.streamId`, and `test_case` events send `stream_id`.
+  Using the wrong key causes the server to never find the test stream and the connection
   to time out silently.
 - **ESM module mocking in Vitest: `vi.spyOn` fails on frozen namespaces.** In Vitest ESM
   mode, `vi.spyOn(fs, "existsSync")` throws "Cannot assign to read only property" because
@@ -298,11 +298,11 @@ varsIgnorePattern: "^_" }` to `@typescript-eslint/no-unused-vars` rule options s
 - **`process.on("exit", this._cleanupSync.bind(this))` instead of arrow wrapper.** Using
   `this._cleanupSync.bind(this)` avoids creating an anonymous arrow function that would
   be counted as an uncovered function by v8 coverage (since process exit never fires in tests).
-- **Avoid fire-and-forget before `channel.close()`.** In `_runTestCase`'s finally block,
-  `channel.sendRequest({command: "mark_complete"})` is fire-and-forget with `.catch(() => {})`.
-  The underlying socket write is queued synchronously, so `channel.close()` immediately after
+- **Avoid fire-and-forget before `stream.close()`.** In `_runTestCase`'s finally block,
+  `stream.sendRequest({command: "mark_complete"})` is fire-and-forget with `.catch(() => {})`.
+  The underlying socket write is queued synchronously, so `stream.close()` immediately after
   is safe. But in test code overriding `_runTestCase`, always `await sendRequest(...)` before
-  `close()` to ensure the packet is queued before the channel is destroyed.
+  `close()` to ensure the packet is queued before the stream is destroyed.
 - **Unhandled rejection warning from pending promise before handler attached.** When calling
   `session._start()` in a test and the promise will reject asynchronously (after fake timers
   advance), attach the rejection handler BEFORE advancing time: `const p = session._start();
@@ -426,7 +426,7 @@ true` in `tsconfig.json`) stores metadata in a `Map<Constructor, FieldMeta[]>`. 
   repetition and keeps error messages consistent.
 - **Use `0x80000000` for REPLY_BIT, not `1 << 31`.** JavaScript's `<<` returns a signed
   32-bit integer, so `1 << 31 === -2147483648`. This is confusing and inconsistent with the
-  `CLOSE_CHANNEL_MESSAGE_ID` comment that warns against the same pattern. The hex literal
+  `CLOSE_STREAM_MESSAGE_ID` comment that warns against the same pattern. The hex literal
   `0x80000000` is `2147483648` (positive) and unambiguous. Bitwise operators still coerce it
   correctly for `|`, `&`, and `^` operations.
 - **Don't pass default arguments explicitly.** When `stopSpan()` defaults `discard` to `false`,

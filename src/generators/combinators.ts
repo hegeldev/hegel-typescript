@@ -225,13 +225,13 @@ export function oneOf<T>(...generators: Generator<T>[]): Generator<T> {
   if (allIdentity) {
     // Path 1: all basic, no transforms — flat one_of schema
     const schemas = basicGenerators.map((g) => g._rawSchema);
-    return new BasicGenerator<T>({ one_of: schemas });
+    return new BasicGenerator<T>({ type: "one_of", generators: schemas });
   }
 
   // Path 2: all basic, some have transforms — use tagged tuples
   const taggedSchemas = basicGenerators.map((g, i) => ({
     type: "tuple",
-    elements: [{ const: i }, g._rawSchema],
+    elements: [{ type: "constant", value: i }, g._rawSchema],
   }));
   const transforms = basicGenerators.map((g) => g._transform as ((raw: unknown) => T) | null);
 
@@ -244,7 +244,7 @@ export function oneOf<T>(...generators: Generator<T>[]): Generator<T> {
     return value as T;
   };
 
-  return new BasicGenerator<T>({ one_of: taggedSchemas }, applyTaggedTransform);
+  return new BasicGenerator<T>({ type: "one_of", generators: taggedSchemas }, applyTaggedTransform);
 }
 
 // ---------------------------------------------------------------------------

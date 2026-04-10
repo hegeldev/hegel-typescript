@@ -8,8 +8,8 @@
  */
 
 import { createRequire } from "module";
-import * as net from "net";
-import { encode, decode } from "cbor-x";
+import * as stream from "node:stream";
+import { encode, decode, addExtension } from "cbor-x";
 
 // Use Node's built-in zlib for CRC32 (same algorithm as Python's zlib.crc32)
 const require = createRequire(import.meta.url);
@@ -18,9 +18,6 @@ const zlib = require("zlib") as typeof import("zlib");
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-/** Protocol version. */
-export const PROTOCOL_VERSION = 0.3;
 
 /** Magic cookie: "HEGL" in hex (0x48 0x45 0x47 0x4C). */
 export const MAGIC = 0x4845474c;
@@ -38,7 +35,7 @@ export const REPLY_BIT = 0x80000000;
 export const TERMINATOR = 0x0a;
 
 /**
- * Special message ID used when closing a channel.
+ * Special message ID used when closing a stream.
  * Chosen as `2**31 - 1` (= 0x7FFFFFFF) — the largest message ID that does not
  * overlap with the reply bit.
  *
@@ -46,14 +43,14 @@ export const TERMINATOR = 0x0a;
  * truncates to 32-bit signed, so `(1 << 31)` is `-2147483648`, making
  * `(1 << 31) - 1 = -2147483649`, which is wrong. Use `2**31 - 1` instead.
  */
-export const CLOSE_CHANNEL_MESSAGE_ID = 2 ** 31 - 1;
+export const CLOSE_STREAM_MESSAGE_ID = 2 ** 31 - 1;
 
 /**
- * Special payload sent when closing a channel.
+ * Special payload sent when closing a stream.
  * Value `0xFE` is invalid CBOR (reserved tag byte per RFC 8949), which
  * ensures it is never confused with a real message payload.
  */
-export const CLOSE_CHANNEL_PAYLOAD: Buffer = Buffer.from([0xfe]);
+export const CLOSE_STREAM_PAYLOAD: Buffer = Buffer.from([0xfe]);
 
 /** Size of the packet header in bytes (5 × uint32). */
 const HEADER_SIZE = 20;
@@ -64,8 +61,8 @@ const HEADER_SIZE = 20;
 
 /** A single message in the wire protocol. */
 export interface Packet {
-  /** The channel this packet belongs to. */
-  channelId: number;
+  /** The stream this packet belongs to. */
+  streamId: number;
   /** The message identifier (without the reply bit). */
   messageId: number;
   /** Whether this packet is a reply to a previous message. */
@@ -100,46 +97,25 @@ export class ConnectionClosedError extends Error {
   }
 }
 
-/**
- * Raised by {@link recvExact} when the socket's read timeout fires before any
- * bytes have been received for the current read. This is a _safe_ timeout:
- * no bytes have been consumed from the network buffer, so the socket can be
- * used again immediately.
- *
- * This is distinct from a mid-packet timeout (which would be a fatal
- * {@link ConnectionClosedError}).
- */
-export class SocketIdleTimeoutError extends Error {
-  constructor(message = "Socket idle timeout") {
-    super(message);
-    this.name = "SocketIdleTimeoutError";
-  }
-}
-
 // ---------------------------------------------------------------------------
-// Low-level socket I/O
+// Low-level stream I/O
 // ---------------------------------------------------------------------------
 
 /**
- * Read exactly `n` bytes from `socket`, waiting until they are all available.
+ * Read exactly `n` bytes from a readable stream.
  *
- * Uses Node's non-flowing (readable) stream mode: calls `socket.read()` when
+ * Uses Node's non-flowing (readable) stream mode: calls `reader.read()` when
  * the `readable` event fires, accumulating bytes until `n` have been received.
  * This avoids the pause/resume race condition that affects event-driven (flowing)
- * mode when multiple sequential reads are made on the same socket.
+ * mode when multiple sequential reads are made on the same stream.
  *
- * If the socket has a timeout set (via `socket.setTimeout(ms)`) and the timeout
- * fires before any bytes arrive, throws {@link SocketIdleTimeoutError}. This is
- * safe — the socket can be reused immediately.
- *
- * @param socket - The Node.js net.Socket to read from.
+ * @param reader - A Node.js Readable stream to read from.
  * @param n - The number of bytes to read.
  * @returns A Buffer containing exactly `n` bytes.
- * @throws {PartialPacketError} If the socket closes before any bytes arrive.
- * @throws {ConnectionClosedError} If the socket closes after some bytes arrive.
- * @throws {SocketIdleTimeoutError} If the socket timeout fires before any bytes arrive.
+ * @throws {PartialPacketError} If the stream closes before any bytes arrive.
+ * @throws {ConnectionClosedError} If the stream closes after some bytes arrive.
  */
-export function recvExact(socket: net.Socket, n: number): Promise<Buffer> {
+export function recvExact(reader: stream.Readable, n: number): Promise<Buffer> {
   if (n === 0) return Promise.resolve(Buffer.alloc(0));
 
   return new Promise((resolve, reject) => {
@@ -149,7 +125,7 @@ export function recvExact(socket: net.Socket, n: number): Promise<Buffer> {
     function tryRead() {
       while (received < n) {
         const needed = n - received;
-        const chunk = socket.read(needed) as Buffer | null;
+        const chunk = reader.read(needed) as Buffer | null;
         if (chunk === null) break;
         chunks.push(chunk);
         received += chunk.length;
@@ -174,27 +150,15 @@ export function recvExact(socket: net.Socket, n: number): Promise<Buffer> {
       reject(err);
     }
 
-    function onTimeout() {
-      // Socket idle timeout. Only safe to abort if no bytes have been consumed yet.
-      if (received === 0) {
-        cleanup();
-        reject(new SocketIdleTimeoutError());
-      }
-      // If bytes were received, a mid-packet timeout would corrupt the stream.
-      // Do nothing — let the socket close via 'end' or 'error' instead.
-    }
-
     function cleanup() {
-      socket.removeListener("readable", tryRead);
-      socket.removeListener("end", onEnd);
-      socket.removeListener("error", onError);
-      socket.removeListener("timeout", onTimeout);
+      reader.removeListener("readable", tryRead);
+      reader.removeListener("end", onEnd);
+      reader.removeListener("error", onError);
     }
 
-    socket.on("readable", tryRead);
-    socket.on("end", onEnd);
-    socket.on("error", onError);
-    socket.on("timeout", onTimeout);
+    reader.on("readable", tryRead);
+    reader.on("end", onEnd);
+    reader.on("error", onError);
 
     // Try to read immediately in case data is already buffered
     tryRead();
@@ -206,21 +170,21 @@ export function recvExact(socket: net.Socket, n: number): Promise<Buffer> {
 // ---------------------------------------------------------------------------
 
 /**
- * Read and parse a single {@link Packet} from the socket.
+ * Read and parse a single {@link Packet} from a readable stream.
  *
  * Reads the 20-byte header, then the payload, then the terminator byte.
  * Validates magic number, terminator, and CRC32 checksum.
  *
- * @param socket - The connected socket to read from.
+ * @param reader - The readable stream to read from.
  * @returns The parsed Packet.
  * @throws {Error} If the magic number, terminator, or checksum is invalid.
  */
-export async function readPacket(socket: net.Socket): Promise<Packet> {
-  const header = await recvExact(socket, HEADER_SIZE);
+export async function readPacket(reader: stream.Readable): Promise<Packet> {
+  const header = await recvExact(reader, HEADER_SIZE);
 
   const magic = header.readUInt32BE(0);
   const checksum = header.readUInt32BE(4);
-  const channelId = header.readUInt32BE(8);
+  const streamId = header.readUInt32BE(8);
   let messageId = header.readUInt32BE(12);
   const payloadLength = header.readUInt32BE(16);
 
@@ -235,8 +199,8 @@ export async function readPacket(socket: net.Socket): Promise<Packet> {
     messageId = messageId ^ REPLY_BIT;
   }
 
-  const payload = await recvExact(socket, payloadLength);
-  const terminatorBuf = await recvExact(socket, 1);
+  const payload = await recvExact(reader, payloadLength);
+  const terminatorBuf = await recvExact(reader, 1);
   const terminator = terminatorBuf[0];
 
   if (terminator !== TERMINATOR) {
@@ -254,19 +218,19 @@ export async function readPacket(socket: net.Socket): Promise<Packet> {
     );
   }
 
-  return { channelId, messageId, isReply, payload };
+  return { streamId, messageId, isReply, payload };
 }
 
 /**
- * Serialize a {@link Packet} and write it to the socket.
+ * Serialize a {@link Packet} and write it to a writable stream.
  *
  * Computes the CRC32 over the header (with checksum zeroed) plus payload,
  * then sends header + payload + terminator as a single write.
  *
- * @param socket - The connected socket to write to.
+ * @param writer - The writable stream to write to.
  * @param packet - The packet to send.
  */
-export function writePacket(socket: net.Socket, packet: Packet): Promise<void> {
+export function writePacket(writer: stream.Writable, packet: Packet): Promise<void> {
   let messageId = packet.messageId;
   if (packet.isReply) {
     messageId = (messageId | REPLY_BIT) >>> 0;
@@ -276,7 +240,7 @@ export function writePacket(socket: net.Socket, packet: Packet): Promise<void> {
   const header = Buffer.alloc(HEADER_SIZE);
   header.writeUInt32BE(MAGIC, 0);
   // offset 4 left as 0 for CRC computation
-  header.writeUInt32BE(packet.channelId, 8);
+  header.writeUInt32BE(packet.streamId, 8);
   header.writeUInt32BE(messageId, 12);
   header.writeUInt32BE(packet.payload.length, 16);
 
@@ -286,7 +250,7 @@ export function writePacket(socket: net.Socket, packet: Packet): Promise<void> {
   const frame = Buffer.concat([header, packet.payload, Buffer.from([TERMINATOR])]);
 
   return new Promise((resolve, reject) => {
-    socket.write(frame, (err) => {
+    writer.write(frame, (err) => {
       if (err) reject(err);
       else resolve();
     });
@@ -296,6 +260,21 @@ export function writePacket(socket: net.Socket, packet: Packet): Promise<void> {
 // ---------------------------------------------------------------------------
 // CBOR helpers
 // ---------------------------------------------------------------------------
+
+// Register CBOR Tag 6 (hegel string): the server wraps all string values as
+// Tag 6 containing WTF-8 encoded bytes. WTF-8 is like UTF-8 but allows lone
+// surrogate codepoints (U+D800-U+DFFF), which JS strings can represent natively.
+import { wtf8ToString } from "./wtf8.js";
+
+/** Sentinel class for CBOR Tag 6 (hegel string). Decode-only — never instantiated. */
+export class _HegelString {}
+addExtension({
+  tag: 6,
+  Class: _HegelString,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  encode: () => null as any,
+  decode: wtf8ToString,
+});
 
 /**
  * Encode a value to CBOR bytes.
@@ -315,112 +294,4 @@ export function encodeValue(value: unknown): Buffer {
  */
 export function decodeValue(data: Buffer): unknown {
   return decode(data);
-}
-
-// ---------------------------------------------------------------------------
-// CBOR extractor helpers
-// ---------------------------------------------------------------------------
-
-/** Describe a value's type for error messages — handles the `typeof null === "object"` quirk. */
-function describeType(value: unknown): string {
-  if (value === null) return "null";
-  if (Array.isArray(value)) return "array";
-  return typeof value;
-}
-
-/**
- * Extract an integer from a CBOR-decoded value.
- *
- * @param value - The CBOR-decoded value.
- * @param field - Field name for error messages.
- * @throws {TypeError} If the value is not a safe integer.
- */
-export function extractInt(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isInteger(value)) {
-    throw new TypeError(`Expected integer for field '${field}', got ${describeType(value)}`);
-  }
-  return value;
-}
-
-/**
- * Extract a float (or integer promoted to float) from a CBOR-decoded value.
- *
- * @param value - The CBOR-decoded value.
- * @param field - Field name for error messages.
- * @throws {TypeError} If the value is not a number.
- */
-export function extractFloat(value: unknown, field: string): number {
-  if (typeof value !== "number") {
-    throw new TypeError(`Expected number for field '${field}', got ${describeType(value)}`);
-  }
-  return value;
-}
-
-/**
- * Extract a string from a CBOR-decoded value.
- *
- * @param value - The CBOR-decoded value.
- * @param field - Field name for error messages.
- * @throws {TypeError} If the value is not a string.
- */
-export function extractString(value: unknown, field: string): string {
-  if (typeof value !== "string") {
-    throw new TypeError(`Expected string for field '${field}', got ${describeType(value)}`);
-  }
-  return value;
-}
-
-/**
- * Extract a boolean from a CBOR-decoded value.
- *
- * @param value - The CBOR-decoded value.
- * @param field - Field name for error messages.
- * @throws {TypeError} If the value is not a boolean.
- */
-export function extractBool(value: unknown, field: string): boolean {
-  if (typeof value !== "boolean") {
-    throw new TypeError(`Expected boolean for field '${field}', got ${describeType(value)}`);
-  }
-  return value;
-}
-
-/**
- * Extract a bytes buffer from a CBOR-decoded value.
- *
- * @param value - The CBOR-decoded value (expected to be a Buffer or Uint8Array).
- * @param field - Field name for error messages.
- * @throws {TypeError} If the value is not a Buffer/Uint8Array.
- */
-export function extractBytes(value: unknown, field: string): Buffer {
-  if (Buffer.isBuffer(value)) return value;
-  if (value instanceof Uint8Array) return Buffer.from(value);
-  throw new TypeError(`Expected bytes for field '${field}', got ${describeType(value)}`);
-}
-
-/**
- * Extract an array from a CBOR-decoded value.
- *
- * @param value - The CBOR-decoded value.
- * @param field - Field name for error messages.
- * @throws {TypeError} If the value is not an array.
- */
-export function extractList(value: unknown, field: string): unknown[] {
-  if (!Array.isArray(value)) {
-    throw new TypeError(`Expected array for field '${field}', got ${describeType(value)}`);
-  }
-  return value;
-}
-
-/**
- * Extract a plain object (dict) from a CBOR-decoded value.
- *
- * @param value - The CBOR-decoded value.
- * @param field - Field name for error messages.
- * @throws {TypeError} If the value is not a plain object (or is null/array).
- */
-export function extractDict(value: unknown, field: string): Record<string, unknown> {
-  if (value === null || Array.isArray(value) || typeof value !== "object") {
-    throw new TypeError(`Expected object for field '${field}', got ${describeType(value)}`);
-  }
-  return value as Record<string, unknown>;
 }
