@@ -137,6 +137,18 @@ export function text(
 }
 
 /**
+ * Generate single Unicode characters.
+ *
+ * This is a convenience for `text(1, 1, opts)` — it generates single-character
+ * strings with the same character filtering options as {@link text}.
+ *
+ * @param opts - Character filtering options.
+ */
+export function characters(opts: CharacterOptions = {}): BasicGenerator<string> {
+  return text(1, 1, opts);
+}
+
+/**
  * Generate binary data (byte strings).
  *
  * The server returns CBOR byte strings which are decoded directly as

@@ -33,6 +33,7 @@ export {
   floats,
   booleans,
   text,
+  characters,
   binary,
   just,
   sampledFrom,
