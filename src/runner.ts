@@ -1,15 +1,15 @@
 /**
- * Test runner for the Hegel SDK.
+ * Test runner for the Hegel library.
  *
  * Implements the {@link Client} class which manages the test protocol with a
  * Hegel server, and `AsyncLocalStorage`-based context state for generator
- * functions that must be callable without an explicit channel parameter.
+ * functions that must be callable without an explicit stream parameter.
  *
  * @packageDocumentation
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
-import { Channel, Connection, RequestError } from "./connection.js";
+import { Stream, Connection, RequestError } from "./connection.js";
 import { encodeValue } from "./protocol.js";
 import type { Generator } from "./generators/index.js";
 
@@ -17,8 +17,8 @@ import type { Generator } from "./generators/index.js";
 // Supported protocol version range
 // ---------------------------------------------------------------------------
 
-const SUPPORTED_PROTOCOL_LO = 0.1;
-const SUPPORTED_PROTOCOL_HI = 0.4;
+const SUPPORTED_PROTOCOL_LO = 0.9;
+const SUPPORTED_PROTOCOL_HI = 0.9;
 
 // ---------------------------------------------------------------------------
 // Error classes
@@ -79,16 +79,16 @@ export const Labels = {
 
 /**
  * Per-test-case context stored in AsyncLocalStorage.
- * Holds the current data channel and flags for the active test case.
+ * Holds the current data stream and flags for the active test case.
  */
 export interface TestCaseData {
-  /** The data channel for the current test case. */
-  channel: Channel;
+  /** The data stream for the current test case. */
+  stream: Stream;
   /** Whether this is the final (shrunk) replay of a failing test. */
   isFinal: boolean;
   /**
    * Whether the server has sent StopTest (DataExhausted).
-   * When true, no further commands should be sent on the channel.
+   * When true, no further commands should be sent on the stream.
    */
   testAborted: boolean;
 }
@@ -117,7 +117,7 @@ export class Client {
   /** The underlying connection. */
   readonly connection: Connection;
 
-  private readonly _control: Channel;
+  private readonly _control: Stream;
 
   /**
    * Construct a Client over an already-connected (but NOT yet handshaked)
@@ -125,7 +125,7 @@ export class Client {
    */
   constructor(connection: Connection) {
     this.connection = connection;
-    this._control = connection.controlChannel;
+    this._control = connection.controlStream;
   }
 
   /**
@@ -160,13 +160,13 @@ export class Client {
     opts: { testCases?: number } = {},
   ): Promise<void> {
     const testCases = opts.testCases ?? 100;
-    const testChannel = this.connection.newChannel({ role: "Test" });
+    const testStream = this.connection.newStream({ role: "Test" });
 
     await this._control
       .request({
         command: "run_test",
         test_cases: testCases,
-        channel_id: testChannel.channelId,
+        stream_id: testStream.streamId,
       })
       .get();
 
@@ -174,24 +174,24 @@ export class Client {
 
     // Main test loop: handle test_case and test_done events
     while (true) {
-      const [messageId, rawMessage] = await testChannel.receiveRequest();
+      const [messageId, rawMessage] = await testStream.receiveRequest();
       const message = rawMessage as Record<string, unknown>;
       const event = message["event"] as string | undefined;
 
       if (event === "test_case") {
-        const channelId = message["channel_id"] as number;
-        await testChannel.sendResponseValue(messageId, null);
-        const testCaseChannel = this.connection.connectChannel(channelId, {
+        const streamId = message["stream_id"] as number;
+        await testStream.sendResponseValue(messageId, null);
+        const testCaseStream = this.connection.connectStream(streamId, {
           role: "Test Case",
         });
-        await this._runTestCase(testCaseChannel, testFn, false);
+        await this._runTestCase(testCaseStream, testFn, false);
       } else if (event === "test_done") {
-        await testChannel.sendResponseValue(messageId, true);
+        await testStream.sendResponseValue(messageId, true);
         resultData = message["results"] as Record<string, unknown>;
         break;
       } else {
         // Unrecognised event — send error response
-        await testChannel.sendResponseRaw(
+        await testStream.sendResponseRaw(
           messageId,
           encodeValue({
             error: `Unrecognised event ${String(event)}`,
@@ -208,14 +208,14 @@ export class Client {
     const exceptions: Error[] = [];
     for (let i = 0; i < nInteresting; i++) {
       try {
-        const [messageId, rawMessage] = await testChannel.receiveRequest();
+        const [messageId, rawMessage] = await testStream.receiveRequest();
         const message = rawMessage as Record<string, unknown>;
-        const channelId = message["channel_id"] as number;
-        await testChannel.sendResponseValue(messageId, null);
-        const testCaseChannel = this.connection.connectChannel(channelId, {
+        const streamId = message["stream_id"] as number;
+        await testStream.sendResponseValue(messageId, null);
+        const testCaseStream = this.connection.connectStream(streamId, {
           role: "Test Case",
         });
-        await this._runTestCase(testCaseChannel, testFn, true);
+        await this._runTestCase(testCaseStream, testFn, true);
         // Final test case passed when it should have failed
         if (nInteresting > 1) {
           throw new AssertionError(`Expected test case ${i} to fail but it didn't`);
@@ -234,14 +234,14 @@ export class Client {
    * Run a single test case inside an AsyncLocalStorage context.
    *
    * Sets up context variables, calls the test body, handles exceptions,
-   * and sends `mark_complete` before closing the channel.
+   * and sends `mark_complete` before closing the stream.
    *
-   * @param channel - The data channel for this test case.
+   * @param stream - The data stream for this test case.
    * @param testFn - The test body.
    * @param isFinal - Whether this is the final (shrunk) replay.
    */
   async _runTestCase(
-    channel: Channel,
+    stream: Stream,
     testFn: () => void | Promise<void>,
     isFinal: boolean,
   ): Promise<void> {
@@ -251,7 +251,7 @@ export class Client {
       throw new RuntimeError("Cannot nest test cases - already inside a test case");
     }
 
-    const data: TestCaseData = { channel, isFinal, testAborted: false };
+    const data: TestCaseData = { stream, isFinal, testAborted: false };
 
     await _testContextStorage.run(data, async () => {
       let alreadyComplete = false;
@@ -276,7 +276,7 @@ export class Client {
       } finally {
         if (!alreadyComplete) {
           // Fire-and-forget: send mark_complete then close
-          channel
+          stream
             .sendRequest({
               command: "mark_complete",
               status,
@@ -284,7 +284,7 @@ export class Client {
             })
             .catch(() => {});
         }
-        channel.close();
+        stream.close();
       }
     });
   }
@@ -293,19 +293,6 @@ export class Client {
 // ---------------------------------------------------------------------------
 // Context helpers (used by generator functions)
 // ---------------------------------------------------------------------------
-
-/**
- * Get the current test channel.
- *
- * @throws {RuntimeError} If called outside a test function.
- */
-export function _getChannel(): Channel {
-  const data = _testContextStorage.getStore();
-  if (!data) {
-    throw new RuntimeError("Not in a test context - must be called from within a test function");
-  }
-  return data.channel;
-}
 
 // ---------------------------------------------------------------------------
 // Generator/test-body helper functions
@@ -327,9 +314,9 @@ export async function generateFromSchema(
   schema: Record<string, unknown>,
   data: TestCaseData,
 ): Promise<unknown> {
-  const channel = data.channel;
+  const stream = data.stream;
   try {
-    return await channel.request({ command: "generate", schema }).get();
+    return await stream.request({ command: "generate", schema }).get();
   } catch (e) {
     if (e instanceof RequestError && e.errorType === "StopTest") {
       data.testAborted = true;
@@ -382,8 +369,8 @@ export async function target(value: number, label = ""): Promise<void> {
   if (!data) {
     throw new RuntimeError("target() cannot be called outside of a Hegel test");
   }
-  const channel = data.channel;
-  await channel.request({ command: "target", value, label }).get();
+  const stream = data.stream;
+  await stream.request({ command: "target", value, label }).get();
 }
 
 /**
@@ -395,8 +382,8 @@ export async function target(value: number, label = ""): Promise<void> {
  */
 export async function startSpan(label: number, data: TestCaseData): Promise<void> {
   if (data.testAborted) return;
-  const channel = data.channel;
-  await channel.request({ command: "start_span", label }).get();
+  const stream = data.stream;
+  await stream.request({ command: "start_span", label }).get();
 }
 
 /**
@@ -408,8 +395,8 @@ export async function startSpan(label: number, data: TestCaseData): Promise<void
  */
 export async function stopSpan(opts: { discard?: boolean }, data: TestCaseData): Promise<void> {
   if (data.testAborted) return;
-  const channel = data.channel;
-  await channel.request({ command: "stop_span", discard: opts.discard ?? false }).get();
+  const stream = data.stream;
+  await stream.request({ command: "stop_span", discard: opts.discard ?? false }).get();
 }
 
 // ---------------------------------------------------------------------------
@@ -501,7 +488,7 @@ export function extractOrigin(err: Error): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Thrown when the SDK is called outside its expected context.
+ * Thrown when the library is called outside its expected context.
  * (e.g., nesting test cases, calling generator functions outside a test)
  */
 export class RuntimeError extends Error {

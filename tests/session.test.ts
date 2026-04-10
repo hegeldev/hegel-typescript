@@ -1,8 +1,6 @@
 import * as childProcess from "node:child_process";
 import * as fs from "node:fs";
-import * as net from "node:net";
-import { EventEmitter } from "node:events";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { HegelSession, hegel, runHegelTest } from "hegel";
 import { _findHegeld } from "../src/session.js";
 import { generateFromSchema, _testContextStorage } from "../src/runner.js";
@@ -19,8 +17,6 @@ vi.mock("node:fs", async (importOriginal) => {
   return {
     ...actual,
     existsSync: vi.fn(actual.existsSync),
-    mkdtempSync: vi.fn(actual.mkdtempSync),
-    rmSync: vi.fn(actual.rmSync),
   };
 });
 
@@ -29,14 +25,6 @@ vi.mock("node:child_process", async (importOriginal) => {
   return {
     ...actual,
     spawn: vi.fn(actual.spawn),
-  };
-});
-
-vi.mock("node:net", async (importOriginal) => {
-  const actual = await importOriginal<typeof net>();
-  return {
-    ...actual,
-    createConnection: vi.fn(actual.createConnection),
   };
 });
 
@@ -107,10 +95,6 @@ describe("_findHegeld", () => {
 // ---------------------------------------------------------------------------
 
 describe("HegelSession._cleanup", () => {
-  afterEach(() => {
-    vi.mocked(fs.rmSync).mockRestore();
-  });
-
   it("is a no-op when nothing is started", () => {
     const session = new HegelSession();
     expect(() => session._cleanup()).not.toThrow();
@@ -127,10 +111,6 @@ describe("HegelSession._cleanup", () => {
     (session as any)._client = {};
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (session as any)._process = mockProcess;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (session as any)._tempDir = "/tmp/fake-hegel-dir";
-
-    vi.mocked(fs.rmSync).mockImplementation(() => {});
 
     session._cleanup();
 
@@ -140,8 +120,6 @@ describe("HegelSession._cleanup", () => {
     expect((session as any)._client).toBeNull();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((session as any)._process).toBeNull();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect((session as any)._tempDir).toBeNull();
   });
 
   it("suppresses exceptions from all cleanup operations", () => {
@@ -164,12 +142,6 @@ describe("HegelSession._cleanup", () => {
     (session as any)._client = {};
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (session as any)._process = mockProcess;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (session as any)._tempDir = "/tmp/fake";
-
-    vi.mocked(fs.rmSync).mockImplementation(() => {
-      throw new Error("rm failed");
-    });
 
     expect(() => session._cleanup()).not.toThrow();
 
@@ -177,8 +149,6 @@ describe("HegelSession._cleanup", () => {
     expect((session as any)._connection).toBeNull();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((session as any)._process).toBeNull();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect((session as any)._tempDir).toBeNull();
   });
 });
 
@@ -204,7 +174,7 @@ describe("HegelSession._hasWorkingClient", () => {
 // ---------------------------------------------------------------------------
 
 describe("HegelSession._cleanup", () => {
-  it("cleans up connection, process, and tempDir", () => {
+  it("cleans up connection and process", () => {
     const session = new HegelSession();
 
     const mockConnection = { close: vi.fn(), live: true };
@@ -216,8 +186,6 @@ describe("HegelSession._cleanup", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (session as any)._process = mockProcess;
 
-    vi.mocked(fs.rmSync).mockImplementation(() => {});
-
     session._cleanup();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -227,89 +195,39 @@ describe("HegelSession._cleanup", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((session as any)._process).toBeNull();
   });
-
-  afterEach(() => {
-    vi.mocked(fs.rmSync).mockRestore();
-  });
 });
 
 // ---------------------------------------------------------------------------
-// HegelSession timeout kill
+// HegelSession startup failure
 // ---------------------------------------------------------------------------
 
-describe("HegelSession timeout", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-
+describe("HegelSession startup failure", () => {
   afterEach(() => {
-    vi.useRealTimers();
-    vi.mocked(fs.existsSync).mockRestore();
-    vi.mocked(fs.mkdtempSync).mockRestore();
-    vi.mocked(fs.rmSync).mockRestore();
     vi.mocked(childProcess.spawn).mockRestore();
-    vi.mocked(net.createConnection).mockRestore();
   });
 
-  it("kills process and throws when socket never appears", async () => {
-    const mockProcess = {
+  it("rejects when hegel process exits immediately", async () => {
+    // Mock spawn to return a process whose stdout ends immediately,
+    // causing the Connection handshake to fail.
+    const { PassThrough } = await import("node:stream");
+    const fakeStdout = new PassThrough();
+    const fakeStdin = new PassThrough();
+    const fakeStderr = new PassThrough();
+
+    vi.mocked(childProcess.spawn).mockReturnValue({
+      stdout: fakeStdout,
+      stdin: fakeStdin,
+      stderr: fakeStderr,
       kill: vi.fn(),
-      stdout: new EventEmitter(),
-      stderr: new EventEmitter(),
       pid: 99999,
-    };
-    vi.mocked(childProcess.spawn).mockReturnValue(
-      mockProcess as unknown as childProcess.ChildProcess,
-    );
-    vi.mocked(fs.existsSync).mockReturnValue(false); // socket never appears
-    vi.mocked(fs.mkdtempSync).mockReturnValue("/tmp/hegel-fake");
-    vi.mocked(fs.rmSync).mockImplementation(() => {});
+    } as unknown as childProcess.ChildProcess);
+
+    // End stdout immediately to simulate process exit
+    fakeStdout.end();
 
     const session = new HegelSession();
-    // Attach rejection handler immediately to avoid "unhandled rejection" warning
-    const startPromise = session._start();
-    const expectedRejection = expect(startPromise).rejects.toThrow("Timeout");
-
-    // Advance fake time past 50 * 100ms = 5000ms
-    await vi.advanceTimersByTimeAsync(6000);
-
-    await expectedRejection;
-    expect(mockProcess.kill).toHaveBeenCalled();
-  });
-
-  it("kills process and throws when socket exists but connection always refused", async () => {
-    const mockProcess = {
-      kill: vi.fn(),
-      stdout: new EventEmitter(),
-      stderr: new EventEmitter(),
-      pid: 99998,
-    };
-    vi.mocked(childProcess.spawn).mockReturnValue(
-      mockProcess as unknown as childProcess.ChildProcess,
-    );
-    vi.mocked(fs.existsSync).mockReturnValue(true); // socket appears immediately
-    vi.mocked(fs.mkdtempSync).mockReturnValue("/tmp/hegel-fake");
-    vi.mocked(fs.rmSync).mockImplementation(() => {});
-
-    // Intercept net.createConnection to always reject
-    vi.mocked(net.createConnection).mockImplementation((..._args: unknown[]) => {
-      const sock = new EventEmitter() as net.Socket;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (sock as any).destroy = () => {};
-      setTimeout(() => sock.emit("error", new Error("ECONNREFUSED")), 0);
-      return sock;
-    });
-
-    const session = new HegelSession();
-    // Attach rejection handler immediately to avoid "unhandled rejection" warning
-    const startPromise = session._start();
-    const expectedRejection = expect(startPromise).rejects.toThrow("Timeout");
-
-    // Advance time past 50 * 100ms
-    await vi.advanceTimersByTimeAsync(6000);
-
-    await expectedRejection;
-    expect(mockProcess.kill).toHaveBeenCalled();
+    await expect(session._start()).rejects.toThrow();
+    session._cleanup();
   });
 });
 

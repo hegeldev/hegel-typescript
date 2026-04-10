@@ -1,5 +1,5 @@
 /**
- * Conformance testing helpers for the Hegel TypeScript SDK.
+ * Conformance testing helpers for Hegel for TypeScript.
  *
  * Provides utilities used by conformance binary scripts to read test
  * configuration from environment variables and write per-test-case metrics

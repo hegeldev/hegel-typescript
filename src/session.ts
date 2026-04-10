@@ -1,16 +1,14 @@
 /**
- * Session management for the Hegel SDK.
+ * Session management for the Hegel library.
  *
- * Manages the lifecycle of the hegel subprocess, its Unix socket connection,
- * and the global session used by {@link runHegelTest}.
+ * Manages the lifecycle of the hegel subprocess and the global session used
+ * by {@link runHegelTest}. Communicates with the hegel binary via stdio pipes.
  *
  * @packageDocumentation
  */
 
 import * as childProcess from "node:child_process";
 import * as fs from "node:fs";
-import * as net from "node:net";
-import * as os from "node:os";
 import * as path from "node:path";
 import { Connection } from "./connection.js";
 import { Client } from "./runner.js";
@@ -56,13 +54,13 @@ export function _findHegeld(): string {
  * Manages a shared hegel subprocess for the test suite.
  *
  * Spawns the hegel binary on first use and keeps it running for all tests.
- * Cleans up automatically when the process exits.
+ * Communicates via stdio pipes (`--stdio` mode). Cleans up automatically
+ * when the process exits.
  */
 export class HegelSession {
   private _process: childProcess.ChildProcess | null = null;
   private _connection: Connection | null = null;
   private _client: Client | null = null;
-  private _tempDir: string | null = null;
   private _startPromise: Promise<void> | null = null;
   private _cleanupRegistered = false;
 
@@ -95,65 +93,31 @@ export class HegelSession {
   }
 
   private async _doStart(): Promise<void> {
-    this._tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hegel-"));
-    const socketPath = path.join(this._tempDir, "hegel.sock");
-
     const hegelCmd = _findHegeld();
     const cmdParts = hegelCmd.split(" ");
     const binary = cmdParts[0]!;
-    const args = [...cmdParts.slice(1), socketPath];
+    const args = [...cmdParts.slice(1), "--stdio", "--verbosity", "normal"];
 
     this._process = childProcess.spawn(binary, args, {
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
 
-    // Wait up to 50 × 100 ms = 5 s for the socket to appear and accept
-    let connected = false;
-    for (let i = 0; i < 50; i++) {
-      if (fs.existsSync(socketPath)) {
-        try {
-          const sock = await this._tryConnect(socketPath);
-          const connection = new Connection(sock, { name: "SDK" });
-          const client = await Client.create(connection);
-          this._connection = connection;
-          this._client = client;
-          connected = true;
-          // Register process-exit cleanup once
-          if (!this._cleanupRegistered) {
-            this._cleanupRegistered = true;
-            process.on("exit", this._cleanup.bind(this));
-          }
-          break;
-        } catch {
-          // Socket exists but not ready — keep trying
-        }
-      }
-      await _sleep(100);
-    }
-
-    if (!connected) {
-      this._process!.kill("SIGKILL");
-      this._process = null;
-      try {
-        fs.rmSync(this._tempDir!, { recursive: true, force: true });
-      } catch {
-        // ignore
-      }
-      this._tempDir = null;
-      throw new Error("Timeout waiting for hegel to start");
-    }
-  }
-
-  private _tryConnect(socketPath: string): Promise<net.Socket> {
-    return new Promise((resolve, reject) => {
-      const sock = net.createConnection(socketPath);
-      sock.once("connect", () => resolve(sock));
-      sock.once("error", (err) => reject(err));
+    const connection = new Connection(this._process.stdout!, this._process.stdin!, {
+      name: "Client",
     });
+    const client = await Client.create(connection);
+    this._connection = connection;
+    this._client = client;
+
+    // Register process-exit cleanup once
+    if (!this._cleanupRegistered) {
+      this._cleanupRegistered = true;
+      process.on("exit", this._cleanup.bind(this));
+    }
   }
 
   /**
-   * Clean up the hegel subprocess and socket.
+   * Clean up the hegel subprocess.
    * Suppresses all errors during cleanup.
    */
   _cleanup(): void {
@@ -172,15 +136,6 @@ export class HegelSession {
         /* ignore */
       }
       this._process = null;
-    }
-
-    if (this._tempDir) {
-      try {
-        fs.rmSync(this._tempDir, { recursive: true, force: true });
-      } catch {
-        /* ignore */
-      }
-      this._tempDir = null;
     }
   }
 
@@ -262,12 +217,4 @@ export function hegel(
     });
     return wrapper;
   };
-}
-
-// ---------------------------------------------------------------------------
-// Utility
-// ---------------------------------------------------------------------------
-
-function _sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

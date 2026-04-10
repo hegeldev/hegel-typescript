@@ -215,54 +215,6 @@ export class FilteredGenerator<T> extends Generator<T> {
 // Span helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Run `fn` inside a span with the given label.
- *
- * Starts the span before calling `fn`, then stops it (with `discard=false`)
- * after `fn` returns. Returns the value returned by `fn`.
- *
- * @param label - Span label constant (see `Labels`).
- * @param fn - Function to run inside the span.
- */
-export async function group<T>(
-  label: number,
-  fn: () => T | Promise<T>,
-  data: TestCaseData,
-): Promise<T> {
-  await startSpan(label, data);
-  try {
-    return await fn();
-  } finally {
-    await stopSpan({}, data);
-  }
-}
-
-/**
- * Run `fn` inside a discardable span.
- *
- * If `fn` throws, stops the span with `discard=true`. Otherwise stops with
- * `discard=false`. The exception (if any) is re-thrown.
- *
- * @param label - Span label constant (see `Labels`).
- * @param fn - Function to run inside the span.
- */
-export async function discardableGroup<T>(
-  label: number,
-  fn: () => T | Promise<T>,
-  data: TestCaseData,
-): Promise<T> {
-  await startSpan(label, data);
-  let discard = false;
-  try {
-    return await fn();
-  } catch (e) {
-    discard = true;
-    throw e;
-  } finally {
-    await stopSpan({ discard }, data);
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Collection protocol
 // ---------------------------------------------------------------------------
@@ -279,9 +231,8 @@ export async function discardableGroup<T>(
  * (same as in `generateFromSchema`).
  */
 export class Collection {
-  private _baseName: string | null;
-  private _serverName: unknown = null;
-  private _serverNameResolved = false;
+  private _collectionId: unknown = null;
+  private _collectionIdResolved = false;
   private _finished = false;
 
   /** Minimum number of elements. */
@@ -289,25 +240,23 @@ export class Collection {
   /** Maximum number of elements (null = unlimited). */
   readonly maxSize: number | null;
 
-  constructor(name: string | null, minSize = 0, maxSize: number | null = null) {
-    this._baseName = name;
+  constructor(minSize = 0, maxSize: number | null = null) {
     this.minSize = minSize;
     this.maxSize = maxSize;
   }
 
   /**
-   * Get (or lazily initialize) the server-side collection name.
+   * Get (or lazily initialize) the collection ID.
    * Sends `new_collection` on first call.
    */
-  private async _getServerName(data: TestCaseData): Promise<unknown> {
-    if (!this._serverNameResolved) {
-      this._serverNameResolved = true;
-      const channel = data.channel;
+  private async _getCollectionId(data: TestCaseData): Promise<unknown> {
+    if (!this._collectionIdResolved) {
+      this._collectionIdResolved = true;
+      const stream = data.stream;
       try {
-        this._serverName = await channel
+        this._collectionId = await stream
           .request({
             command: "new_collection",
-            name: this._baseName,
             min_size: this.minSize,
             max_size: this.maxSize,
           })
@@ -320,17 +269,19 @@ export class Collection {
         throw e;
       }
     }
-    return this._serverName;
+    return this._collectionId;
   }
 
   /** @internal */
   async more(data: TestCaseData): Promise<boolean> {
     if (this._finished) return false;
-    const serverName = await this._getServerName(data);
-    const channel = data.channel;
+    const collectionId = await this._getCollectionId(data);
+    const stream = data.stream;
     let result: unknown;
     try {
-      result = await channel.request({ command: "collection_more", collection: serverName }).get();
+      result = await stream
+        .request({ command: "collection_more", collection_id: collectionId })
+        .get();
     } catch (e) {
       if (isStopTest(e)) {
         data.testAborted = true;
@@ -347,12 +298,12 @@ export class Collection {
   /** @internal */
   async reject(data: TestCaseData, why: string | null = null): Promise<void> {
     if (this._finished) return;
-    const serverName = await this._getServerName(data);
-    const channel = data.channel;
-    await channel
+    const collectionId = await this._getCollectionId(data);
+    const stream = data.stream;
+    await stream
       .request({
         command: "collection_reject",
-        collection: serverName,
+        collection_id: collectionId,
         why,
       })
       .get();

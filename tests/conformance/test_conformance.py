@@ -1,6 +1,6 @@
-"""Conformance tests for the Hegel TypeScript SDK.
+"""Conformance tests for Hegel for TypeScript.
 
-These tests validate that the TypeScript SDK correctly implements the Hegel
+These tests validate that Hegel for TypeScript correctly implements the Hegel
 protocol by running compiled TypeScript binaries against the real hegel server
 and checking that the generated values satisfy the expected constraints.
 
@@ -61,5 +61,5 @@ def conformance_tests() -> list:
 
 
 def test_conformance(conformance_tests: list, subtests: pytest.Subtests) -> None:
-    """Run all conformance tests for the TypeScript SDK."""
+    """Run all conformance tests for Hegel for TypeScript."""
     run_conformance_tests(conformance_tests, subtests)

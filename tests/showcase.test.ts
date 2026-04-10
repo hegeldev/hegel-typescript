@@ -2,7 +2,7 @@
  * Showcase tests demonstrating idiomatic Hegel property-based testing.
  *
  * These tests show what user code looks like — concise property tests that
- * use the SDK's free-function API. Every generated value is used in a
+ * use the library's free-function API. Every generated value is used in a
  * meaningful assertion.
  */
 

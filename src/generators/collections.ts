@@ -33,7 +33,7 @@ export class CompositeListGenerator<T = unknown> extends Generator<T[]> {
   async doDraw(data: TestCaseData): Promise<T[]> {
     // Create a fresh Collection for each doDraw() call so that _finished
     // state from prior calls does not carry over.
-    const collection = new Collection("composite_list", this._minSize, this._maxSize);
+    const collection = new Collection(this._minSize, this._maxSize);
     await startSpan(Labels.LIST, data);
     try {
       const result: T[] = [];

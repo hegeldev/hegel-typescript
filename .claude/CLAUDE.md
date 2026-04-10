@@ -1,4 +1,4 @@
-# Hegel SDK for typescript
+# Hegel for TypeScript
 
 ## Build Commands
 
@@ -15,33 +15,33 @@ Tests must use `PATH=".venv/bin:$PATH"` so the `hegel` binary is found.
 
 ## What This Is
 
-A typescript implementation of the Hegel property-based testing SDK. Hegel is a
-universal property-based testing framework powered by Hypothesis on the backend.
-SDKs communicate with the `hegel` binary (a Python server) via Unix sockets using
+A TypeScript implementation of the Hegel property-based testing library. Hegel is a
+universal property-based testing protocol powered by Hypothesis on the backend.
+Client libraries communicate with the `hegel` binary (a Python server) via Unix sockets using
 a custom binary protocol.
 
-## SDK Architecture
+## Architecture
 
-The SDK is structured in layers, each building on the previous:
+The library is structured in layers, each building on the previous:
 
 1. **Protocol Layer** — Binary wire protocol with 20-byte header, CBOR payload, CRC32
-2. **Connection & Channels** — Unix socket multiplexing with demand-driven reader
+2. **Connection & Streams** — Unix socket multiplexing with demand-driven reader
 3. **Test Runner** — Spawns `hegel` subprocess, manages test lifecycle
 4. **Generators** — Type-safe generator abstraction, span system, collection protocol
 5. **Derivation** — Type-directed generator derivation via decorators, record schemas, and variant generators
-6. **Conformance** — Test binaries that validate SDK correctness against the framework
+6. **Conformance** — Test binaries that validate library correctness against the framework
 
 ### Key Pattern: Demand-Driven Reader
 
-The Connection uses a demand-driven model: when a Channel needs a message, it
+The Connection uses a demand-driven model: when a Stream needs a message, it
 acquires a reader lock and reads packets from the socket until its inbox has data.
 No background threads — reading is triggered by the consumer that needs data.
 
-### Key Pattern: Thread-Local Channel State
+### Key Pattern: Thread-Local Stream State
 
-The current data channel is stored in thread-local (or context-var) state so that
+The current data stream is stored in thread-local (or context-var) state so that
 generator functions (`generate()`, `assume()`, `note()`, `target()`) don't need a
-channel parameter. The test runner sets the current channel before calling the test
+stream parameter. The test runner sets the current stream before calling the test
 body.
 
 ### Key Pattern: Global Lazy Session
@@ -57,8 +57,8 @@ or sessions manually — `run_hegel_test()` is a plain free function.
 - **Use the real `hegel` binary** for integration tests. Never write a mock server.
   The real binary runs as a subprocess, so there is zero threading contention.
   In-process mocks with threads cause deadlocks — they have wasted hundreds of
-  agent turns in previous SDK generations.
-- **Socket pairs** (`socketpair()`) for unit testing Connection/Channel in isolation.
+  agent turns in previous library generations.
+- **Socket pairs** (`socketpair()`) for unit testing Connection/Stream in isolation.
 
 ### HEGEL_PROTOCOL_TEST_MODE — Error Injection
 
@@ -76,7 +76,7 @@ trigger server-side error injection:
 
 ## Type-Directed Generator Derivation
 
-The SDK supports automatic generator derivation for TypeScript classes and
+The library supports automatic generator derivation for TypeScript classes and
 plain-object types. Three mechanisms are available:
 
 ### 1. Class-based derivation with `@field` decorator
@@ -135,7 +135,7 @@ All derived generators support `.map()`, `.filter()`, and `.flatMap()` combinato
 
 ## Critical: StopTest Handling
 
-When the server sends StopTest, the SDK MUST:
+When the server sends StopTest, the client MUST:
 
 1. Raise a language-specific exception (DataExhausted/StopTest) to unwind the test body
 2. NOT send `mark_complete` after receiving StopTest
@@ -145,12 +145,12 @@ Failing to handle StopTest correctly causes `FlakyStrategyDefinition` errors.
 
 ## Wire Protocol
 
-- **Header**: 5 big-endian uint32: `magic(0x4845474C)`, `CRC32`, `channel_id`,
+- **Header**: 5 big-endian uint32: `magic(0x4845474C)`, `CRC32`, `stream_id`,
   `message_id`, `payload_length`
 - **Payload**: CBOR-encoded bytes
 - **Terminator**: single byte `0x0A`
 - **Reply bit**: `message_id | (1 << 31)` marks a message as a reply
-- **Client channel IDs**: odd — allocated as `(counter << 1) | 1`
+- **Client stream IDs**: odd — allocated as `(counter << 1) | 1`
 - **CRC32**: computed over the full 20-byte header (checksum field zeroed) + payload
 
 ## Tooling Choices
@@ -180,7 +180,7 @@ Failing to handle StopTest correctly causes `FlakyStrategyDefinition` errors.
 src/                 — Library source code (all production code)
   index.ts           — Public API entry point
   protocol.ts        — Binary wire protocol (header, CBOR, CRC32)
-  connection.ts      — Unix socket connection and channel multiplexing
+  connection.ts      — Unix socket connection and stream multiplexing
   runner.ts          — Test runner (Client, AsyncLocalStorage context, error classes)
   session.ts         — Global lazy session (HegelSession, runHegelTest, hegel)
   generators.ts      — Generator base class, combinators, all built-in generators
@@ -188,13 +188,13 @@ src/                 — Library source code (all production code)
   conformance.ts     — Conformance test helpers (getTestCases, writeMetrics)
 tests/               — Test files (excluded from coverage)
   *.test.ts          — Vitest test files (one per module)
-  showcase.test.ts   — Property tests demonstrating real SDK usage
+  showcase.test.ts   — Property tests demonstrating real library usage
   conformance/       — Python-side conformance test runner
 conformance/         — TypeScript conformance test scripts (run as binaries via tsx)
   test_*.ts          — Individual conformance scenarios
 scripts/             — Build/CI scripts
   check-coverage.py  — Secondary coverage validation script
-examples/            — Example programs demonstrating SDK usage
+examples/            — Example programs demonstrating library usage
   01-basic-properties.ts     — Primitive generators and basic properties
   02-collections-and-combinators.ts — Collections, combinators, dependent generation
   03-real-world-scenario.ts  — Domain model with derived generators
@@ -282,9 +282,9 @@ varsIgnorePattern: "^_" }` to `@typescript-eslint/no-unused-vars` rule options s
   `@throws {Foo}` appears in JSDoc but `Foo` is not in the public API, TypeDoc emits a
   warning that fails the docs build. Either export the symbol from `index.ts` or remove
   the reference from the JSDoc comment.
-- **Hegel protocol field name is `channel_id`, not `channel`.** The `run_test` command
-  must use `channel_id: testChannel.channelId`, and `test_case` events send `channel_id`.
-  Using the wrong key causes the server to never find the test channel and the connection
+- **Hegel protocol field name is `stream_id`, not `stream`.** The `run_test` command
+  must use `stream_id: testStream.streamId`, and `test_case` events send `stream_id`.
+  Using the wrong key causes the server to never find the test stream and the connection
   to time out silently.
 - **ESM module mocking in Vitest: `vi.spyOn` fails on frozen namespaces.** In Vitest ESM
   mode, `vi.spyOn(fs, "existsSync")` throws "Cannot assign to read only property" because
@@ -298,11 +298,11 @@ varsIgnorePattern: "^_" }` to `@typescript-eslint/no-unused-vars` rule options s
 - **`process.on("exit", this._cleanupSync.bind(this))` instead of arrow wrapper.** Using
   `this._cleanupSync.bind(this)` avoids creating an anonymous arrow function that would
   be counted as an uncovered function by v8 coverage (since process exit never fires in tests).
-- **Avoid fire-and-forget before `channel.close()`.** In `_runTestCase`'s finally block,
-  `channel.sendRequest({command: "mark_complete"})` is fire-and-forget with `.catch(() => {})`.
-  The underlying socket write is queued synchronously, so `channel.close()` immediately after
+- **Avoid fire-and-forget before `stream.close()`.** In `_runTestCase`'s finally block,
+  `stream.sendRequest({command: "mark_complete"})` is fire-and-forget with `.catch(() => {})`.
+  The underlying socket write is queued synchronously, so `stream.close()` immediately after
   is safe. But in test code overriding `_runTestCase`, always `await sendRequest(...)` before
-  `close()` to ensure the packet is queued before the channel is destroyed.
+  `close()` to ensure the packet is queued before the stream is destroyed.
 - **Unhandled rejection warning from pending promise before handler attached.** When calling
   `session._start()` in a test and the promise will reject asynchronously (after fake timers
   advance), attach the rejection handler BEFORE advancing time: `const p = session._start();
@@ -377,9 +377,9 @@ true` in `tsconfig.json`) stores metadata in a `Map<Constructor, FieldMeta[]>`. 
   a nice landing page with quick-start examples before diving into the API reference.
 - **Getting-started tutorial lives in `guide/getting-started.md`.** The `docs/` directory
   is reserved for TypeDoc generated output (gitignored), so the tutorial goes in `guide/`
-  instead. Other SDKs that don't have this constraint use `docs/getting-started.md`.
+  instead. Other libraries that don't have this constraint use `docs/getting-started.md`.
 - **Examples directory does NOT need to be compiled or tested.** The `examples/` directory
-  contains runnable TypeScript programs that demonstrate SDK usage. They are excluded from
+  contains runnable TypeScript programs that demonstrate library usage. They are excluded from
   coverage measurement and ESLint/TypeScript checking. Keep them correct and idiomatic but
   do not add them to `tsconfig.json` or `vitest.config.ts`.
 - **ESLint and Prettier must ignore `examples/`.** Add `examples/`
@@ -426,7 +426,7 @@ true` in `tsconfig.json`) stores metadata in a `Map<Constructor, FieldMeta[]>`. 
   repetition and keeps error messages consistent.
 - **Use `0x80000000` for REPLY_BIT, not `1 << 31`.** JavaScript's `<<` returns a signed
   32-bit integer, so `1 << 31 === -2147483648`. This is confusing and inconsistent with the
-  `CLOSE_CHANNEL_MESSAGE_ID` comment that warns against the same pattern. The hex literal
+  `CLOSE_STREAM_MESSAGE_ID` comment that warns against the same pattern. The hex literal
   `0x80000000` is `2147483648` (positive) and unambiguous. Bitwise operators still coerce it
   correctly for `|`, `&`, and `^` operations.
 - **Don't pass default arguments explicitly.** When `stopSpan()` defaults `discard` to `false`,

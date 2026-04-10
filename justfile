@@ -1,8 +1,7 @@
-# Hegel SDK for typescript
-# This justfile provides the standard build recipes.
+set ignore-comments := true
 
 # Install dependencies and the hegel binary.
-# If HEGEL_BINARY is set, symlinks it into .venv/bin instead of installing from git.
+# If HEGEL_BINARY is set, symlinks it into .venv/bin instead of installing from PyPI.
 setup:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -11,34 +10,34 @@ setup:
         mkdir -p .venv/bin
         ln -sf "$HEGEL_BINARY" .venv/bin/hegel
     else
-        uv pip install --python .venv/bin/python hegel@git+ssh://git@github.com/antithesishq/hegel-core.git
+        uv pip install --python .venv/bin/python hegel-core
     fi
     npm install
 
-# Run tests with coverage enforcement (100% required).
-test:
+check-test:
     #!/usr/bin/env bash
     set -euo pipefail
     export PATH=".venv/bin:$PATH"
     npx vitest run --coverage
     python3 scripts/check-coverage.py
 
-# Auto-format code.
 format:
     npx prettier --write .
 
-# Check formatting + linting.
-lint:
+check-format:
     npx prettier --check .
+
+check-lint:
     npx eslint .
     npx tsc --noEmit
 
-# Build API documentation from source.
-docs:
+check-docs:
     npx typedoc
 
-# Compile conformance test binaries to bin/conformance/.
-# Each binary is an executable shell script that runs the TypeScript source via tsx.
+docs:
+    npx typedoc
+    open docs/index.html
+
 build-conformance:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -51,15 +50,14 @@ build-conformance:
             "${REPO_ROOT}" "${REPO_ROOT}" "${name}" > "$wrapper"
         chmod +x "$wrapper"
     done
-    echo "Conformance wrappers written to bin/conformance/"
 
-# Run conformance tests against the real hegel server.
-conformance: build-conformance
-    #!/usr/bin/env bash
-    set -euo pipefail
-    export PATH=".venv/bin:$PATH"
-    uv pip install --python .venv/bin/python pytest hypothesis > /dev/null 2>&1 || true
-    .venv/bin/python -m pytest tests/conformance/ -v
+check-conformance: build-conformance
+    uv run --with 'hegel-core==0.3.2' --with pytest --with hypothesis \
+        pytest tests/conformance/ -v
 
-# Run lint + docs + test (the full CI check).
-check: lint docs test
+# these aliases are provided as ux improvements for local developers. CI should use the longer
+# forms.
+test: check-test
+lint: check-format check-lint
+conformance: check-conformance
+check: lint check-docs check-test

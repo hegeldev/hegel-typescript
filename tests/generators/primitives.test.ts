@@ -318,16 +318,16 @@ describe("just()", () => {
     expect(gen).toBeInstanceOf(BasicGenerator);
   });
 
-  it("schema has 'const' key with null value", () => {
+  it("schema has type 'const' with value null", () => {
     const gen = just("hello");
-    expect(gen.schema()).toEqual({ const: null });
+    expect(gen.schema()).toEqual({ type: "constant", value: null });
   });
 
   it("transform always returns the constant regardless of raw value", () => {
     const gen = just(99);
     // map() on a BasicGenerator exposes the composed transform
     // We can test this via the live server: every generated value should be 99
-    expect(gen.schema()).toHaveProperty("const");
+    expect(gen.schema()["type"]).toBe("constant");
   });
 
   it("returns constant value via live server", async () => {
@@ -565,6 +565,25 @@ describe("text()", () => {
     const schema = text(1, 10).schema();
     expect(schema["min_size"]).toBe(1);
     expect(schema["max_size"]).toBe(10);
+  });
+
+  it("schema includes character options when provided", () => {
+    const schema = text(0, null, {
+      codec: "ascii",
+      minCodepoint: 32,
+      maxCodepoint: 126,
+      categories: ["L", "Nd"],
+      excludeCategories: ["Cs"],
+      includeCharacters: "xyz",
+      excludeCharacters: "abc",
+    }).schema();
+    expect(schema["codec"]).toBe("ascii");
+    expect(schema["min_codepoint"]).toBe(32);
+    expect(schema["max_codepoint"]).toBe(126);
+    expect(schema["categories"]).toEqual(["L", "Nd"]);
+    expect(schema["exclude_categories"]).toEqual(["Cs"]);
+    expect(schema["include_characters"]).toBe("xyz");
+    expect(schema["exclude_characters"]).toBe("abc");
   });
 
   it("generates strings via live server", async () => {

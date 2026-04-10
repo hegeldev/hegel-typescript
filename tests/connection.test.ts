@@ -1,12 +1,12 @@
 /**
- * Tests for Connection and Channel abstractions.
+ * Tests for Connection and Stream abstractions.
  *
  * Uses TCP socket pairs (server/client) to simulate Unix socket pairs.
- * No mock servers — tests exercise real Connection/Channel logic.
+ * No mock servers — tests exercise real Connection/Stream logic.
  */
 
 import * as net from "net";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { encodeValue, Packet } from "../src/protocol.js";
 import {
   Connection,
@@ -52,17 +52,17 @@ async function socketPair(): Promise<[net.Socket, net.Socket]> {
 }
 
 /**
- * Raw handshake responder: reads the handshake request from the control channel
+ * Raw handshake responder: reads the handshake request from the control stream
  * and replies with "Hegel/0.3". Sets the connection to CLIENT state with a high
- * channel ID base to avoid collisions with the actual client side.
+ * stream ID base to avoid collisions with the actual client side.
  */
 async function rawHandshakeResponder(conn: Connection): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (conn as any)._connectionState = ConnectionState.CLIENT;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (conn as any)._nextChannelId = 1000;
-  const [msgId] = await conn.controlChannel.receiveRequestRaw();
-  await conn.controlChannel.sendResponseRaw(msgId, Buffer.from("Hegel/0.3"));
+  (conn as any)._nextStreamId = 1000;
+  const [msgId] = await conn.controlStream.receiveRequestRaw();
+  await conn.controlStream.sendResponseRaw(msgId, Buffer.from("Hegel/0.3"));
 }
 
 /** Perform handshake on both sides concurrently. */
@@ -116,7 +116,7 @@ describe("SHUTDOWN sentinel", () => {
 describe("Connection.live", () => {
   it("is true initially and false after close", async () => {
     const [serverSock] = await socketPair();
-    const conn = new Connection(serverSock, { name: "Live" });
+    const conn = new Connection(serverSock, serverSock, { name: "Live" });
     expect(conn.live).toBe(true);
     conn.close();
     expect(conn.live).toBe(false);
@@ -125,7 +125,7 @@ describe("Connection.live", () => {
 
   it("double close does not throw", async () => {
     const [serverSock] = await socketPair();
-    const conn = new Connection(serverSock, { name: "DoubleClose" });
+    const conn = new Connection(serverSock, serverSock, { name: "DoubleClose" });
     conn.close();
     expect(() => conn.close()).not.toThrow();
     serverSock.destroy();
@@ -139,8 +139,8 @@ describe("Connection.live", () => {
 describe("handshake", () => {
   it("double sendHandshake throws", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
 
     await handshakePair(serverConn, clientConn);
     await expect(clientConn.sendHandshake()).rejects.toThrow(/Handshake already established/);
@@ -151,11 +151,11 @@ describe("handshake", () => {
 
   it("bad handshake response to client raises ConnectionError", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
 
     const badServer = async () => {
-      const ch = serverConn.controlChannel;
+      const ch = serverConn.controlStream;
       const [msgId] = await ch.receiveRequestRaw();
       await ch.sendResponseRaw(msgId, Buffer.from("NotOk"));
     };
@@ -170,57 +170,57 @@ describe("handshake", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Channel allocation
+// Stream allocation
 // ---------------------------------------------------------------------------
 
-describe("channel allocation", () => {
-  it("new_channel before handshake throws", async () => {
+describe("stream allocation", () => {
+  it("new_stream before handshake throws", async () => {
     const [serverSock] = await socketPair();
-    const conn = new Connection(serverSock, { name: "Test" });
-    expect(() => conn.newChannel({ role: "test" })).toThrow(/Cannot create a new channel/);
+    const conn = new Connection(serverSock, serverSock, { name: "Test" });
+    expect(() => conn.newStream({ role: "test" })).toThrow(/Cannot create a new stream/);
     conn.close();
     serverSock.destroy();
   });
 
-  it("connect_channel before handshake throws", async () => {
+  it("connect_stream before handshake throws", async () => {
     const [serverSock] = await socketPair();
-    const conn = new Connection(serverSock, { name: "Test" });
-    expect(() => conn.connectChannel(1)).toThrow(/Cannot create a new channel/);
+    const conn = new Connection(serverSock, serverSock, { name: "Test" });
+    expect(() => conn.connectStream(1)).toThrow(/Cannot create a new stream/);
     conn.close();
     serverSock.destroy();
   });
 
-  it("client channels get odd IDs: 1, 3, 5", async () => {
+  it("client streams get odd IDs: 1, 3, 5", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
 
     await handshakePair(serverConn, clientConn);
 
-    const ch1 = clientConn.newChannel({ role: "A" });
-    const ch2 = clientConn.newChannel({ role: "B" });
-    const ch3 = clientConn.newChannel({ role: "C" });
+    const ch1 = clientConn.newStream({ role: "A" });
+    const ch2 = clientConn.newStream({ role: "B" });
+    const ch3 = clientConn.newStream({ role: "C" });
 
-    expect(ch1.channelId % 2).toBe(1);
-    expect(ch2.channelId % 2).toBe(1);
-    expect(ch3.channelId % 2).toBe(1);
-    expect(ch1.channelId).toBe(1);
-    expect(ch2.channelId).toBe(3);
-    expect(ch3.channelId).toBe(5);
+    expect(ch1.streamId % 2).toBe(1);
+    expect(ch2.streamId % 2).toBe(1);
+    expect(ch3.streamId % 2).toBe(1);
+    expect(ch1.streamId).toBe(1);
+    expect(ch2.streamId).toBe(3);
+    expect(ch3.streamId).toBe(5);
 
     clientConn.close();
     serverConn.close();
   });
 
-  it("connect_channel to already-connected channel throws", async () => {
+  it("connect_stream to already-connected stream throws", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
 
     await handshakePair(serverConn, clientConn);
 
-    // Channel 0 (control) already exists
-    expect(() => clientConn.connectChannel(0)).toThrow(/Channel already connected/);
+    // Stream 0 (control) already exists
+    expect(() => clientConn.connectStream(0)).toThrow(/Stream already connected/);
 
     clientConn.close();
     serverConn.close();
@@ -228,18 +228,18 @@ describe("channel allocation", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Channel close
+// Stream close
 // ---------------------------------------------------------------------------
 
-describe("channel close", () => {
+describe("stream close", () => {
   it("close is idempotent (can close twice)", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
 
     await handshakePair(serverConn, clientConn);
 
-    const ch = clientConn.newChannel({ role: "TestClose" });
+    const ch = clientConn.newStream({ role: "TestClose" });
     ch.close();
     expect(() => ch.close()).not.toThrow();
 
@@ -247,28 +247,28 @@ describe("channel close", () => {
     clientConn.close();
   });
 
-  it("closing channel when connection not live does not throw", async () => {
+  it("closing stream when connection not live does not throw", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
 
     await handshakePair(serverConn, clientConn);
 
-    const ch = clientConn.newChannel({ role: "TestClose" });
+    const ch = clientConn.newStream({ role: "TestClose" });
     clientConn.close();
     expect(() => ch.close()).not.toThrow();
 
     serverConn.close();
   });
 
-  it("receive_request on closed channel throws ConnectionError", async () => {
+  it("receive_request on closed stream throws ConnectionError", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
 
     await handshakePair(serverConn, clientConn);
 
-    const ch = clientConn.newChannel({ role: "TestClosed" });
+    const ch = clientConn.newStream({ role: "TestClosed" });
     ch.close();
 
     await expect(ch.receiveRequest({ timeoutMs: 100 })).rejects.toThrow(/is closed/);
@@ -282,15 +282,15 @@ describe("channel close", () => {
 // Timeout
 // ---------------------------------------------------------------------------
 
-describe("channel timeout", () => {
+describe("stream timeout", () => {
   it("receive_request times out when no message arrives", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
 
     await handshakePair(serverConn, clientConn);
 
-    const ch = clientConn.newChannel({ role: "TestTimeout" });
+    const ch = clientConn.newStream({ role: "TestTimeout" });
 
     await expect(ch.receiveRequest({ timeoutMs: 100 })).rejects.toThrow(/Timed out/);
 
@@ -306,8 +306,8 @@ describe("channel timeout", () => {
 describe("SHUTDOWN in inbox", () => {
   it("receiveRequest raises ConnectionError when SHUTDOWN is in inbox", async () => {
     const [serverSock] = await socketPair();
-    const conn = new Connection(serverSock, { name: "Test" });
-    const ch = conn.controlChannel;
+    const conn = new Connection(serverSock, serverSock, { name: "Test" });
+    const ch = conn.controlStream;
     ch.inbox.push(SHUTDOWN);
     await expect(ch.receiveRequest({ timeoutMs: 100 })).rejects.toThrow(/Connection closed/);
     conn.close();
@@ -322,21 +322,21 @@ describe("SHUTDOWN in inbox", () => {
 describe("request/response", () => {
   it("send_request and receive_response round-trip", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
 
     await handshakePair(serverConn, clientConn);
 
-    // Server creates a channel and handles one request
-    const serverCh = serverConn.newChannel({ role: "Handler" });
+    // Server creates a stream and handles one request
+    const serverCh = serverConn.newStream({ role: "Handler" });
     const serverHandle = (async () => {
       const [msgId, body] = await serverCh.receiveRequest();
       const msg = body as Record<string, number>;
       await serverCh.sendResponseValue(msgId, { sum: msg.x + msg.y });
     })();
 
-    // Client connects to that channel and sends a request
-    const clientCh = clientConn.connectChannel(serverCh.channelId);
+    // Client connects to that stream and sends a request
+    const clientCh = clientConn.connectStream(serverCh.streamId);
     const msgId = await clientCh.sendRequest({ x: 2, y: 3 });
     const result = await clientCh.receiveResponse(msgId);
     expect(result).toEqual({ sum: 5 });
@@ -348,19 +348,19 @@ describe("request/response", () => {
 
   it("PendingRequest.get() caches result on second call", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
 
     await handshakePair(serverConn, clientConn);
 
-    const serverCh = serverConn.newChannel({ role: "PR" });
+    const serverCh = serverConn.newStream({ role: "PR" });
     const serverHandle = (async () => {
       const [msgId, body] = await serverCh.receiveRequest();
       const msg = body as Record<string, number>;
       await serverCh.sendResponseValue(msgId, msg.value * 2);
     })();
 
-    const clientCh = clientConn.connectChannel(serverCh.channelId);
+    const clientCh = clientConn.connectStream(serverCh.streamId);
     const pending = clientCh.request({ value: 21 });
     expect(await pending.get()).toBe(42);
     expect(await pending.get()).toBe(42); // cached
@@ -372,20 +372,20 @@ describe("request/response", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Message to nonexistent channel
+// Message to nonexistent stream
 // ---------------------------------------------------------------------------
 
-describe("message to nonexistent channel", () => {
+describe("message to nonexistent stream", () => {
   it("sends error reply and continues working", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
 
     await handshakePair(serverConn, clientConn);
 
-    // Send a packet to a channel that does not exist on the server
+    // Send a packet to a stream that does not exist on the server
     const badPacket: Packet = {
-      channelId: 999,
+      streamId: 999,
       messageId: 1,
       isReply: false,
       payload: encodeValue({ command: "test" }),
@@ -393,8 +393,8 @@ describe("message to nonexistent channel", () => {
     await serverConn.sendPacket(badPacket);
 
     // Prove the connection is still alive by doing a normal exchange
-    await clientConn.controlChannel.sendRequestRaw(Buffer.from("ping"));
-    await serverConn.controlChannel.receiveRequestRaw();
+    await clientConn.controlStream.sendRequestRaw(Buffer.from("ping"));
+    await serverConn.controlStream.receiveRequestRaw();
 
     serverConn.close();
     clientConn.close();
@@ -413,20 +413,20 @@ describe("ConnectionState", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Coverage: Channel.close() when channel was replaced in the map
+// Coverage: Stream.close() when stream was replaced in the map
 // ---------------------------------------------------------------------------
 
-describe("Channel.close() on replaced channel", () => {
-  it("sets _closed without sending a packet when channel is no longer in map", async () => {
+describe("Stream.close() on replaced stream", () => {
+  it("sets _closed without sending a packet when stream is no longer in map", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
     await handshakePair(serverConn, clientConn);
 
-    const ch = clientConn.newChannel({ role: "OldCh" });
-    // Replace channel in map with a dead marker (as _dispatch does after close-channel message)
-    clientConn.channels.set(ch.channelId, "dead:OldCh");
-    // close() should set _closed but not throw (channel is no longer the current holder)
+    const ch = clientConn.newStream({ role: "OldCh" });
+    // Replace stream in map with a dead marker (as _dispatch does after close-stream message)
+    clientConn.streams.set(ch.streamId, "dead:OldCh");
+    // close() should set _closed but not throw (stream is no longer the current holder)
     expect(() => ch.close()).not.toThrow();
 
     clientConn.close();
@@ -435,20 +435,20 @@ describe("Channel.close() on replaced channel", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Coverage: _waitForMessage post-loop closed-channel error (SHUTDOWN via close())
+// Coverage: _waitForMessage post-loop closed-stream error (SHUTDOWN via close())
 // ---------------------------------------------------------------------------
 
-describe("_waitForMessage post-loop closed via channel.close()", () => {
-  it("raises channel-closed error when channel is closed while waiting", async () => {
+describe("_waitForMessage post-loop closed via stream.close()", () => {
+  it("raises stream-closed error when stream is closed while waiting", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
     await handshakePair(serverConn, clientConn);
 
-    const ch = clientConn.newChannel({ role: "WaitCh" });
-    // Wait for a message, then close the channel after a short delay
+    const ch = clientConn.newStream({ role: "WaitCh" });
+    // Wait for a message, then close the stream after a short delay
     const waiter = ch.receiveRequest({ timeoutMs: 500 }).catch((e: unknown) => e);
-    // Close the channel quickly — this sets _closed on the channel
+    // Close the stream quickly — this sets _closed on the stream
     setTimeout(() => ch.close(), 50);
     const err = await waiter;
     expect(err).toBeInstanceOf(Error);
@@ -466,11 +466,11 @@ describe("_waitForMessage post-loop closed via channel.close()", () => {
 describe("_waitForMessage SHUTDOWN mid-wait", () => {
   it("raises Connection closed when peer drops the connection while waiting", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
     await handshakePair(serverConn, clientConn);
 
-    const clientCh = clientConn.newChannel({ role: "WaitForShutdown" });
+    const clientCh = clientConn.newStream({ role: "WaitForShutdown" });
     // Start waiting for a message
     const waiter = clientCh.receiveRequest({ timeoutMs: 500 }).catch((e: unknown) => e);
     // Drop the server side, causing EOF on client
@@ -490,11 +490,11 @@ describe("_waitForMessage SHUTDOWN mid-wait", () => {
 describe("_waitForMessage SHUTDOWN during while loop", () => {
   it("raises Connection closed when SHUTDOWN is injected mid-loop", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
     await handshakePair(serverConn, clientConn);
 
-    const ch = clientConn.newChannel({ role: "ShutdownInLoop" });
+    const ch = clientConn.newStream({ role: "ShutdownInLoop" });
     // Start waiting for a message
     const waiter = ch.receiveRequest({ timeoutMs: 2000 }).catch((e: unknown) => e);
     // After a short delay, inject SHUTDOWN directly into the inbox.
@@ -513,77 +513,48 @@ describe("_waitForMessage SHUTDOWN during while loop", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Coverage: runReader with until() already true
+// Coverage: _dispatch with close-stream payload
 // ---------------------------------------------------------------------------
 
-describe("runReader with until already true", () => {
-  it("returns immediately when until() is true at call time", async () => {
-    const [serverSock] = await socketPair();
-    const conn = new Connection(serverSock, { name: "Test" });
-    // until() always true → runReader should return immediately
-    await expect(conn.runReader(() => true)).resolves.toBeUndefined();
-    conn.close();
-    serverSock.destroy();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Coverage: _dispatch with close-channel payload
-// ---------------------------------------------------------------------------
-
-describe("dispatch close-channel payload", () => {
-  it("marks channel as dead when close-channel packet is received", async () => {
+describe("dispatch close-stream payload", () => {
+  it("marks stream as dead when close-stream packet is received", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
     await handshakePair(serverConn, clientConn);
 
-    const serverCh = serverConn.newChannel({ role: "ToClose" });
-    const clientCh = clientConn.connectChannel(serverCh.channelId);
+    const serverCh = serverConn.newStream({ role: "ToClose" });
+    const clientCh = clientConn.connectStream(serverCh.streamId);
 
-    // Client closes the channel, sending a close-channel packet to the server.
+    // Client closes the stream, sending a close-stream packet to the server.
     clientCh.close();
 
-    // Server needs to receive the close-channel packet.
-    // Wait a moment for it to arrive, then check the channel map.
-    await new Promise<void>((resolve) => setTimeout(resolve, 100));
-    // Trigger a read on the server so it processes the close-channel packet
-    serverConn
-      .runReader(() => {
-        const v = serverConn.channels.get(serverCh.channelId);
-        return typeof v === "string"; // true when channel is dead
-      })
-      .catch(() => {});
-
-    // Give it time to process
-    await new Promise<void>((resolve) => setTimeout(resolve, 150));
-    const v = serverConn.channels.get(serverCh.channelId);
-    expect(typeof v === "string").toBe(true);
+    // Background reader on serverConn will process the close-stream packet.
+    // Wait for it to be dispatched.
+    await vi.waitFor(() => {
+      const v = serverConn.streams.get(serverCh.streamId);
+      expect(typeof v === "string").toBe(true);
+    });
 
     serverConn.close();
     clientConn.close();
   });
 
-  it("marks channel as dead even when no channel exists for that ID", async () => {
+  it("marks stream as dead even when no stream exists for that ID", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
     await handshakePair(serverConn, clientConn);
 
-    // Create a channel on the client, but DON'T connect it on the server.
-    // When client sends close-channel, server has no channel for that ID.
-    const clientCh = clientConn.newChannel({ role: "Ghost" });
-    clientCh.close(); // sends CLOSE_CHANNEL_PAYLOAD to server
+    // Create a stream on the client, but DON'T connect it on the server.
+    // When client sends close-stream, server has no stream for that ID.
+    const clientCh = clientConn.newStream({ role: "Ghost" });
+    clientCh.close(); // sends CLOSE_STREAM_PAYLOAD to server
 
-    // The server should dispatch this to _dispatch(), see it's a close-channel
-    // packet for a non-existent channel, and still mark it dead.
-    await new Promise<void>((resolve) => setTimeout(resolve, 150));
-    await serverConn
-      .runReader(() => {
-        return serverConn.channels.has(clientCh.channelId);
-      })
-      .catch(() => {});
-    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    // Background reader on serverConn dispatches the close-stream packet.
+    await vi.waitFor(() => {
+      expect(serverConn.streams.has(clientCh.streamId)).toBe(true);
+    });
 
     // Connection still alive
     expect(serverConn.live).toBe(true);
@@ -593,21 +564,21 @@ describe("dispatch close-channel payload", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Coverage: message to closed (dead) channel
+// Coverage: message to closed (dead) stream
 // ---------------------------------------------------------------------------
 
-describe("message to dead channel", () => {
-  it("sends error reply for request to closed channel", async () => {
+describe("message to dead stream", () => {
+  it("sends error reply for request to closed stream", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
     await handshakePair(serverConn, clientConn);
 
-    const serverCh = serverConn.newChannel({ role: "DeadCh" });
-    const clientCh = clientConn.connectChannel(serverCh.channelId);
+    const serverCh = serverConn.newStream({ role: "DeadCh" });
+    const clientCh = clientConn.connectStream(serverCh.streamId);
 
-    // Mark the channel as dead on server side
-    serverConn.channels.set(serverCh.channelId, "dead:DeadCh");
+    // Mark the stream as dead on server side
+    serverConn.streams.set(serverCh.streamId, "dead:DeadCh");
 
     // Send a request from client — server should reply with error
     await expect(clientCh.request({ x: 1 }).get()).rejects.toThrow(RequestError);
@@ -616,30 +587,30 @@ describe("message to dead channel", () => {
     clientConn.close();
   });
 
-  it("silently drops reply packet to dead channel (isReply=true)", async () => {
+  it("silently drops reply packet to dead stream (isReply=true)", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
     await handshakePair(serverConn, clientConn);
 
-    const serverCh = serverConn.newChannel({ role: "DeadReply" });
+    const serverCh = serverConn.newStream({ role: "DeadReply" });
     // Mark as dead on server
-    serverConn.channels.set(serverCh.channelId, "dead:DeadReply");
+    serverConn.streams.set(serverCh.streamId, "dead:DeadReply");
 
-    // Create a second channel to receive a real request after the dead-reply packet.
-    // The reader will read both: the reply to the dead channel (silently dropped),
-    // then the real request to the live channel.
-    const serverCh2 = serverConn.newChannel({ role: "LiveCh" });
-    const clientCh2 = clientConn.connectChannel(serverCh2.channelId);
+    // Create a second stream to receive a real request after the dead-reply packet.
+    // The reader will read both: the reply to the dead stream (silently dropped),
+    // then the real request to the live stream.
+    const serverCh2 = serverConn.newStream({ role: "LiveCh" });
+    const clientCh2 = clientConn.connectStream(serverCh2.streamId);
 
-    // Send a REPLY from client to the dead channel first
+    // Send a REPLY from client to the dead stream first
     await clientConn.sendPacket({
-      channelId: serverCh.channelId,
+      streamId: serverCh.streamId,
       messageId: 1,
       isReply: true,
       payload: encodeValue({ result: "nope" }),
     });
-    // Then send a real request to the live channel
+    // Then send a real request to the live stream
     await clientCh2.sendRequest({ ping: true });
 
     // Server reads both: drops the dead reply, delivers the request
@@ -652,19 +623,19 @@ describe("message to dead channel", () => {
     clientConn.close();
   });
 
-  it("swallows sendPacket error when socket fails during error reply to dead channel", async () => {
+  it("swallows sendPacket error when socket fails during error reply to dead stream", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
     await handshakePair(serverConn, clientConn);
 
-    // Create a live channel for the server to wait on
-    const serverLive = serverConn.newChannel({ role: "Live" });
-    const clientLive = clientConn.connectChannel(serverLive.channelId);
+    // Create a live stream for the server to wait on
+    const serverLive = serverConn.newStream({ role: "Live" });
+    const clientLive = clientConn.connectStream(serverLive.streamId);
 
-    // Create a dead channel
-    const serverCh = serverConn.newChannel({ role: "FailReply" });
-    serverConn.channels.set(serverCh.channelId, "dead:FailReply");
+    // Create a dead stream
+    const serverCh = serverConn.newStream({ role: "FailReply" });
+    serverConn.streams.set(serverCh.streamId, "dead:FailReply");
 
     // Monkey-patch sendPacket on the server connection to make it fail once.
     // This causes the error-reply sendPacket in _dispatch to reject,
@@ -679,19 +650,19 @@ describe("message to dead channel", () => {
       return origSendPacket(pkt);
     };
 
-    // Send a request to the dead channel — reader will dispatch it,
+    // Send a request to the dead stream — reader will dispatch it,
     // sendPacket() will fail (mocked), .catch() fires.
     await clientConn.sendPacket({
-      channelId: serverCh.channelId,
+      streamId: serverCh.streamId,
       messageId: 1,
       isReply: false,
       payload: encodeValue({ command: "test" }),
     });
-    // Send a live-channel request to unblock the server's receive after the dead one
+    // Send a live-stream request to unblock the server's receive after the dead one
     await clientLive.sendRequest({ ping: true });
 
-    // Server reads both packets; the dead-channel error reply fails (caught by .catch),
-    // then the live-channel request arrives.
+    // Server reads both packets; the dead-stream error reply fails (caught by .catch),
+    // then the live-stream request arrives.
     const [msgId] = await serverLive.receiveRequest({ timeoutMs: 1000 });
     // Restore sendPacket before sending response
     serverConn.sendPacket = origSendPacket;
@@ -712,14 +683,14 @@ describe("message to dead channel", () => {
 describe("_waitForMessage data already ready", () => {
   it("returns immediately when inbox has data before waiting", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
     await handshakePair(serverConn, clientConn);
 
     // Pre-populate the inbox with a packet so receiveRequest returns immediately.
-    const serverCh = serverConn.newChannel({ role: "PreReady" });
+    const serverCh = serverConn.newStream({ role: "PreReady" });
     const packet: Packet = {
-      channelId: serverCh.channelId,
+      streamId: serverCh.streamId,
       messageId: 1,
       isReply: false,
       payload: encodeValue({ v: 42 }),
@@ -742,11 +713,11 @@ describe("_waitForMessage data already ready", () => {
 describe("request() on dead socket", () => {
   it("swallows sendPacket error when socket is closed", async () => {
     const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, { name: "Client" });
+    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
+    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
     await handshakePair(serverConn, clientConn);
 
-    const ch = clientConn.newChannel({ role: "DeadReq" });
+    const ch = clientConn.newStream({ role: "DeadReq" });
     // Destroy the socket so sendPacket will fail
     clientSock.destroy();
     // request() must not throw — the .catch swallows the error

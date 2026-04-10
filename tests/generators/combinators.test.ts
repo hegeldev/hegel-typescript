@@ -57,7 +57,7 @@ describe("tuples2()", () => {
     const elems = schema["elements"] as Record<string, unknown>[];
     // Raw schemas — NOT the transformed schemas
     expect(elems[0]).toMatchObject({ type: "integer", min_value: 0, max_value: 10 });
-    expect(elems[1]).toMatchObject({ const: null });
+    expect(elems[1]).toMatchObject({ type: "constant", value: null });
     // A combined transform must exist
     expect(gen._transform).not.toBeNull();
   });
@@ -255,8 +255,8 @@ describe("oneOf() — Path 1 (all basic, no transforms)", () => {
     const gen = oneOf(integers(), booleans());
     expect(gen).toBeInstanceOf(BasicGenerator);
     const schema = (gen as BasicGenerator<unknown>).schema();
-    expect(schema).toHaveProperty("one_of");
-    const branches = schema["one_of"] as unknown[];
+    expect(schema["type"]).toBe("one_of");
+    const branches = schema["generators"] as unknown[];
     expect(branches).toHaveLength(2);
     // Neither branch should be a tagged tuple
     for (const branch of branches) {
@@ -317,15 +317,15 @@ describe("oneOf() — Path 2 (all basic, with transforms)", () => {
     const combined = oneOf(gen1, gen2);
     expect(combined).toBeInstanceOf(BasicGenerator);
     const schema = (combined as BasicGenerator<unknown>).schema();
-    expect(schema).toHaveProperty("one_of");
-    const branches = schema["one_of"] as unknown[];
+    expect(schema["type"]).toBe("one_of");
+    const branches = schema["generators"] as unknown[];
     expect(branches).toHaveLength(2);
     // Each branch should be a tagged tuple
     for (let i = 0; i < branches.length; i++) {
       const branch = branches[i] as Record<string, unknown>;
       expect(branch["type"]).toBe("tuple");
       const elements = branch["elements"] as unknown[];
-      expect(elements[0]).toEqual({ const: i });
+      expect(elements[0]).toEqual({ type: "constant", value: i });
     }
   });
 
@@ -352,7 +352,7 @@ describe("oneOf() — Path 2 (all basic, with transforms)", () => {
     const combined = oneOf(gen1, gen2);
     expect(combined).toBeInstanceOf(BasicGenerator);
     const schema = (combined as BasicGenerator<unknown>).schema();
-    const branches = schema["one_of"] as unknown[];
+    const branches = schema["generators"] as unknown[];
     // Should use tagged tuples since one branch has a transform
     expect((branches[0] as Record<string, unknown>)["type"]).toBe("tuple");
   });
@@ -507,7 +507,7 @@ describe("ipAddresses()", () => {
     // oneOf(ipAddresses(4), ipAddresses(6)) where both are basic with no transforms → Path 1
     expect(gen).toBeInstanceOf(BasicGenerator);
     const schema = (gen as BasicGenerator<string>).schema();
-    expect(schema).toHaveProperty("one_of");
+    expect(schema["type"]).toBe("one_of");
   });
 
   it("v4: generates strings with dots (IPv4 format) via live server", async () => {

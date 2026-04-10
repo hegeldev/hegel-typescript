@@ -85,13 +85,36 @@ export function booleans(): BasicGenerator<boolean> {
   return new BasicGenerator<boolean>({ type: "boolean" });
 }
 
+/** Character filtering options for {@link text} and {@link fromRegex}. */
+export interface CharacterOptions {
+  /** Restrict to characters encodable in this codec (e.g. `"ascii"`, `"utf-8"`). */
+  codec?: string;
+  /** Minimum Unicode codepoint. */
+  minCodepoint?: number;
+  /** Maximum Unicode codepoint. */
+  maxCodepoint?: number;
+  /** Include only characters from these Unicode general categories (e.g. `["L", "Nd"]`). Mutually exclusive with `excludeCategories`. */
+  categories?: string[];
+  /** Exclude characters from these Unicode general categories. Mutually exclusive with `categories`. */
+  excludeCategories?: string[];
+  /** Always include these characters regardless of other constraints. */
+  includeCharacters?: string;
+  /** Exclude these characters. */
+  excludeCharacters?: string;
+}
+
 /**
  * Generate text strings.
  *
  * @param minSize - Minimum number of Unicode codepoints. Defaults to 0.
  * @param maxSize - Maximum number of Unicode codepoints, or null for unbounded.
+ * @param opts - Character filtering options.
  */
-export function text(minSize = 0, maxSize: number | null = null): BasicGenerator<string> {
+export function text(
+  minSize = 0,
+  maxSize: number | null = null,
+  opts: CharacterOptions = {},
+): BasicGenerator<string> {
   if (minSize < 0) {
     throw new Error(`min_size=${minSize} must be non-negative`);
   }
@@ -103,6 +126,13 @@ export function text(minSize = 0, maxSize: number | null = null): BasicGenerator
   }
   const schema: Record<string, unknown> = { type: "string", min_size: minSize };
   if (maxSize !== null) schema["max_size"] = maxSize;
+  if (opts.codec !== undefined) schema["codec"] = opts.codec;
+  if (opts.minCodepoint !== undefined) schema["min_codepoint"] = opts.minCodepoint;
+  if (opts.maxCodepoint !== undefined) schema["max_codepoint"] = opts.maxCodepoint;
+  if (opts.categories !== undefined) schema["categories"] = opts.categories;
+  if (opts.excludeCategories !== undefined) schema["exclude_categories"] = opts.excludeCategories;
+  if (opts.includeCharacters !== undefined) schema["include_characters"] = opts.includeCharacters;
+  if (opts.excludeCharacters !== undefined) schema["exclude_characters"] = opts.excludeCharacters;
   return new BasicGenerator<string>(schema);
 }
 
@@ -136,7 +166,7 @@ export function binary(minSize = 0, maxSize: number | null = null): BasicGenerat
  * @param value - The constant to always return.
  */
 export function just<T>(value: T): BasicGenerator<T> {
-  return new BasicGenerator<T>({ const: null }, (_raw) => value);
+  return new BasicGenerator<T>({ type: "constant", value: null }, (_raw) => value);
 }
 
 /**

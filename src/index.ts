@@ -1,10 +1,10 @@
 /**
- * Hegel property-based testing SDK for TypeScript.
+ * Hegel property-based testing library for TypeScript.
  *
  * @packageDocumentation
  */
 
-/** Returns the version of the Hegel TypeScript SDK. */
+/** Returns the version of the Hegel library. */
 export function version(): string {
   return "0.1.0";
 }
@@ -52,6 +52,8 @@ export {
   ipAddresses,
   dicts,
 } from "./generators/index.js";
+
+export type { CharacterOptions } from "./generators/index.js";
 
 // Type-directed derivation
 export {

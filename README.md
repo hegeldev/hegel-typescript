@@ -1,6 +1,6 @@
 # hegel-typescript
 
-A TypeScript SDK for [Hegel](https://github.com/antithesishq/hegel-core) —
+A TypeScript library for [Hegel](https://github.com/hegeldev/hegel-core) —
 universal property-based testing powered by
 [Hypothesis](https://hypothesis.works/).
 
@@ -13,10 +13,10 @@ shrinks them to minimal counterexamples.
 npm install "git+ssh://git@github.com/antithesishq/hegel-typescript.git"
 ```
 
-The SDK requires the `hegel` CLI on your PATH:
+The library requires the `hegel` CLI on your PATH:
 
 ```bash
-pip install "hegel @ git+ssh://git@github.com/antithesishq/hegel-core.git"
+pip install hegel-core
 ```
 
 ## Quick Start

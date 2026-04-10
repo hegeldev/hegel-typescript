@@ -1,5 +1,5 @@
 /**
- * Type-directed generator derivation for the Hegel SDK.
+ * Type-directed generator derivation for the Hegel library.
  *
  * TypeScript erases interface and type information at compile time, but
  * **classes** persist at runtime with real constructors and field names.
