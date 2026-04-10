@@ -261,15 +261,15 @@ export function writePacket(writer: stream.Writable, packet: Packet): Promise<vo
 // CBOR helpers
 // ---------------------------------------------------------------------------
 
-// Register CBOR Tag 6 (hegel string): the server wraps all string values as
-// Tag 6 containing WTF-8 encoded bytes. WTF-8 is like UTF-8 but allows lone
+// Register CBOR Tag 91 (hegel string): the server wraps all string values as
+// Tag 91 containing WTF-8 encoded bytes. WTF-8 is like UTF-8 but allows lone
 // surrogate codepoints (U+D800-U+DFFF), which JS strings can represent natively.
 import { wtf8ToString } from "./wtf8.js";
 
-/** Sentinel class for CBOR Tag 6 (hegel string). Decode-only — never instantiated. */
+/** Sentinel class for CBOR Tag 91 (hegel string). Decode-only — never instantiated. */
 export class _HegelString {}
 addExtension({
-  tag: 6,
+  tag: 91,
   Class: _HegelString,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   encode: () => null as any,
