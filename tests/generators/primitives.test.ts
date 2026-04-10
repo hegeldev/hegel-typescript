@@ -5,6 +5,7 @@ import {
   floats,
   booleans,
   text,
+  characters,
   binary,
   just,
   sampledFrom,
@@ -597,6 +598,24 @@ describe("text()", () => {
       },
       { testCases: 20 },
     );
+  });
+});
+
+describe("characters()", () => {
+  it("returns a BasicGenerator with type=string, min_size=1, max_size=1", () => {
+    const gen = characters();
+    expect(gen).toBeInstanceOf(BasicGenerator);
+    expect(gen.schema()).toEqual({ type: "string", min_size: 1, max_size: 1 });
+  });
+
+  it("passes character options through to text()", () => {
+    const gen = characters({ codec: "ascii", minCodepoint: 65, maxCodepoint: 90 });
+    const schema = gen.schema();
+    expect(schema["min_size"]).toBe(1);
+    expect(schema["max_size"]).toBe(1);
+    expect(schema["codec"]).toBe("ascii");
+    expect(schema["min_codepoint"]).toBe(65);
+    expect(schema["max_codepoint"]).toBe(90);
   });
 });
 

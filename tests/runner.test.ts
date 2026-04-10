@@ -27,6 +27,7 @@ import {
   Client,
   Labels,
   _testContextStorage,
+  compareVersions,
   extractOrigin,
   generateFromSchema,
   startSpan,
@@ -855,5 +856,37 @@ describe("draw", () => {
   it("throws RuntimeError outside test context", async () => {
     const gen = new BasicGenerator({ type: "boolean" });
     await expect(draw(gen)).rejects.toThrow("draw() cannot be called outside of a Hegel test");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// compareVersions
+// ---------------------------------------------------------------------------
+
+describe("compareVersions", () => {
+  it("throws on invalid version string", () => {
+    expect(() => compareVersions("bad", "0.10")).toThrow(
+      "invalid version string 'bad': expected 'major.minor' format",
+    );
+  });
+
+  it("returns 0 for equal versions", () => {
+    expect(compareVersions("0.10", "0.10")).toBe(0);
+  });
+
+  it("returns -1 when major is less", () => {
+    expect(compareVersions("0.10", "1.0")).toBe(-1);
+  });
+
+  it("returns 1 when major is greater", () => {
+    expect(compareVersions("2.0", "1.0")).toBe(1);
+  });
+
+  it("returns -1 when minor is less", () => {
+    expect(compareVersions("0.9", "0.10")).toBe(-1);
+  });
+
+  it("returns 1 when minor is greater", () => {
+    expect(compareVersions("0.11", "0.10")).toBe(1);
   });
 });

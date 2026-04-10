@@ -21,7 +21,7 @@ const SUPPORTED_PROTOCOL_LO = "0.10";
 const SUPPORTED_PROTOCOL_HI = "0.10";
 
 /** Compare two "major.minor" version strings numerically. Returns -1, 0, or 1. */
-function compareVersions(a: string, b: string): number {
+export function compareVersions(a: string, b: string): number {
   const parse = (s: string): [number, number] => {
     const match = /^(\d+)\.(\d+)$/.exec(s);
     if (!match) {
