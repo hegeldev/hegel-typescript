@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.5 - 2026-04-10
+
+Update to new protocol version.
+
 ## 0.2.4 - 2026-03-11
 
 Add validation to generator arguments.
