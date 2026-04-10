@@ -59,4 +59,5 @@ check-conformance: build-conformance
 # forms.
 test: check-test
 lint: check-format check-lint
+conformance: check-conformance
 check: lint check-docs check-test
