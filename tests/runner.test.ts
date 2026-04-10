@@ -39,7 +39,7 @@ import {
 
 /**
  * Raw handshake responder: reads the handshake request from the control stream
- * and replies with "Hegel/0.3". Sets the connection to CLIENT state with a high
+ * and replies with "Hegel/0.10". Sets the connection to CLIENT state with a high
  * stream ID base to avoid collisions with the actual client side.
  */
 async function rawHandshakeResponder(conn: Connection): Promise<void> {
@@ -48,7 +48,7 @@ async function rawHandshakeResponder(conn: Connection): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (conn as any)._nextStreamId = 1000;
   const [msgId] = await conn.controlStream.receiveRequestRaw();
-  await conn.controlStream.sendResponseRaw(msgId, Buffer.from("Hegel/0.3"));
+  await conn.controlStream.sendResponseRaw(msgId, Buffer.from("Hegel/0.10"));
 }
 
 /** Create a connected TCP socket pair for in-process tests. */

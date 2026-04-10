@@ -17,8 +17,26 @@ import type { Generator } from "./generators/index.js";
 // Supported protocol version range
 // ---------------------------------------------------------------------------
 
-const SUPPORTED_PROTOCOL_LO = 0.9;
-const SUPPORTED_PROTOCOL_HI = 0.9;
+const SUPPORTED_PROTOCOL_LO = "0.10";
+const SUPPORTED_PROTOCOL_HI = "0.10";
+
+/** Compare two "major.minor" version strings numerically. Returns -1, 0, or 1. */
+function compareVersions(a: string, b: string): number {
+  const parse = (s: string): [number, number] => {
+    const match = /^(\d+)\.(\d+)$/.exec(s);
+    if (!match) {
+      throw new Error(
+        `invalid version string '${s}': expected 'major.minor' format`,
+      );
+    }
+    return [Number(match[1]), Number(match[2])];
+  };
+  const [aMajor, aMinor] = parse(a);
+  const [bMajor, bMinor] = parse(b);
+  if (aMajor !== bMajor) return aMajor < bMajor ? -1 : 1;
+  if (aMinor !== bMinor) return aMinor < bMinor ? -1 : 1;
+  return 0;
+}
 
 // ---------------------------------------------------------------------------
 // Error classes
@@ -134,9 +152,11 @@ export class Client {
    * @throws {ConnectionError} If the server's protocol version is unsupported.
    */
   static async create(connection: Connection): Promise<Client> {
-    const versionStr = await connection.sendHandshake();
-    const version = parseFloat(versionStr);
-    if (version < SUPPORTED_PROTOCOL_LO || version > SUPPORTED_PROTOCOL_HI) {
+    const version = await connection.sendHandshake();
+    if (
+      compareVersions(version, SUPPORTED_PROTOCOL_LO) < 0 ||
+      compareVersions(version, SUPPORTED_PROTOCOL_HI) > 0
+    ) {
       throw new ConnectionError(
         `hegel supports protocol versions ${SUPPORTED_PROTOCOL_LO} through ` +
           `${SUPPORTED_PROTOCOL_HI}, but got server version ${version}.`,
