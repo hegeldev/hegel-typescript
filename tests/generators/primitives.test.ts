@@ -567,6 +567,25 @@ describe("text()", () => {
     expect(schema["max_size"]).toBe(10);
   });
 
+  it("schema includes character options when provided", () => {
+    const schema = text(0, null, {
+      codec: "ascii",
+      minCodepoint: 32,
+      maxCodepoint: 126,
+      categories: ["L", "Nd"],
+      excludeCategories: ["Cs"],
+      includeCharacters: "xyz",
+      excludeCharacters: "abc",
+    }).schema();
+    expect(schema["codec"]).toBe("ascii");
+    expect(schema["min_codepoint"]).toBe(32);
+    expect(schema["max_codepoint"]).toBe(126);
+    expect(schema["categories"]).toEqual(["L", "Nd"]);
+    expect(schema["exclude_categories"]).toEqual(["Cs"]);
+    expect(schema["include_characters"]).toBe("xyz");
+    expect(schema["exclude_characters"]).toBe("abc");
+  });
+
   it("generates strings via live server", async () => {
     await runHegelTest(
       async () => {

@@ -53,6 +53,8 @@ export {
   dicts,
 } from "./generators/index.js";
 
+export type { CharacterOptions } from "./generators/index.js";
+
 // Type-directed derivation
 export {
   field,
