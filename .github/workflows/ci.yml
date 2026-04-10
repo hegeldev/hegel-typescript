@@ -116,7 +116,7 @@ jobs:
 
   release:
     name: release
-    if: github.event_name == 'push' && github.repository == 'antithesishq/hegel-typescript'
+    if: github.event_name == 'push' && github.repository == 'hegeldev/hegel-typescript'
     needs: [lint, test, docs, conformance]
     runs-on: ubuntu-latest
     permissions:
