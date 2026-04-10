@@ -1,5 +1,7 @@
 .claude/plan.md
 .claude/settings.local.json
+.claude/local/
+CLAUDE.local.md
 
 .venv/
 .hegel/

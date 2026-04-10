@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4 - 2026-03-11
+
+Add validation to generator arguments.
+
 ## 0.2.3 - 2026-03-04
 
 Reorganize generators, and rename package from `hegel-typescript` to `hegel`.
