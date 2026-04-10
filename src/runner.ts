@@ -25,9 +25,7 @@ function compareVersions(a: string, b: string): number {
   const parse = (s: string): [number, number] => {
     const match = /^(\d+)\.(\d+)$/.exec(s);
     if (!match) {
-      throw new Error(
-        `invalid version string '${s}': expected 'major.minor' format`,
-      );
+      throw new Error(`invalid version string '${s}': expected 'major.minor' format`);
     }
     return [Number(match[1]), Number(match[2])];
   };
