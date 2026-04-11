@@ -4,7 +4,7 @@
  * Params (JSON from argv[1]):
  *   { min_size?: number, max_size?: number|null,
  *     min_value?: number|null, max_value?: number|null }
- * Metrics: { elements: number[] }
+ * Metrics: { size: number, min_element: number|null, max_element: number|null }
  *
  * Uses CompositeListGenerator (via .filter) so the collection protocol is
  * exercised — this is required for stop_test_on_collection_more and
@@ -37,7 +37,12 @@ const gen = lists(elemGen, minSize, maxSize);
 await runHegelTest(
   async function conformance_lists() {
     const items = await draw(gen);
-    writeMetrics({ elements: items });
+    const size = items.length;
+    writeMetrics({
+      size,
+      min_element: size > 0 ? Math.min(...items) : null,
+      max_element: size > 0 ? Math.max(...items) : null,
+    });
   },
   { testCases },
 );
