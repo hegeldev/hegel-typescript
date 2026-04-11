@@ -9,6 +9,22 @@
  */
 
 import * as fs from "node:fs";
+import type { Generator } from "./generators/index.js";
+
+// ---------------------------------------------------------------------------
+// makeNonBasic
+// ---------------------------------------------------------------------------
+
+/**
+ * Wrap a generator so it loses its schema, forcing the compositional
+ * fallback path. Used by conformance binaries when `mode` is `"non_basic"`.
+ *
+ * @param gen - The generator to wrap.
+ * @returns A new generator that always uses the compositional path.
+ */
+export function makeNonBasic<T>(gen: Generator<T>): Generator<T> {
+  return gen.filter(() => true);
+}
 
 // ---------------------------------------------------------------------------
 // getTestCases

@@ -11,12 +11,13 @@
  *     min_value: number|null, max_value: number|null }
  */
 
-import { getTestCases, writeMetrics } from "../src/conformance.js";
+import { getTestCases, makeNonBasic, writeMetrics } from "../src/conformance.js";
 import { dicts, integers, text } from "../src/generators/index.js";
 import { draw } from "../src/runner.js";
 import { runHegelTest } from "../src/session.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
+const mode = (params["mode"] as string | undefined) ?? "basic";
 
 const minSize = params["min_size"] != null ? Number(params["min_size"]) : 0;
 const maxSize = params["max_size"] != null ? Number(params["max_size"]) : 10;
@@ -28,8 +29,10 @@ const maxVal = params["max_value"] != null ? Number(params["max_value"]) : 1000;
 
 const testCases = getTestCases();
 
-const keysGen = keyType === "string" ? text() : integers(minKey, maxKey);
-const valsGen = integers(minVal, maxVal);
+const baseKeysGen = keyType === "string" ? text() : integers(minKey, maxKey);
+const baseValsGen = integers(minVal, maxVal);
+const keysGen = mode === "non_basic" ? makeNonBasic(baseKeysGen) : baseKeysGen;
+const valsGen = mode === "non_basic" ? makeNonBasic(baseValsGen) : baseValsGen;
 const gen = dicts(keysGen, valsGen, minSize, maxSize);
 
 await runHegelTest(

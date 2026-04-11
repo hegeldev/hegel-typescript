@@ -11,12 +11,13 @@
  * stop_test_on_new_collection conformance tests to work correctly.
  */
 
-import { getTestCases, writeMetrics } from "../src/conformance.js";
+import { getTestCases, makeNonBasic, writeMetrics } from "../src/conformance.js";
 import { integers, lists } from "../src/generators/index.js";
 import { draw } from "../src/runner.js";
 import { runHegelTest } from "../src/session.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
+const mode = (params["mode"] as string | undefined) ?? "basic";
 
 const minSize = params["min_size"] != null ? Number(params["min_size"]) : 0;
 const maxSize = params["max_size"] != null ? Number(params["max_size"]) : null;
@@ -24,9 +25,13 @@ const minValue = params["min_value"] != null ? Number(params["min_value"]) : nul
 const maxValue = params["max_value"] != null ? Number(params["max_value"]) : null;
 
 const testCases = getTestCases();
-// Use .filter(() => true) to force CompositeListGenerator (collection protocol),
-// which is required for stop_test_on_collection_more/new_collection test modes.
-const elemGen = integers(minValue, maxValue).filter(() => true);
+// Force non-basic (collection protocol) when mode is "non_basic" or when the
+// HEGEL_PROTOCOL_TEST_MODE requires the collection protocol (stop_test_on_collection_more
+// and stop_test_on_new_collection).
+const testMode = process.env["HEGEL_PROTOCOL_TEST_MODE"] ?? "";
+const needsNonBasic = mode === "non_basic" || testMode.includes("collection");
+const baseElemGen = integers(minValue, maxValue);
+const elemGen = needsNonBasic ? makeNonBasic(baseElemGen) : baseElemGen;
 const gen = lists(elemGen, minSize, maxSize);
 
 await runHegelTest(
