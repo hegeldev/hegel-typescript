@@ -7,13 +7,12 @@
  * Metrics: { codepoints: number[] }  (Unicode codepoint values)
  */
 
-import { getTestCases, makeNonBasic, writeMetrics } from "../src/conformance.js";
+import { getTestCases, writeMetrics } from "../src/conformance.js";
 import { text, CharacterOptions } from "../src/generators/index.js";
 import { draw } from "../src/runner.js";
 import { runHegelTest } from "../src/session.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
-const mode = (params["mode"] as string | undefined) ?? "basic";
 
 const minSize = params["min_size"] != null ? Number(params["min_size"]) : 0;
 const maxSize = params["max_size"] != null ? Number(params["max_size"]) : null;
@@ -31,8 +30,7 @@ if (params["exclude_characters"] != null)
   opts.excludeCharacters = String(params["exclude_characters"]);
 
 const testCases = getTestCases();
-const baseGen = text(minSize, maxSize, opts);
-const gen = mode === "non_basic" ? makeNonBasic(baseGen) : baseGen;
+const gen = text(minSize, maxSize, opts);
 
 await runHegelTest(
   async function conformance_text() {

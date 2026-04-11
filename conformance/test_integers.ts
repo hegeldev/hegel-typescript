@@ -5,20 +5,18 @@
  * Metrics: { value: number }
  */
 
-import { getTestCases, makeNonBasic, writeMetrics } from "../src/conformance.js";
+import { getTestCases, writeMetrics } from "../src/conformance.js";
 import { integers } from "../src/generators/index.js";
 import { draw } from "../src/runner.js";
 import { runHegelTest } from "../src/session.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
-const mode = (params["mode"] as string | undefined) ?? "basic";
 
 const minValue = params["min_value"] != null ? Number(params["min_value"]) : null;
 const maxValue = params["max_value"] != null ? Number(params["max_value"]) : null;
 
 const testCases = getTestCases();
-const baseGen = integers(minValue, maxValue);
-const gen = mode === "non_basic" ? makeNonBasic(baseGen) : baseGen;
+const gen = integers(minValue, maxValue);
 
 await runHegelTest(
   async function conformance_integers() {
