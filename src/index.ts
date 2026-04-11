@@ -70,4 +70,4 @@ export {
 export type { VariantDef, FieldMeta } from "./derive.js";
 
 // Conformance testing
-export { getTestCases, writeMetrics } from "./conformance.js";
+export { getTestCases, makeNonBasic, writeMetrics } from "./conformance.js";

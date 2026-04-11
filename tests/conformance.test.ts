@@ -6,7 +6,15 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { getTestCases, writeMetrics } from "hegel";
+import {
+  BasicGenerator,
+  draw,
+  getTestCases,
+  hegel,
+  integers,
+  makeNonBasic,
+  writeMetrics,
+} from "hegel";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -35,6 +43,30 @@ function withEnv(vars: Record<string, string | undefined>, fn: () => void): void
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// makeNonBasic
+// ---------------------------------------------------------------------------
+
+describe("makeNonBasic", () => {
+  it("returns a non-basic generator", () => {
+    const gen = integers(0, 100);
+    // The basic generator has a schema
+    expect(gen).toBeInstanceOf(BasicGenerator);
+    // After makeNonBasic, it should no longer be a BasicGenerator
+    const nonBasic = makeNonBasic(gen);
+    expect(nonBasic).not.toBeInstanceOf(BasicGenerator);
+  });
+
+  it(
+    "generates values via the compositional path",
+    hegel()(async () => {
+      const gen = makeNonBasic(integers(0, 1000));
+      const value = await draw(gen);
+      expect(typeof value).toBe("number");
+    }),
+  );
+});
 
 // ---------------------------------------------------------------------------
 // getTestCases
