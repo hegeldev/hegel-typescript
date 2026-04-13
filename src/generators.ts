@@ -668,6 +668,21 @@ export function domains(): BasicGenerator<string> {
   return new BasicGenerator({ type: "domain" }, (raw) => String(raw));
 }
 
+/** Generate IPv4 address strings. */
+export function ipv4Addresses(): BasicGenerator<string> {
+  return new BasicGenerator({ type: "ipv4" }, (raw) => String(raw));
+}
+
+/** Generate IPv6 address strings. */
+export function ipv6Addresses(): BasicGenerator<string> {
+  return new BasicGenerator({ type: "ipv6" }, (raw) => String(raw));
+}
+
+/** Generate IP address strings (IPv4 or IPv6). */
+export function ipAddresses(): Generator<string> {
+  return oneOf(ipv4Addresses(), ipv6Addresses());
+}
+
 /** Generate date strings (ISO 8601). */
 export function dates(): BasicGenerator<string> {
   return new BasicGenerator({ type: "date" }, (raw) => String(raw));

@@ -36,6 +36,9 @@ import {
   emails,
   urls,
   domains,
+  ipv4Addresses,
+  ipv6Addresses,
+  ipAddresses,
   dates,
   times,
   datetimes,
@@ -1368,6 +1371,42 @@ describe("collection composite path without maxSize", () => {
           ),
         );
         expect(m).toBeInstanceOf(Map);
+      },
+      { testCases: 10 },
+    ),
+  );
+});
+
+describe("ipAddresses()", () => {
+  test(
+    "ipv4Addresses generates valid IPv4",
+    hegel(
+      (tc) => {
+        const ip = tc.draw(ipv4Addresses());
+        expect(ip).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
+      },
+      { testCases: 10 },
+    ),
+  );
+
+  test(
+    "ipv6Addresses generates valid IPv6",
+    hegel(
+      (tc) => {
+        const ip = tc.draw(ipv6Addresses());
+        expect(typeof ip).toBe("string");
+        expect(ip).toContain(":");
+      },
+      { testCases: 10 },
+    ),
+  );
+
+  test(
+    "ipAddresses generates either IPv4 or IPv6",
+    hegel(
+      (tc) => {
+        const ip = tc.draw(ipAddresses());
+        expect(typeof ip).toBe("string");
       },
       { testCases: 10 },
     ),
