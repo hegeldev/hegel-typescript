@@ -123,6 +123,14 @@ export class TestCase {
   }
 
   /**
+   * Draw a value from a generator without recording it in the output.
+   * Unlike draw(), this does not print the value during the final replay.
+   */
+  drawSilent<T>(generator: GeneratorLike<T>): T {
+    return generator.doDraw(this);
+  }
+
+  /**
    * Reject the current test case if the condition is false.
    */
   assume(condition: boolean): void {

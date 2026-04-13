@@ -387,7 +387,7 @@ describe("fromRegex()", () => {
     "generates strings matching the pattern",
     hegel(
       (tc) => {
-        const v = tc.draw(fromRegex("[0-9]{3}"));
+        const v = tc.draw(fromRegex("[0-9]{3}", { fullmatch: true }));
         expect(v).toMatch(/^[0-9]{3}$/);
       },
       { testCases: 50 },

@@ -289,7 +289,7 @@ describe("basic property tests", () => {
   test(
     "fromRegex",
     hegel((tc) => {
-      const s = tc.draw(fromRegex("[a-z]+"));
+      const s = tc.draw(fromRegex("[a-z]+", { fullmatch: true }));
       expect(s).toMatch(/^[a-z]+$/);
     }),
   );

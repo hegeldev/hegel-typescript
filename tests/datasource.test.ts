@@ -324,14 +324,14 @@ describe("Generator parse error paths", () => {
 describe("text and characters with alphabet", () => {
   it("text with alphabet option sets schema correctly", () => {
     const gen = text({ alphabet: "abc" });
-    expect(gen.schema).toHaveProperty("alphabet");
-    expect(gen.schema["alphabet"]).toEqual({ type: "characters", characters: "abc" });
+    expect(gen.schema["categories"]).toEqual([]);
+    expect(gen.schema["include_characters"]).toBe("abc");
   });
 
   it("characters with alphabet option sets schema correctly", () => {
     const gen = characters({ alphabet: "xyz" });
-    expect(gen.schema).toHaveProperty("alphabet");
-    expect(gen.schema["alphabet"]).toEqual({ type: "characters", characters: "xyz" });
+    expect(gen.schema["categories"]).toEqual([]);
+    expect(gen.schema["include_characters"]).toBe("xyz");
   });
 
   it("text generator parses result as string", () => {

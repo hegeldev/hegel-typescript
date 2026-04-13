@@ -18,7 +18,7 @@ export {
   ServerDataSource,
   runTestCase,
 } from "./runner.js";
-export type { Settings, TestCaseResult } from "./runner.js";
+export type { Settings, TestCaseResult, TestLocation } from "./runner.js";
 
 // Session
 export { HegelSession, HEGEL_SERVER_VERSION } from "./session.js";
@@ -68,10 +68,12 @@ export {
 export type {
   IntegerOptions,
   FloatOptions,
+  CharacterFilterOptions,
   TextOptions,
   CharacterOptions,
   BinaryOptions,
   RegexOptions,
+  DomainOptions,
   CollectionOptions,
   ArrayOptions,
 } from "./generators.js";

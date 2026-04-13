@@ -4,6 +4,8 @@
  * @packageDocumentation
  */
 
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { HegelSession } from "./session.js";
 import { TestCase, StopTestError, AssumeError, type DataSource } from "./testCase.js";
 import { encodeValue, decodeValue } from "./protocol.js";
@@ -44,6 +46,7 @@ function isInCI(): boolean {
   const ciVars: Array<[string, string | null]> = [
     ["CI", null],
     ["BITBUCKET_COMMIT", null],
+    ["BUILDKITE", "true"],
     ["CIRCLECI", "true"],
     ["CIRRUS_CI", "true"],
     ["CODEBUILD_BUILD_ID", null],
@@ -51,6 +54,8 @@ function isInCI(): boolean {
     ["GITLAB_CI", null],
     ["HEROKU_TEST_RUN_ID", null],
     ["TEAMCITY_VERSION", null],
+    ["TF_BUILD", "true"],
+    ["bamboo.buildKey", null],
   ];
   return ciVars.some(([key, value]) => {
     if (value === null) {
@@ -287,6 +292,71 @@ export function runTestCase(
 }
 
 // ---------------------------------------------------------------------------
+// Antithesis integration
+// ---------------------------------------------------------------------------
+
+export interface TestLocation {
+  function: string;
+  file: string;
+  class: string;
+  beginLine: number;
+}
+
+function isRunningInAntithesis(): boolean {
+  const dir = process.env["ANTITHESIS_OUTPUT_DIR"];
+  return dir !== undefined && dir !== "";
+}
+
+function emitAntithesisAssertion(location: TestLocation, passed: boolean): void {
+  const dir = process.env["ANTITHESIS_OUTPUT_DIR"];
+  /* v8 ignore start: only runs inside Antithesis */
+  if (!dir) return;
+
+  const filePath = path.join(dir, "sdk.jsonl");
+  const id = `${location.class}::${location.function} passes properties`;
+
+  const locationObj = {
+    class: location.class,
+    function: location.function,
+    file: location.file,
+    begin_line: location.beginLine,
+    begin_column: 0,
+  };
+
+  const declaration = {
+    antithesis_assert: {
+      hit: false,
+      must_hit: true,
+      assert_type: "always",
+      display_type: "Always",
+      condition: false,
+      id,
+      message: id,
+      location: locationObj,
+    },
+  };
+
+  const evaluation = {
+    antithesis_assert: {
+      hit: true,
+      must_hit: true,
+      assert_type: "always",
+      display_type: "Always",
+      condition: passed,
+      id,
+      message: id,
+      location: locationObj,
+    },
+  };
+
+  fs.appendFileSync(
+    filePath,
+    JSON.stringify(declaration) + "\n" + JSON.stringify(evaluation) + "\n",
+  );
+  /* v8 ignore stop */
+}
+
+// ---------------------------------------------------------------------------
 // Hegel builder
 // ---------------------------------------------------------------------------
 
@@ -294,6 +364,7 @@ export class Hegel {
   private testFn: (tc: TestCase) => void;
   private _settings: Settings;
   private _databaseKey: string | null = null;
+  private _testLocation: TestLocation | null = null;
 
   constructor(testFn: (tc: TestCase) => void) {
     this.testFn = testFn;
@@ -307,6 +378,11 @@ export class Hegel {
 
   databaseKey(key: string): this {
     this._databaseKey = key;
+    return this;
+  }
+
+  testLocation(location: TestLocation): this {
+    this._testLocation = location;
     return this;
   }
 
@@ -419,6 +495,10 @@ export class Hegel {
 
     const passed = (resultData["passed"] as boolean) ?? true;
     const testFailed = !passed || gotInteresting;
+
+    if (isRunningInAntithesis() && this._testLocation) {
+      emitAntithesisAssertion(this._testLocation, !testFailed);
+    }
 
     if (testFailed) {
       let msg = "unknown";

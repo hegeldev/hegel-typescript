@@ -179,7 +179,7 @@ test(
     (tc) => {
       const pattern = "[A-Z]{2}[0-9]{4}";
       const re = new RegExp(`^${pattern}$`);
-      const v = tc.draw(fromRegex(pattern));
+      const v = tc.draw(fromRegex(pattern, { fullmatch: true }));
       if (!re.test(v)) {
         throw new Error(`"${v}" does not match pattern /${pattern}/`);
       }
