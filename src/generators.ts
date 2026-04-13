@@ -212,10 +212,16 @@ export interface FloatOptions {
   allowInfinity?: boolean;
 }
 
-/** Generate floating-point numbers. */
+/**
+ * Generate floating-point numbers.
+ *
+ * By default, NaN is allowed only when no bounds are set, and infinity
+ * is allowed when at least one bound is missing.
+ */
 export function floats(options?: FloatOptions): BasicGenerator<number> {
   const hasMin = options?.minValue !== undefined;
   const hasMax = options?.maxValue !== undefined;
+  // NaN only when completely unbounded; infinity when at least one side is open
   const allowNan = options?.allowNan ?? (!hasMin && !hasMax);
   const allowInfinity = options?.allowInfinity ?? (!hasMin || !hasMax);
 
@@ -495,6 +501,10 @@ export function sets<T>(elements: Generator<T>, options?: CollectionOptions): Ge
   const minSize = options?.minSize ?? 0;
   const maxSize = options?.maxSize ?? null;
 
+  if (maxSize !== null && minSize > maxSize) {
+    throw new Error("Cannot have maxSize < minSize");
+  }
+
   const elementBasic = elements.asBasic();
   if (elementBasic) {
     const schema: Record<string, unknown> = {
@@ -540,6 +550,10 @@ export function maps<K, V>(
 ): Generator<Map<K, V>> {
   const minSize = options?.minSize ?? 0;
   const maxSize = options?.maxSize ?? null;
+
+  if (maxSize !== null && minSize > maxSize) {
+    throw new Error("Cannot have maxSize < minSize");
+  }
 
   const keyBasic = keys.asBasic();
   const valueBasic = values.asBasic();

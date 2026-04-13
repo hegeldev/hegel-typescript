@@ -371,21 +371,32 @@ export class Hegel {
     this._settings = defaultSettings();
   }
 
+  /** Override default settings. Returns this for chaining. */
   settings(s: Partial<Settings>): this {
     Object.assign(this._settings, s);
     return this;
   }
 
+  /** Set the database key for persisting failing examples across runs. */
   databaseKey(key: string): this {
     this._databaseKey = key;
     return this;
   }
 
+  /** Set the test location for Antithesis integration. */
   testLocation(location: TestLocation): this {
     this._testLocation = location;
     return this;
   }
 
+  /**
+   * Execute the property-based test.
+   *
+   * Connects to the hegel server (spawning it on first use), runs the
+   * configured number of test cases, and throws if any test case fails.
+   * On failure, the failing input is shrunk to a minimal example and
+   * replayed with draw output printed to stderr.
+   */
   run(): void {
     const session = HegelSession.get();
     const connection = session.connection;
