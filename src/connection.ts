@@ -13,19 +13,9 @@ import {
   type Packet,
   encodePacket,
   readPacketFrom,
-  encodeValue,
-  decodeValue,
   CLOSE_STREAM_MESSAGE_ID,
   CLOSE_STREAM_PAYLOAD,
 } from "./protocol.js";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
 // ---------------------------------------------------------------------------
 // Sleep helper (for EAGAIN retry on non-blocking fds)
@@ -261,30 +251,6 @@ export class Stream {
       // Buffer reply for later
       this.responses.set(packet.messageId, packet.payload);
     }
-  }
-
-  /**
-   * Send a CBOR-encoded request and return the decoded CBOR response.
-   * Checks for error responses from the server.
-   */
-  requestCbor(message: unknown): unknown {
-    const payload = encodeValue(message);
-    const id = this.sendRequest(payload);
-    const responseBytes = this.receiveReply(id);
-    const response = decodeValue(responseBytes) as Record<string, unknown> | unknown;
-
-    if (!isRecord(response)) return response;
-
-    if ("error" in response) {
-      const errorType = response["type"] ?? "";
-      throw new Error(`Server error (${errorType}): ${JSON.stringify(response["error"])}`);
-    }
-
-    if ("result" in response) {
-      return response["result"];
-    }
-
-    return response;
   }
 
   /**

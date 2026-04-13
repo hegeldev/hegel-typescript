@@ -32,21 +32,12 @@ export const HANDSHAKE_STRING = "hegel_handshake_start";
 // CBOR extension: tag 91 = WTF-8 bytes → string
 // ---------------------------------------------------------------------------
 
-class HegelString {
-  value: string;
-  constructor(value: string) {
-    this.value = value;
-  }
-}
-
+// cbor-x requires a Class for addExtension, but we only use the decode
+// path (tag 91 is sent by the server, never by the client).
 addExtension({
-  Class: HegelString,
+  Class: class HegelString {},
   tag: 91,
-  encode(instance: HegelString, encodeFn: (value: unknown) => Buffer) {
-    return encodeFn(Buffer.from(instance.value, "utf-8"));
-  },
-  // cbor-x calls decode when it encounters tag 91. We want the decoded
-  // result to be a plain string, not a HegelString wrapper.
+  encode: () => Buffer.alloc(0),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   decode(data: unknown): any {
     if (Buffer.isBuffer(data)) return wtf8ToString(data);

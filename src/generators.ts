@@ -114,20 +114,13 @@ class MappedGenerator<T, U> extends Generator<U> {
   }
 
   doDraw(tc: TestCase): U {
-    const basic = this.asBasic();
-    if (basic) {
-      return basic.doDraw(tc);
-    }
+    // MappedGenerator is only created for non-basic sources (BasicGenerator
+    // overrides .map() to return a BasicGenerator directly). So asBasic()
+    // would always return null here — we go straight to the span-based path.
     tc.startSpan(Labels.MAPPED);
     const result = this.f(this.source.doDraw(tc));
     tc.stopSpan(false);
     return result;
-  }
-
-  asBasic(): BasicGenerator<U> | null {
-    const sourceBasic = this.source.asBasic();
-    if (!sourceBasic) return null;
-    return sourceBasic.map(this.f);
   }
 }
 
