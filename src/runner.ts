@@ -289,23 +289,24 @@ function runTestCase(
 // ---------------------------------------------------------------------------
 
 /**
- * Run a property-based test.
+ * Wrap a property-based test body into a function suitable for a test runner.
  *
  * @example
  * ```ts
+ * import { test } from 'vitest';
  * import { hegel, integers } from 'hegel';
  *
- * test('addition is commutative', () => {
- *   hegel((tc) => {
- *     const x = tc.draw(integers());
- *     const y = tc.draw(integers());
- *     expect(x + y).toBe(y + x);
- *   });
- * });
+ * test('addition is commutative', hegel((tc) => {
+ *   const x = tc.draw(integers());
+ *   const y = tc.draw(integers());
+ *   expect(x + y).toBe(y + x);
+ * }));
  * ```
  */
-export function hegel(testFn: (tc: TestCase) => void, settings?: Partial<Settings>): void {
-  const h = new Hegel(testFn);
-  if (settings) h.settings(settings);
-  h.run();
+export function hegel(testFn: (tc: TestCase) => void, settings?: Partial<Settings>): () => void {
+  return () => {
+    const h = new Hegel(testFn);
+    if (settings) h.settings(settings);
+    h.run();
+  };
 }
