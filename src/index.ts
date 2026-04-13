@@ -53,7 +53,6 @@ export {
   emails,
   urls,
   domains,
-  ipAddresses,
   dates,
   times,
   datetimes,

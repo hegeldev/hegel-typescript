@@ -2,7 +2,9 @@
  * Tests targeting uncovered lines in runner.ts, specifically:
  * - Hegel.run() settings branches (database, suppressHealthCheck)
  * - ServerDataSource error handling paths
- * - extractOrigin for non-Error values
+ * - Health check failure detection
+ * - Flaky test detection
+ * - Server error (invalid schema) detection
  */
 
 import { describe, test, expect } from "vitest";
@@ -11,6 +13,7 @@ import {
   HealthCheck,
   integers,
   booleans,
+  BasicGenerator,
   runTestCase,
   type DataSource,
   StopTestError,
@@ -19,7 +22,6 @@ import {
 
 describe("Hegel.run() settings branches", () => {
   test("database: 'disabled' sets database to null", () => {
-    // This exercises line 321: runTestMsg["database"] = null
     new Hegel((tc) => {
       tc.draw(booleans());
     })
@@ -28,7 +30,6 @@ describe("Hegel.run() settings branches", () => {
   });
 
   test("database: custom path sets database to string", () => {
-    // This exercises line 323: runTestMsg["database"] = path
     new Hegel((tc) => {
       tc.draw(booleans());
     })
@@ -37,7 +38,6 @@ describe("Hegel.run() settings branches", () => {
   });
 
   test("suppressHealthCheck passes through to server", () => {
-    // This exercises lines 305, 327
     new Hegel((tc) => {
       tc.draw(booleans());
     })
@@ -69,7 +69,6 @@ describe("runTestCase with fake DataSource", () => {
   }
 
   test("extractOrigin returns null for non-Error values", () => {
-    // Line 229: extractOrigin receives non-Error
     const ds = makeDs();
     const result = runTestCase(
       ds,
@@ -104,7 +103,7 @@ describe("runTestCase with fake DataSource", () => {
       false,
     );
     expect(result.status).toBe("invalid");
-    expect(ds.completed).toBeNull(); // markComplete was not called
+    expect(ds.completed).toBeNull();
   });
 
   test("AssumeError returns invalid", () => {
@@ -118,6 +117,51 @@ describe("runTestCase with fake DataSource", () => {
     );
     expect(result.status).toBe("invalid");
     expect(ds.completed).toBe("INVALID");
+  });
+});
+
+describe("server error detection", () => {
+  test("invalid schema triggers server error", () => {
+    // Send a schema the server rejects (integer with min > max).
+    // This exercises the generic server error path in ServerDataSource.sendRequest.
+    const badGen = new BasicGenerator({ type: "integer", min_value: 100, max_value: 0 });
+    expect(() => {
+      new Hegel((tc) => {
+        tc.draw(badGen);
+      })
+        .settings({ testCases: 1 })
+        .run();
+    }).toThrow("Server error");
+  });
+
+  test("health_check_failure: excessive filtering triggers health check", () => {
+    // Filter that rejects >99% of values triggers FilterTooMuch health check.
+    // This exercises line 380-381 in Hegel.run() (result data check).
+    expect(() => {
+      new Hegel((tc) => {
+        const x = tc.draw(integers({ minValue: 0, maxValue: 1000 }));
+        tc.assume(x === 500);
+      })
+        .settings({ testCases: 100 })
+        .run();
+    }).toThrow("Health check failure");
+  });
+
+  test("flaky test detected", () => {
+    // A test that fails on the first run but passes on replay is flaky.
+    // Use a mutable counter: fail on the first non-zero example, then pass on retry.
+    let seen = false;
+    expect(() => {
+      new Hegel((tc) => {
+        const x = tc.draw(integers({ minValue: 0, maxValue: 100 }));
+        if (x > 0 && !seen) {
+          seen = true;
+          throw new Error("flaky failure");
+        }
+      })
+        .settings({ testCases: 100 })
+        .run();
+    }).toThrow("Flaky test detected");
   });
 });
 
@@ -137,7 +181,6 @@ describe("ServerDataSource error paths via HEGEL_PROTOCOL_TEST_MODE", () => {
   }
 
   test("error_response exercises server error path", () => {
-    // This exercises the error handling in ServerDataSource.sendRequest
     withTestMode("error_response", () => {
       new Hegel((tc) => {
         tc.draw(integers({ minValue: 0, maxValue: 100 }));

@@ -36,7 +36,6 @@ import {
   emails,
   urls,
   domains,
-  ipAddresses,
   dates,
   times,
   datetimes,
@@ -472,19 +471,7 @@ describe("domains()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// ipAddresses()
-// ---------------------------------------------------------------------------
-
-describe("ipAddresses()", () => {
-  test("returns a BasicGenerator", () => {
-    expect(ipAddresses()).toBeInstanceOf(BasicGenerator);
-  });
-
-  test("schema has type=ip_address", () => {
-    const gen = ipAddresses();
-    expect(gen.schema).toEqual({ type: "ip_address" });
-  });
-});
+// ipAddresses() removed — not supported by current hegel server
 
 // ---------------------------------------------------------------------------
 // dates()
@@ -1317,4 +1304,72 @@ describe("argument validation", () => {
       expect(() => variantGenerator({})).toThrow("variantGenerator requires at least one variant");
     });
   });
+});
+
+describe("generators branch coverage", () => {
+  test(
+    "binary with minSize exercises minSize branch",
+    hegel(
+      (tc) => {
+        const b = tc.draw(binary({ minSize: 5, maxSize: 10 }));
+        expect(b.length).toBeGreaterThanOrEqual(5);
+      },
+      { testCases: 10 },
+    ),
+  );
+
+  test(
+    "sets with minSize exercises minSize branch",
+    hegel(
+      (tc) => {
+        const s = tc.draw(
+          sets(integers({ minValue: 0, maxValue: 100 }), { minSize: 1, maxSize: 5 }),
+        );
+        expect(s.size).toBeGreaterThanOrEqual(1);
+      },
+      { testCases: 10 },
+    ),
+  );
+
+  test(
+    "maps with minSize exercises minSize branch",
+    hegel(
+      (tc) => {
+        const m = tc.draw(
+          maps(integers({ minValue: 0, maxValue: 100 }), booleans(), { minSize: 1, maxSize: 3 }),
+        );
+        expect(m.size).toBeGreaterThanOrEqual(1);
+      },
+      { testCases: 10 },
+    ),
+  );
+});
+
+describe("collection composite path without maxSize", () => {
+  test(
+    "sets with non-basic elements and no maxSize",
+    hegel(
+      (tc) => {
+        const s = tc.draw(sets(integers({ minValue: 0, maxValue: 100 }).filter(() => true)));
+        expect(s).toBeInstanceOf(Set);
+      },
+      { testCases: 10 },
+    ),
+  );
+
+  test(
+    "maps with non-basic elements and no maxSize",
+    hegel(
+      (tc) => {
+        const m = tc.draw(
+          maps(
+            integers({ minValue: 0, maxValue: 100 }).filter(() => true),
+            booleans(),
+          ),
+        );
+        expect(m).toBeInstanceOf(Map);
+      },
+      { testCases: 10 },
+    ),
+  );
 });

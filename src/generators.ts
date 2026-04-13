@@ -303,8 +303,8 @@ export interface BinaryOptions {
 }
 
 function parseBytes(raw: unknown): Uint8Array {
+  // Buffer is a subclass of Uint8Array, so this catches both.
   if (raw instanceof Uint8Array) return raw;
-  if (Buffer.isBuffer(raw)) return new Uint8Array(raw);
   throw new Error(`Expected bytes, got ${typeof raw}`);
 }
 
@@ -666,11 +666,6 @@ export function urls(): BasicGenerator<string> {
 /** Generate domain names. */
 export function domains(): BasicGenerator<string> {
   return new BasicGenerator({ type: "domain" }, (raw) => String(raw));
-}
-
-/** Generate IP addresses. */
-export function ipAddresses(): BasicGenerator<string> {
-  return new BasicGenerator({ type: "ip_address" }, (raw) => String(raw));
 }
 
 /** Generate date strings (ISO 8601). */

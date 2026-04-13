@@ -37,6 +37,7 @@ export const HANDSHAKE_STRING = "hegel_handshake_start";
 addExtension({
   Class: class HegelString {},
   tag: 91,
+  /* v8 ignore next: encode is never called — tag 91 is only received from server */
   encode: () => Buffer.alloc(0),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   decode(data: unknown): any {
