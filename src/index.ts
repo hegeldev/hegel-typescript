@@ -6,11 +6,19 @@
 
 // Core types
 export { TestCase, Collection, Labels, StopTestError, AssumeError } from "./testCase.js";
-export type { GeneratorLike } from "./testCase.js";
+export type { GeneratorLike, DataSource } from "./testCase.js";
 
 // Runner
-export { Hegel, hegel, Verbosity, HealthCheck, defaultSettings } from "./runner.js";
-export type { Settings } from "./runner.js";
+export {
+  Hegel,
+  hegel,
+  Verbosity,
+  HealthCheck,
+  defaultSettings,
+  ServerDataSource,
+  runTestCase,
+} from "./runner.js";
+export type { Settings, TestCaseResult } from "./runner.js";
 
 // Session
 export { HegelSession, HEGEL_SERVER_VERSION } from "./session.js";

@@ -8,7 +8,6 @@
  */
 
 import { inspect } from "node:util";
-import type { Connection, Stream } from "./connection.js";
 
 // ---------------------------------------------------------------------------
 // Error classes
@@ -59,22 +58,46 @@ export interface GeneratorLike<T> {
 }
 
 // ---------------------------------------------------------------------------
+// DataSource interface
+// ---------------------------------------------------------------------------
+
+/**
+ * Abstraction over the data backend for a test case.
+ *
+ * The default implementation (ServerDataSource) talks to the hegel server
+ * over a multiplexed stream. Custom implementations can be used in tests
+ * to inject specific behaviors without a server.
+ */
+export interface DataSource {
+  generate(schema: Record<string, unknown>): unknown;
+  startSpan(label: number): void;
+  stopSpan(discard: boolean): void;
+  newCollection(minSize: number, maxSize?: number): number;
+  collectionMore(collectionId: number): boolean;
+  collectionReject(collectionId: number, why?: string): void;
+  markComplete(status: string, origin: string | null): void;
+  testAborted(): boolean;
+}
+
+// ---------------------------------------------------------------------------
 // TestCase
 // ---------------------------------------------------------------------------
 
 export class TestCase {
-  private stream: Stream;
-  private connection: Connection;
+  private _dataSource: DataSource;
   private _isLastRun: boolean;
-  private _testAborted = false;
   private drawCount = 0;
   private spanDepth = 0;
 
   /** @internal */
-  constructor(connection: Connection, stream: Stream, isLastRun: boolean) {
-    this.connection = connection;
-    this.stream = stream;
+  constructor(dataSource: DataSource, isLastRun: boolean) {
+    this._dataSource = dataSource;
     this._isLastRun = isLastRun;
+  }
+
+  /** @internal */
+  dataSource(): DataSource {
+    return this._dataSource;
   }
 
   get isLastRun(): boolean {
@@ -82,7 +105,7 @@ export class TestCase {
   }
 
   get testAborted(): boolean {
-    return this._testAborted;
+    return this._dataSource.testAborted();
   }
 
   /**
@@ -123,7 +146,7 @@ export class TestCase {
   startSpan(label: number): void {
     this.spanDepth++;
     try {
-      this.sendRequest("start_span", { label });
+      this._dataSource.startSpan(label);
     } catch (e) {
       this.spanDepth--;
       throw e;
@@ -136,60 +159,10 @@ export class TestCase {
   stopSpan(discard = false): void {
     this.spanDepth--;
     try {
-      this.sendRequest("stop_span", { discard });
+      this._dataSource.stopSpan(discard);
     } catch {
       // Ignore errors during stop_span (matches Rust: `let _ = ...`)
     }
-  }
-
-  /**
-   * Send a request to the hegel server.
-   * Throws StopTestError if the server sends StopTest/overflow.
-   * @internal
-   */
-  sendRequest(command: string, payload: Record<string, unknown> = {}): unknown {
-    if (this._testAborted) {
-      throw new StopTestError();
-    }
-
-    const message: Record<string, unknown> = { command, ...payload };
-
-    try {
-      return this.stream.requestCbor(message);
-    } catch (e: unknown) {
-      const errorMsg = e instanceof Error ? e.message : String(e);
-      if (
-        errorMsg.includes("overflow") ||
-        errorMsg.includes("StopTest") ||
-        errorMsg.includes("Stream is closed")
-      ) {
-        this.stream.markClosed();
-        this._testAborted = true;
-        throw new StopTestError();
-      }
-      if (errorMsg.includes("FlakyStrategyDefinition") || errorMsg.includes("FlakyReplay")) {
-        this.stream.markClosed();
-        this._testAborted = true;
-        throw new StopTestError();
-      }
-      if (this.connection.hasServerExited()) {
-        throw new Error("Server process crashed", { cause: e });
-      }
-      throw new Error(`Failed to communicate with Hegel: ${errorMsg}`, { cause: e });
-    }
-  }
-
-  /**
-   * Send mark_complete and close the stream.
-   * @internal
-   */
-  sendMarkComplete(markComplete: Record<string, unknown>): void {
-    try {
-      this.stream.requestCbor(markComplete);
-    } catch {
-      // ignore errors during mark_complete
-    }
-    this.stream.close();
   }
 }
 
@@ -198,12 +171,12 @@ export class TestCase {
 // ---------------------------------------------------------------------------
 
 /**
- * Send a generate command to the server and return the raw result.
- * Throws StopTestError if the server runs out of data.
+ * Send a generate command to the data source and return the raw result.
+ * Throws StopTestError if the data source runs out of data.
  * @internal
  */
 export function generateRaw(tc: TestCase, schema: Record<string, unknown>): unknown {
-  return tc.sendRequest("generate", { schema });
+  return tc.dataSource().generate(schema);
 }
 
 // ---------------------------------------------------------------------------
@@ -217,31 +190,21 @@ export function generateRaw(tc: TestCase, schema: Record<string, unknown>): unkn
  * min_size, max_size, and shrinking state.
  */
 export class Collection {
-  private tc: TestCase;
+  private dataSource: DataSource;
   private minSize: number;
   private maxSize: number | undefined;
   private collectionId: number | null = null;
   private finished = false;
 
   constructor(tc: TestCase, minSize: number, maxSize?: number) {
-    this.tc = tc;
+    this.dataSource = tc.dataSource();
     this.minSize = minSize;
     this.maxSize = maxSize;
   }
 
   private ensureInitialized(): number {
     if (this.collectionId === null) {
-      const payload: Record<string, unknown> = {
-        min_size: this.minSize,
-      };
-      if (this.maxSize !== undefined) {
-        payload["max_size"] = this.maxSize;
-      }
-      const result = this.tc.sendRequest("new_collection", payload);
-      if (typeof result !== "number") {
-        throw new Error(`Expected integer from new_collection, got ${typeof result}`);
-      }
-      this.collectionId = result;
+      this.collectionId = this.dataSource.newCollection(this.minSize, this.maxSize);
     }
     return this.collectionId;
   }
@@ -254,17 +217,12 @@ export class Collection {
       return false;
     }
     const collectionId = this.ensureInitialized();
-    let result: unknown;
+    let result: boolean;
     try {
-      result = this.tc.sendRequest("collection_more", {
-        collection_id: collectionId,
-      });
+      result = this.dataSource.collectionMore(collectionId);
     } catch (e) {
       this.finished = true;
       throw e;
-    }
-    if (typeof result !== "boolean") {
-      throw new Error(`Expected boolean from collection_more, got ${typeof result}`);
     }
     if (!result) {
       this.finished = true;
@@ -278,12 +236,6 @@ export class Collection {
   reject(why?: string): void {
     if (this.finished) return;
     const collectionId = this.ensureInitialized();
-    const payload: Record<string, unknown> = {
-      collection_id: collectionId,
-    };
-    if (why !== undefined) {
-      payload["why"] = why;
-    }
-    this.tc.sendRequest("collection_reject", payload);
+    this.dataSource.collectionReject(collectionId, why);
   }
 }

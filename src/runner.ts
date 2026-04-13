@@ -5,7 +5,7 @@
  */
 
 import { HegelSession } from "./session.js";
-import { TestCase, StopTestError, AssumeError } from "./testCase.js";
+import { TestCase, StopTestError, AssumeError, type DataSource } from "./testCase.js";
 import { encodeValue, decodeValue } from "./protocol.js";
 import type { Connection, Stream } from "./connection.js";
 
@@ -73,13 +73,204 @@ export function defaultSettings(): Settings {
 }
 
 // ---------------------------------------------------------------------------
+// ServerDataSource
+// ---------------------------------------------------------------------------
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * DataSource implementation that communicates with the hegel server
+ * over a multiplexed stream connection.
+ */
+export class ServerDataSource implements DataSource {
+  private stream: Stream;
+  private connection: Connection;
+  private _aborted = false;
+
+  constructor(connection: Connection, stream: Stream) {
+    this.connection = connection;
+    this.stream = stream;
+  }
+
+  private sendRequest(command: string, payload: Record<string, unknown> = {}): unknown {
+    if (this._aborted) {
+      throw new StopTestError();
+    }
+
+    const message: Record<string, unknown> = { command, ...payload };
+    const encoded = encodeValue(message);
+    const id = this.stream.sendRequest(encoded);
+    const responseBytes = this.stream.receiveReply(id);
+    const response = decodeValue(responseBytes);
+
+    if (!isRecord(response)) return response;
+
+    if ("error" in response) {
+      const errorType = String(response["type"] ?? "");
+      const errorMsg = JSON.stringify(response["error"]);
+
+      if (
+        errorMsg.includes("overflow") ||
+        errorMsg.includes("StopTest") ||
+        errorType.includes("overflow") ||
+        errorType.includes("StopTest")
+      ) {
+        this.stream.markClosed();
+        this._aborted = true;
+        throw new StopTestError();
+      }
+      if (errorMsg.includes("FlakyStrategyDefinition") || errorMsg.includes("FlakyReplay")) {
+        this.stream.markClosed();
+        this._aborted = true;
+        throw new StopTestError();
+      }
+      if (this.connection.hasServerExited()) {
+        throw new Error(`Server process crashed`);
+      }
+      throw new Error(`Server error (${errorType}): ${errorMsg}`);
+    }
+
+    if ("result" in response) {
+      return response["result"];
+    }
+
+    return response;
+  }
+
+  generate(schema: Record<string, unknown>): unknown {
+    return this.sendRequest("generate", { schema });
+  }
+
+  startSpan(label: number): void {
+    this.sendRequest("start_span", { label });
+  }
+
+  stopSpan(discard: boolean): void {
+    this.sendRequest("stop_span", { discard });
+  }
+
+  newCollection(minSize: number, maxSize?: number): number {
+    const payload: Record<string, unknown> = { min_size: minSize };
+    if (maxSize !== undefined) {
+      payload["max_size"] = maxSize;
+    }
+    const result = this.sendRequest("new_collection", payload);
+    if (typeof result !== "number") {
+      throw new Error(`Expected integer from new_collection, got ${typeof result}`);
+    }
+    return result;
+  }
+
+  collectionMore(collectionId: number): boolean {
+    const result = this.sendRequest("collection_more", {
+      collection_id: collectionId,
+    });
+    if (typeof result !== "boolean") {
+      throw new Error(`Expected boolean from collection_more, got ${typeof result}`);
+    }
+    return result;
+  }
+
+  collectionReject(collectionId: number, why?: string): void {
+    const payload: Record<string, unknown> = {
+      collection_id: collectionId,
+    };
+    if (why !== undefined) {
+      payload["why"] = why;
+    }
+    this.sendRequest("collection_reject", payload);
+  }
+
+  markComplete(status: string, origin: string | null): void {
+    try {
+      const message: Record<string, unknown> = {
+        command: "mark_complete",
+        status,
+        origin: origin ?? null,
+      };
+      const encoded = encodeValue(message);
+      const id = this.stream.sendRequest(encoded);
+      this.stream.receiveReply(id);
+    } catch {
+      // ignore errors during mark_complete
+    }
+    this.stream.close();
+  }
+
+  testAborted(): boolean {
+    return this._aborted;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Test case result
 // ---------------------------------------------------------------------------
 
-type TestCaseResult =
+export type TestCaseResult =
   | { status: "valid" }
   | { status: "invalid" }
   | { status: "interesting"; error: unknown };
+
+// ---------------------------------------------------------------------------
+// runTestCase (exported for testing)
+// ---------------------------------------------------------------------------
+
+function extractOrigin(error: unknown): string | null {
+  if (!(error instanceof Error) || !error.stack) return null;
+  const lines = error.stack.split("\n");
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("at ") && !trimmed.includes("node_modules")) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
+export function runTestCase(
+  dataSource: DataSource,
+  testFn: (tc: TestCase) => void,
+  isFinal: boolean,
+): TestCaseResult {
+  const tc = new TestCase(dataSource, isFinal);
+
+  let result: TestCaseResult;
+  let origin: string | null = null;
+
+  try {
+    testFn(tc);
+    result = { status: "valid" };
+  } catch (e: unknown) {
+    if (e instanceof AssumeError) {
+      result = { status: "invalid" };
+    } else if (e instanceof StopTestError) {
+      result = { status: "invalid" };
+    } else {
+      result = { status: "interesting", error: e };
+      origin = extractOrigin(e);
+
+      if (isFinal) {
+        const msg = e instanceof Error ? e.message : String(e);
+        process.stderr.write(`\n${msg}\n`);
+        if (e instanceof Error && e.stack) {
+          process.stderr.write(e.stack + "\n");
+        }
+      }
+    }
+  }
+
+  // Send mark_complete unless test was aborted (server already closed stream)
+  if (!tc.testAborted) {
+    const status =
+      result.status === "valid" ? "VALID" : result.status === "invalid" ? "INVALID" : "INTERESTING";
+
+    dataSource.markComplete(status, origin);
+  }
+
+  return result;
+}
 
 // ---------------------------------------------------------------------------
 // Hegel builder
@@ -158,7 +349,8 @@ export class Hegel {
         // Ack BEFORE running the test
         testStream.writeReply(eventId, ackNull);
 
-        const result = runTestCase(connection, testCaseStream, this.testFn, false);
+        const ds = new ServerDataSource(connection, testCaseStream);
+        const result = runTestCase(ds, this.testFn, false);
 
         if (result.status === "interesting") {
           gotInteresting = true;
@@ -197,7 +389,8 @@ export class Hegel {
 
       testStream.writeReply(eventId, ackNull);
 
-      const result = runTestCase(connection, testCaseStream, this.testFn, true);
+      const ds = new ServerDataSource(connection, testCaseStream);
+      const result = runTestCase(ds, this.testFn, true);
 
       if (result.status === "interesting") {
         finalResult = result;
@@ -218,70 +411,6 @@ export class Hegel {
       throw new Error(`Property test failed: ${msg}`);
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// runTestCase
-// ---------------------------------------------------------------------------
-
-function extractOrigin(error: unknown): string | null {
-  if (!(error instanceof Error) || !error.stack) return null;
-  const lines = error.stack.split("\n");
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith("at ") && !trimmed.includes("node_modules")) {
-      return trimmed;
-    }
-  }
-  return null;
-}
-
-function runTestCase(
-  connection: Connection,
-  testStream: Stream,
-  testFn: (tc: TestCase) => void,
-  isFinal: boolean,
-): TestCaseResult {
-  const tc = new TestCase(connection, testStream, isFinal);
-
-  let result: TestCaseResult;
-  let origin: string | null = null;
-
-  try {
-    testFn(tc);
-    result = { status: "valid" };
-  } catch (e: unknown) {
-    if (e instanceof AssumeError) {
-      result = { status: "invalid" };
-    } else if (e instanceof StopTestError) {
-      result = { status: "invalid" };
-    } else {
-      result = { status: "interesting", error: e };
-      origin = extractOrigin(e);
-
-      if (isFinal) {
-        const msg = e instanceof Error ? e.message : String(e);
-        process.stderr.write(`\n${msg}\n`);
-        if (e instanceof Error && e.stack) {
-          process.stderr.write(e.stack + "\n");
-        }
-      }
-    }
-  }
-
-  // Send mark_complete unless test was aborted (server already closed stream)
-  if (!tc.testAborted) {
-    const status =
-      result.status === "valid" ? "VALID" : result.status === "invalid" ? "INVALID" : "INTERESTING";
-
-    tc.sendMarkComplete({
-      command: "mark_complete",
-      status,
-      origin: origin ?? null,
-    });
-  }
-
-  return result;
 }
 
 // ---------------------------------------------------------------------------

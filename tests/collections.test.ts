@@ -13,6 +13,10 @@
 import { describe, test, expect } from "vitest";
 import { hegel, integers, booleans, text, arrays, sets, maps } from "hegel";
 
+// Collection protocol tests use fewer test cases because each test case
+// involves many server round-trips (one per collection element).
+const FEW = { testCases: 20 };
+
 // .filter(() => true) is a no-op filter that strips asBasic(),
 // forcing the collection protocol path.
 function nonBasic(gen: ReturnType<typeof integers>) {
@@ -27,15 +31,17 @@ describe("arrays with non-basic elements (collection protocol)", () => {
       for (const x of arr) {
         expect(x).toBeGreaterThan(5);
       }
-    }),
+    }, FEW),
   );
 
   test(
     "respects maxSize",
     hegel((tc) => {
-      const arr = tc.draw(arrays(nonBasic(integers({ minValue: 0, maxValue: 100 })), { maxSize: 5 }));
+      const arr = tc.draw(
+        arrays(nonBasic(integers({ minValue: 0, maxValue: 100 })), { maxSize: 5 }),
+      );
       expect(arr.length).toBeLessThanOrEqual(5);
-    }),
+    }, FEW),
   );
 
   test(
@@ -45,7 +51,7 @@ describe("arrays with non-basic elements (collection protocol)", () => {
         arrays(nonBasic(integers({ minValue: 0, maxValue: 100 })), { minSize: 1, maxSize: 10 }),
       );
       expect(arr.length).toBeGreaterThanOrEqual(1);
-    }),
+    }, FEW),
   );
 
   test(
@@ -57,7 +63,7 @@ describe("arrays with non-basic elements (collection protocol)", () => {
         expect(x).toBeGreaterThanOrEqual(0);
         expect(x).toBeLessThanOrEqual(10);
       }
-    }),
+    }, FEW),
   );
 
   test(
@@ -68,7 +74,7 @@ describe("arrays with non-basic elements (collection protocol)", () => {
       );
       const uniqueCount = new Set(arr).size;
       expect(uniqueCount).toBe(arr.length);
-    }),
+    }, FEW),
   );
 });
 
@@ -79,7 +85,7 @@ describe("sets with non-basic elements (collection protocol)", () => {
       const s = tc.draw(sets(nonBasic(integers({ minValue: 0, maxValue: 100 })), { maxSize: 5 }));
       expect(s).toBeInstanceOf(Set);
       expect(s.size).toBeLessThanOrEqual(5);
-    }),
+    }, FEW),
   );
 
   test(
@@ -89,7 +95,7 @@ describe("sets with non-basic elements (collection protocol)", () => {
         sets(nonBasic(integers({ minValue: 0, maxValue: 100 })), { minSize: 1, maxSize: 10 }),
       );
       expect(s.size).toBeGreaterThanOrEqual(1);
-    }),
+    }, FEW),
   );
 });
 
@@ -101,7 +107,9 @@ describe("maps with non-basic elements (collection protocol)", () => {
         maps(
           integers({ minValue: 0, maxValue: 100 }).filter((x) => x > 5),
           booleans(),
-          { maxSize: 3 },
+          {
+            maxSize: 3,
+          },
         ),
       );
       expect(m).toBeInstanceOf(Map);
@@ -109,7 +117,7 @@ describe("maps with non-basic elements (collection protocol)", () => {
       for (const key of m.keys()) {
         expect(key).toBeGreaterThan(5);
       }
-    }),
+    }, FEW),
   );
 
   test(
@@ -121,7 +129,7 @@ describe("maps with non-basic elements (collection protocol)", () => {
         }),
       );
       expect(m).toBeInstanceOf(Map);
-    }),
+    }, FEW),
   );
 
   test(
@@ -134,6 +142,6 @@ describe("maps with non-basic elements (collection protocol)", () => {
         }),
       );
       expect(m.size).toBeGreaterThanOrEqual(1);
-    }),
+    }, FEW),
   );
 });
