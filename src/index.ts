@@ -4,31 +4,22 @@
  * @packageDocumentation
  */
 
-/** Returns the version of the Hegel library. */
-export function version(): string {
-  return "0.1.0";
-}
+// Core types
+export { TestCase, Collection, Labels, StopTestError, AssumeError } from "./testCase.js";
+export type { GeneratorLike } from "./testCase.js";
 
-// Error classes
-export {
-  AssumeRejected,
-  AssertionError,
-  ConnectionError,
-  DataExhausted,
-  RuntimeError,
-} from "./runner.js";
+// Runner
+export { Hegel, hegel, Verbosity, HealthCheck, defaultSettings } from "./runner.js";
+export type { Settings } from "./runner.js";
 
-// Test entry points
-export { runHegelTest, hegel, HegelSession } from "./session.js";
-
-// Test helpers
-export { assume, draw, note, target } from "./runner.js";
+// Session
+export { HegelSession, HEGEL_SERVER_VERSION } from "./session.js";
 
 // Generators
 export {
   Generator,
   BasicGenerator,
-  Collection,
+  // Primitives
   integers,
   floats,
   booleans,
@@ -38,36 +29,42 @@ export {
   just,
   sampledFrom,
   fromRegex,
+  // Collections
+  arrays,
+  lists,
+  sets,
+  maps,
+  dicts,
+  // Combinators
+  oneOf,
+  optional,
+  tuples,
+  tuples3,
+  tuples4,
+  // Format generators
   emails,
   urls,
   domains,
+  ipAddresses,
   dates,
   times,
   datetimes,
-  lists,
-  tuples2,
-  tuples3,
-  tuples4,
-  oneOf,
-  optional,
-  ipAddresses,
-  dicts,
-} from "./generators/index.js";
-
-export type { CharacterOptions } from "./generators/index.js";
-
-// Type-directed derivation
-export {
-  field,
-  DerivedGenerator,
-  deriveGenerator,
-  RecordDerivedGenerator,
+  // Composition
+  composite,
   recordGenerator,
-  VariantGenerator,
   variantGenerator,
-} from "./derive.js";
+} from "./generators.js";
 
-export type { VariantDef, FieldMeta } from "./derive.js";
+export type {
+  IntegerOptions,
+  FloatOptions,
+  TextOptions,
+  CharacterOptions,
+  BinaryOptions,
+  RegexOptions,
+  CollectionOptions,
+  ArrayOptions,
+} from "./generators.js";
 
 // Conformance testing
 export { getTestCases, writeMetrics } from "./conformance.js";

@@ -1,545 +1,311 @@
 /**
- * Test runner for the Hegel library.
- *
- * Implements the {@link Client} class which manages the test protocol with a
- * Hegel server, and `AsyncLocalStorage`-based context state for generator
- * functions that must be callable without an explicit stream parameter.
+ * Test runner: Hegel builder, Settings, and test lifecycle.
  *
  * @packageDocumentation
  */
 
-import { AsyncLocalStorage } from "node:async_hooks";
-import { Stream, Connection, RequestError } from "./connection.js";
-import { encodeValue } from "./protocol.js";
-import type { Generator } from "./generators/index.js";
+import { HegelSession } from "./session.js";
+import { TestCase, StopTestError, AssumeError } from "./testCase.js";
+import { encodeValue, decodeValue } from "./protocol.js";
+import type { Connection, Stream } from "./connection.js";
 
 // ---------------------------------------------------------------------------
-// Supported protocol version range
+// Enums
 // ---------------------------------------------------------------------------
 
-const SUPPORTED_PROTOCOL_LO = "0.10";
-const SUPPORTED_PROTOCOL_HI = "0.10";
+export enum Verbosity {
+  Quiet = "quiet",
+  Normal = "normal",
+  Verbose = "verbose",
+  Debug = "debug",
+}
 
-/** Compare two "major.minor" version strings numerically. Returns -1, 0, or 1. */
-export function compareVersions(a: string, b: string): number {
-  const parse = (s: string): [number, number] => {
-    const match = /^(\d+)\.(\d+)$/.exec(s);
-    if (!match) {
-      throw new Error(`invalid version string '${s}': expected 'major.minor' format`);
+export enum HealthCheck {
+  FilterTooMuch = "filter_too_much",
+  TooSlow = "too_slow",
+  TestCasesTooLarge = "test_cases_too_large",
+  LargeInitialTestCase = "large_initial_test_case",
+}
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+
+export interface Settings {
+  testCases: number;
+  seed: number | null;
+  verbosity: Verbosity;
+  derandomize: boolean;
+  database: "unset" | "disabled" | string;
+  suppressHealthCheck: HealthCheck[];
+}
+
+function isInCI(): boolean {
+  const ciVars: Array<[string, string | null]> = [
+    ["CI", null],
+    ["BITBUCKET_COMMIT", null],
+    ["CIRCLECI", "true"],
+    ["CIRRUS_CI", "true"],
+    ["CODEBUILD_BUILD_ID", null],
+    ["GITHUB_ACTIONS", "true"],
+    ["GITLAB_CI", null],
+    ["HEROKU_TEST_RUN_ID", null],
+    ["TEAMCITY_VERSION", null],
+  ];
+  return ciVars.some(([key, value]) => {
+    if (value === null) {
+      return process.env[key] !== undefined;
     }
-    return [Number(match[1]), Number(match[2])];
+    return process.env[key] === value;
+  });
+}
+
+export function defaultSettings(): Settings {
+  const inCI = isInCI();
+  return {
+    testCases: 100,
+    seed: null,
+    verbosity: Verbosity.Normal,
+    derandomize: inCI,
+    database: inCI ? "disabled" : "unset",
+    suppressHealthCheck: [],
   };
-  const [aMajor, aMinor] = parse(a);
-  const [bMajor, bMinor] = parse(b);
-  if (aMajor !== bMajor) return aMajor < bMajor ? -1 : 1;
-  if (aMinor !== bMinor) return aMinor < bMinor ? -1 : 1;
-  return 0;
 }
 
 // ---------------------------------------------------------------------------
-// Error classes
+// Test case result
 // ---------------------------------------------------------------------------
 
-/**
- * Raised by {@link assume} when the condition is false.
- * Signals that this test case should be marked `INVALID`.
- */
-export class AssumeRejected extends Error {
-  constructor() {
-    super("assume() condition was false");
-    this.name = "AssumeRejected";
-  }
-}
-
-/**
- * Raised when the server sends a StopTest error response.
- * Signals that the test data is exhausted; the test runner catches this
- * and skips `mark_complete` (the server has already closed the test case).
- */
-export class DataExhausted extends Error {
-  constructor(message = "Server ran out of test data") {
-    super(message);
-    this.name = "DataExhausted";
-  }
-}
+type TestCaseResult =
+  | { status: "valid" }
+  | { status: "invalid" }
+  | { status: "interesting"; error: unknown };
 
 // ---------------------------------------------------------------------------
-// Span label constants
+// Hegel builder
 // ---------------------------------------------------------------------------
 
-/**
- * Label constants for generation spans.
- * Must match the values expected by the hegel server exactly.
- */
-export const Labels = {
-  LIST: 1,
-  LIST_ELEMENT: 2,
-  SET: 3,
-  SET_ELEMENT: 4,
-  MAP: 5,
-  MAP_ENTRY: 6,
-  TUPLE: 7,
-  ONE_OF: 8,
-  OPTIONAL: 9,
-  FIXED_DICT: 10,
-  FLAT_MAP: 11,
-  FILTER: 12,
-  MAPPED: 13,
-  SAMPLED_FROM: 14,
-  ENUM_VARIANT: 15,
-} as const;
+export class Hegel {
+  private testFn: (tc: TestCase) => void;
+  private _settings: Settings;
+  private _databaseKey: string | null = null;
 
-// ---------------------------------------------------------------------------
-// AsyncLocalStorage context
-// ---------------------------------------------------------------------------
-
-/**
- * Per-test-case context stored in AsyncLocalStorage.
- * Holds the current data stream and flags for the active test case.
- */
-export interface TestCaseData {
-  /** The data stream for the current test case. */
-  stream: Stream;
-  /** Whether this is the final (shrunk) replay of a failing test. */
-  isFinal: boolean;
-  /**
-   * Whether the server has sent StopTest (DataExhausted).
-   * When true, no further commands should be sent on the stream.
-   */
-  testAborted: boolean;
-}
-
-/**
- * AsyncLocalStorage for the current test context.
- * `getStore()` returns `undefined` outside a session call stack,
- * `null` when explicitly cleared, or a `TestCaseData` inside `_runTestCase`.
- */
-export const _testContextStorage = new AsyncLocalStorage<TestCaseData | null>();
-
-// ---------------------------------------------------------------------------
-// Client
-// ---------------------------------------------------------------------------
-
-/**
- * Client for the Hegel test server protocol.
- *
- * Performs the handshake and drives the test loop: receiving `test_case` and
- * `test_done` events, dispatching to `_runTestCase`, and collecting results.
- *
- * Use the static {@link Client.create} factory to construct a Client after
- * completing the protocol handshake.
- */
-export class Client {
-  /** The underlying connection. */
-  readonly connection: Connection;
-
-  private readonly _control: Stream;
-
-  /**
-   * Construct a Client over an already-connected (but NOT yet handshaked)
-   * Connection. Prefer {@link Client.create} which performs the handshake.
-   */
-  constructor(connection: Connection) {
-    this.connection = connection;
-    this._control = connection.controlStream;
+  constructor(testFn: (tc: TestCase) => void) {
+    this.testFn = testFn;
+    this._settings = defaultSettings();
   }
 
-  /**
-   * Factory: performs the protocol handshake and returns a ready Client.
-   *
-   * @throws {ConnectionError} If the server's protocol version is unsupported.
-   */
-  static async create(connection: Connection): Promise<Client> {
-    const version = await connection.sendHandshake();
-    if (
-      compareVersions(version, SUPPORTED_PROTOCOL_LO) < 0 ||
-      compareVersions(version, SUPPORTED_PROTOCOL_HI) > 0
-    ) {
-      throw new ConnectionError(
-        `hegel supports protocol versions ${SUPPORTED_PROTOCOL_LO} through ` +
-          `${SUPPORTED_PROTOCOL_HI}, but got server version ${version}.`,
-      );
+  settings(s: Partial<Settings>): this {
+    Object.assign(this._settings, s);
+    return this;
+  }
+
+  databaseKey(key: string): this {
+    this._databaseKey = key;
+    return this;
+  }
+
+  run(): void {
+    const session = HegelSession.get();
+    const connection = session.connection;
+    const testStream = connection.newStream();
+
+    // Build run_test message
+    const suppressNames = this._settings.suppressHealthCheck.map((c) => c as string);
+
+    const databaseKeyValue =
+      this._databaseKey !== null ? Buffer.from(this._databaseKey, "utf-8") : null;
+
+    const runTestMsg: Record<string, unknown> = {
+      command: "run_test",
+      test_cases: this._settings.testCases,
+      seed: this._settings.seed,
+      stream_id: testStream.streamId,
+      database_key: databaseKeyValue,
+      derandomize: this._settings.derandomize,
+    };
+
+    // Database field
+    if (this._settings.database === "disabled") {
+      runTestMsg["database"] = null;
+    } else if (this._settings.database !== "unset" && this._settings.database !== "disabled") {
+      runTestMsg["database"] = this._settings.database;
     }
-    return new Client(connection);
-  }
 
-  /**
-   * Run a property test.
-   *
-   * Sends the `run_test` command, drives the test loop, and raises on failure.
-   * Re-raises the original exception for a single failure, or raises
-   * `AggregateError` for multiple distinct failures.
-   *
-   * @param testFn - The test body (may be async).
-   * @param opts - Options: `testCases` (default 100).
-   */
-  async runTest(
-    testFn: () => void | Promise<void>,
-    opts: { testCases?: number } = {},
-  ): Promise<void> {
-    const testCases = opts.testCases ?? 100;
-    const testStream = this.connection.newStream({ role: "Test" });
+    if (suppressNames.length > 0) {
+      runTestMsg["suppress_health_check"] = suppressNames;
+    }
 
-    await this._control
-      .request({
-        command: "run_test",
-        test_cases: testCases,
-        stream_id: testStream.streamId,
-      })
-      .get();
+    // Send run_test on control stream
+    const controlPayload = encodeValue(runTestMsg);
+    const reqId = session.controlStream.sendRequest(controlPayload);
+    session.controlStream.receiveReply(reqId);
 
-    let resultData: Record<string, unknown> | undefined;
+    // Event loop
+    let resultData: Record<string, unknown>;
+    const ackNull = encodeValue({ result: null });
+    let gotInteresting = false;
 
-    // Main test loop: handle test_case and test_done events
     while (true) {
-      const [messageId, rawMessage] = await testStream.receiveRequest();
-      const message = rawMessage as Record<string, unknown>;
-      const event = message["event"] as string | undefined;
+      const [eventId, eventPayload] = testStream.receiveRequest();
+      const event = decodeValue(eventPayload) as Record<string, unknown>;
+      const eventType = event["event"] as string;
 
-      if (event === "test_case") {
-        const streamId = message["stream_id"] as number;
-        await testStream.sendResponseValue(messageId, null);
-        const testCaseStream = this.connection.connectStream(streamId, {
-          role: "Test Case",
-        });
-        await this._runTestCase(testCaseStream, testFn, false);
-      } else if (event === "test_done") {
-        await testStream.sendResponseValue(messageId, true);
-        resultData = message["results"] as Record<string, unknown>;
+      if (eventType === "test_case") {
+        const streamId = event["stream_id"] as number;
+        const testCaseStream = connection.connectStream(streamId);
+
+        // Ack BEFORE running the test
+        testStream.writeReply(eventId, ackNull);
+
+        const result = runTestCase(connection, testCaseStream, this.testFn, false);
+
+        if (result.status === "interesting") {
+          gotInteresting = true;
+        }
+      } else if (eventType === "test_done") {
+        const ackTrue = encodeValue({ result: true });
+        testStream.writeReply(eventId, ackTrue);
+        resultData = (event["results"] as Record<string, unknown>) ?? {};
         break;
       } else {
-        // Unrecognised event — send error response
-        await testStream.sendResponseRaw(
-          messageId,
-          encodeValue({
-            error: `Unrecognised event ${String(event)}`,
-            type: "InvalidMessage",
-          }),
-        );
+        throw new Error(`Unknown event: ${eventType}`);
       }
     }
 
-    const nInteresting = resultData!["interesting_test_cases"] as number;
-    if (nInteresting === 0) return;
+    // Check for server-side errors
+    if (resultData["error"]) {
+      throw new Error(`Server error: ${resultData["error"]}`);
+    }
+    if (resultData["health_check_failure"]) {
+      throw new Error(`Health check failure:\n${resultData["health_check_failure"]}`);
+    }
+    if (resultData["flaky"]) {
+      throw new Error(`Flaky test detected: ${resultData["flaky"]}`);
+    }
 
-    // Re-run the minimal failing test cases (final/shrunk replays)
-    const exceptions: Error[] = [];
+    const nInteresting = (resultData["interesting_test_cases"] as number) ?? 0;
+
+    // Final replays for interesting test cases
+    let finalResult: TestCaseResult | null = null;
+
     for (let i = 0; i < nInteresting; i++) {
-      try {
-        const [messageId, rawMessage] = await testStream.receiveRequest();
-        const message = rawMessage as Record<string, unknown>;
-        const streamId = message["stream_id"] as number;
-        await testStream.sendResponseValue(messageId, null);
-        const testCaseStream = this.connection.connectStream(streamId, {
-          role: "Test Case",
-        });
-        await this._runTestCase(testCaseStream, testFn, true);
-        // Final test case passed when it should have failed
-        if (nInteresting > 1) {
-          throw new AssertionError(`Expected test case ${i} to fail but it didn't`);
-        } else {
-          throw new AssertionError("Expected test case to fail but it didn't");
-        }
-      } catch (e) {
-        if (nInteresting === 1) throw e;
-        exceptions.push(e instanceof Error ? e : new Error(String(e)));
+      const [eventId, eventPayload] = testStream.receiveRequest();
+      const event = decodeValue(eventPayload) as Record<string, unknown>;
+      const streamId = event["stream_id"] as number;
+      const testCaseStream = connection.connectStream(streamId);
+
+      testStream.writeReply(eventId, ackNull);
+
+      const result = runTestCase(connection, testCaseStream, this.testFn, true);
+
+      if (result.status === "interesting") {
+        finalResult = result;
       }
     }
-    throw new AggregateError(exceptions, "multiple failures");
-  }
 
-  /**
-   * Run a single test case inside an AsyncLocalStorage context.
-   *
-   * Sets up context variables, calls the test body, handles exceptions,
-   * and sends `mark_complete` before closing the stream.
-   *
-   * @param stream - The data stream for this test case.
-   * @param testFn - The test body.
-   * @param isFinal - Whether this is the final (shrunk) replay.
-   */
-  async _runTestCase(
-    stream: Stream,
-    testFn: () => void | Promise<void>,
-    isFinal: boolean,
-  ): Promise<void> {
-    // Nesting check: context must be null/undefined (not already inside a test)
-    const existing = _testContextStorage.getStore();
-    if (existing !== undefined && existing !== null) {
-      throw new RuntimeError("Cannot nest test cases - already inside a test case");
-    }
+    testStream.close();
 
-    const data: TestCaseData = { stream, isFinal, testAborted: false };
+    const passed = (resultData["passed"] as boolean) ?? true;
+    const testFailed = !passed || gotInteresting;
 
-    await _testContextStorage.run(data, async () => {
-      let alreadyComplete = false;
-      let status = "VALID";
-      let origin: string | null = null;
-
-      try {
-        await testFn();
-      } catch (e) {
-        if (e instanceof AssumeRejected) {
-          status = "INVALID";
-        } else if (e instanceof DataExhausted) {
-          alreadyComplete = true;
-        } else if (e instanceof ConnectionError) {
-          throw e;
-        } else {
-          status = "INTERESTING";
-          const err = e instanceof Error ? e : new Error(String(e));
-          origin = extractOrigin(err);
-          if (isFinal) throw e;
-        }
-      } finally {
-        if (!alreadyComplete) {
-          // Fire-and-forget: send mark_complete then close
-          stream
-            .sendRequest({
-              command: "mark_complete",
-              status,
-              origin,
-            })
-            .catch(() => {});
-        }
-        stream.close();
+    if (testFailed) {
+      let msg = "unknown";
+      if (finalResult && finalResult.status === "interesting") {
+        const err = finalResult.error;
+        msg = err instanceof Error ? err.message : String(err);
       }
-    });
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Context helpers (used by generator functions)
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Generator/test-body helper functions
-// ---------------------------------------------------------------------------
-
-/**
- * Generate a value from a raw schema dict.
- *
- * Sends `{"command": "generate", "schema": schema}` to the server and returns
- * the result. If the server responds with StopTest, sets the `testAborted` flag
- * and throws {@link DataExhausted} to unwind the test body.
- *
- * @param schema - The schema to generate from.
- * @returns The generated value.
- * @throws {DataExhausted} If the server sends StopTest.
- * @throws {RequestError} For any other server error.
- */
-export async function generateFromSchema(
-  schema: Record<string, unknown>,
-  data: TestCaseData,
-): Promise<unknown> {
-  const stream = data.stream;
-  try {
-    return await stream.request({ command: "generate", schema }).get();
-  } catch (e) {
-    if (e instanceof RequestError && e.errorType === "StopTest") {
-      data.testAborted = true;
-      throw new DataExhausted("Server ran out of data");
+      throw new Error(`Property test failed: ${msg}`);
     }
-    throw e;
   }
-}
-
-/**
- * Reject the current test case if `condition` is false.
- *
- * @throws {AssumeRejected} When condition is false.
- */
-export function assume(condition: boolean): void {
-  const data = _testContextStorage.getStore();
-  if (!data) {
-    throw new RuntimeError("assume() cannot be called outside of a Hegel test");
-  }
-  if (!condition) {
-    throw new AssumeRejected();
-  }
-}
-
-/**
- * Record a note that is printed on the final (failing) test run.
- *
- * On non-final runs this is a no-op.
- *
- * @param message - The message to print.
- */
-export function note(message: string): void {
-  const data = _testContextStorage.getStore();
-  if (!data) {
-    throw new RuntimeError("note() cannot be called outside of a Hegel test");
-  }
-  if (data.isFinal) {
-    process.stderr.write(message + "\n");
-  }
-}
-
-/**
- * Guide the search toward higher target values.
- *
- * @param value - The target score to maximize.
- * @param label - Optional label for this target.
- */
-export async function target(value: number, label = ""): Promise<void> {
-  const data = _testContextStorage.getStore();
-  if (!data) {
-    throw new RuntimeError("target() cannot be called outside of a Hegel test");
-  }
-  const stream = data.stream;
-  await stream.request({ command: "target", value, label }).get();
-}
-
-/**
- * Start a generation span for better shrinking.
- *
- * No-op when the test has been aborted (StopTest received).
- *
- * @param label - Span label constant (see `Labels`).
- */
-export async function startSpan(label: number, data: TestCaseData): Promise<void> {
-  if (data.testAborted) return;
-  const stream = data.stream;
-  await stream.request({ command: "start_span", label }).get();
-}
-
-/**
- * End the current generation span.
- *
- * No-op when the test has been aborted (StopTest received).
- *
- * @param opts.discard - If true, the span is discarded (not counted toward coverage).
- */
-export async function stopSpan(opts: { discard?: boolean }, data: TestCaseData): Promise<void> {
-  if (data.testAborted) return;
-  const stream = data.stream;
-  await stream.request({ command: "stop_span", discard: opts.discard ?? false }).get();
 }
 
 // ---------------------------------------------------------------------------
-// draw — primary API for generating values
+// runTestCase
 // ---------------------------------------------------------------------------
 
-/**
- * Draw a value from a generator.
- *
- * This is the primary way to get values from generators inside a Hegel test.
- * It retrieves the current test context and delegates to the generator's
- * `doDraw` method.
- *
- * @param gen - The generator to draw from.
- * @throws {RuntimeError} If called outside a Hegel test.
- */
-export async function draw<T>(gen: Generator<T>): Promise<T> {
-  const data = _testContextStorage.getStore();
-  if (!data) {
-    throw new RuntimeError("draw() cannot be called outside of a Hegel test");
-  }
-  return gen.doDraw(data);
-}
-
-// ---------------------------------------------------------------------------
-// Origin extraction
-// ---------------------------------------------------------------------------
-
-/**
- * Extract origin information from an Error for reporting to the server.
- *
- * Returns a string of the form `"ErrorType at filename:lineno"`.
- * Falls back to `"ErrorType at :0"` when no stack trace is available.
- *
- * @param err - The error to extract origin from.
- */
-export function extractOrigin(err: Error): string {
-  const errName = err.constructor?.name ?? "Error";
-  const stack = err.stack;
-  if (!stack) {
-    return `${errName} at :0`;
-  }
-
-  // Parse all "at ..." frames from the stack trace.
-  // Prefer the first frame that isn't inside node_modules (user code).
-  // Fall back to the last parseable frame if all frames are internal.
-  const lines = stack.split("\n");
-  let firstUserFile = "";
-  let firstUserLine = "0";
-  let lastFile = "";
-  let lastLine = "0";
-
+function extractOrigin(error: unknown): string | null {
+  if (!(error instanceof Error) || !error.stack) return null;
+  const lines = error.stack.split("\n");
   for (const line of lines) {
     const trimmed = line.trim();
-    if (!trimmed.startsWith("at ")) continue;
-    // Format: "at FunctionName (file:line:col)" or "at file:line:col"
-    let file = "";
-    let lineNum = "";
-    const parenMatch = trimmed.match(/\((.+):(\d+):\d+\)$/);
-    if (parenMatch) {
-      file = parenMatch[1]!;
-      lineNum = parenMatch[2]!;
+    if (trimmed.startsWith("at ") && !trimmed.includes("node_modules")) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
+function runTestCase(
+  connection: Connection,
+  testStream: Stream,
+  testFn: (tc: TestCase) => void,
+  isFinal: boolean,
+): TestCaseResult {
+  const tc = new TestCase(connection, testStream, isFinal);
+
+  let result: TestCaseResult;
+  let origin: string | null = null;
+
+  try {
+    testFn(tc);
+    result = { status: "valid" };
+  } catch (e: unknown) {
+    if (e instanceof AssumeError) {
+      result = { status: "invalid" };
+    } else if (e instanceof StopTestError) {
+      result = { status: "invalid" };
     } else {
-      const plainMatch = trimmed.match(/at (.+):(\d+):\d+$/);
-      if (plainMatch) {
-        file = plainMatch[1]!;
-        lineNum = plainMatch[2]!;
+      result = { status: "interesting", error: e };
+      origin = extractOrigin(e);
+
+      if (isFinal) {
+        const msg = e instanceof Error ? e.message : String(e);
+        process.stderr.write(`\n${msg}\n`);
+        if (e instanceof Error && e.stack) {
+          process.stderr.write(e.stack + "\n");
+        }
       }
     }
-    if (!file) continue;
-    lastFile = file;
-    lastLine = lineNum;
-    if (!firstUserFile && !file.includes("node_modules")) {
-      firstUserFile = file;
-      firstUserLine = lineNum;
-    }
   }
 
-  const chosenFile = firstUserFile || lastFile;
-  const chosenLine = firstUserFile ? firstUserLine : lastLine;
-  if (!chosenFile) {
-    return `${errName} at :0`;
+  // Send mark_complete unless test was aborted (server already closed stream)
+  if (!tc.testAborted) {
+    const status =
+      result.status === "valid" ? "VALID" : result.status === "invalid" ? "INVALID" : "INTERESTING";
+
+    tc.sendMarkComplete({
+      command: "mark_complete",
+      status,
+      origin: origin ?? null,
+    });
   }
-  return `${errName} at ${chosenFile}:${chosenLine}`;
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
-// RuntimeError — used for nesting / context errors
+// Convenience function
 // ---------------------------------------------------------------------------
 
 /**
- * Thrown when the library is called outside its expected context.
- * (e.g., nesting test cases, calling generator functions outside a test)
+ * Run a property-based test.
+ *
+ * @example
+ * ```ts
+ * import { hegel, integers } from 'hegel';
+ *
+ * test('addition is commutative', () => {
+ *   hegel((tc) => {
+ *     const x = tc.draw(integers());
+ *     const y = tc.draw(integers());
+ *     expect(x + y).toBe(y + x);
+ *   });
+ * });
+ * ```
  */
-export class RuntimeError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "RuntimeError";
-  }
-}
-
-// ---------------------------------------------------------------------------
-// ConnectionError — re-exported for convenience
-// ---------------------------------------------------------------------------
-
-/**
- * Thrown when the connection to the hegel server is lost.
- */
-export class ConnectionError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ConnectionError";
-  }
-}
-
-// ---------------------------------------------------------------------------
-// AssertionError — for test runner internal assertions
-// ---------------------------------------------------------------------------
-
-/**
- * Thrown when a final test case passes when it should have failed.
- */
-export class AssertionError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "AssertionError";
-  }
+export function hegel(testFn: (tc: TestCase) => void, settings?: Partial<Settings>): void {
+  const h = new Hegel(testFn);
+  if (settings) h.settings(settings);
+  h.run();
 }
