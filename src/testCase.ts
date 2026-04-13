@@ -122,10 +122,11 @@ export class TestCase {
    */
   startSpan(label: number): void {
     this.spanDepth++;
-    const result = this.sendRequest("start_span", { label });
-    if (result === null) {
+    try {
+      this.sendRequest("start_span", { label });
+    } catch (e) {
       this.spanDepth--;
-      throw new StopTestError();
+      throw e;
     }
   }
 
@@ -134,17 +135,21 @@ export class TestCase {
    */
   stopSpan(discard = false): void {
     this.spanDepth--;
-    this.sendRequest("stop_span", { discard });
+    try {
+      this.sendRequest("stop_span", { discard });
+    } catch {
+      // Ignore errors during stop_span (matches Rust: `let _ = ...`)
+    }
   }
 
   /**
    * Send a request to the hegel server.
-   * Returns null if the server sends StopTest/overflow.
+   * Throws StopTestError if the server sends StopTest/overflow.
    * @internal
    */
   sendRequest(command: string, payload: Record<string, unknown> = {}): unknown {
     if (this._testAborted) {
-      return null;
+      throw new StopTestError();
     }
 
     const message: Record<string, unknown> = { command, ...payload };
@@ -160,12 +165,12 @@ export class TestCase {
       ) {
         this.stream.markClosed();
         this._testAborted = true;
-        return null;
+        throw new StopTestError();
       }
       if (errorMsg.includes("FlakyStrategyDefinition") || errorMsg.includes("FlakyReplay")) {
         this.stream.markClosed();
         this._testAborted = true;
-        return null;
+        throw new StopTestError();
       }
       if (this.connection.hasServerExited()) {
         throw new Error("Server process crashed", { cause: e });
@@ -198,11 +203,7 @@ export class TestCase {
  * @internal
  */
 export function generateRaw(tc: TestCase, schema: Record<string, unknown>): unknown {
-  const result = tc.sendRequest("generate", { schema });
-  if (result === null) {
-    throw new StopTestError();
-  }
-  return result;
+  return tc.sendRequest("generate", { schema });
 }
 
 // ---------------------------------------------------------------------------
@@ -237,9 +238,6 @@ export class Collection {
         payload["max_size"] = this.maxSize;
       }
       const result = this.tc.sendRequest("new_collection", payload);
-      if (result === null) {
-        throw new StopTestError();
-      }
       if (typeof result !== "number") {
         throw new Error(`Expected integer from new_collection, got ${typeof result}`);
       }
@@ -256,12 +254,14 @@ export class Collection {
       return false;
     }
     const collectionId = this.ensureInitialized();
-    const result = this.tc.sendRequest("collection_more", {
-      collection_id: collectionId,
-    });
-    if (result === null) {
+    let result: unknown;
+    try {
+      result = this.tc.sendRequest("collection_more", {
+        collection_id: collectionId,
+      });
+    } catch (e) {
       this.finished = true;
-      throw new StopTestError();
+      throw e;
     }
     if (typeof result !== "boolean") {
       throw new Error(`Expected boolean from collection_more, got ${typeof result}`);
