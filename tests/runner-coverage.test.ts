@@ -123,6 +123,14 @@ describe("Hegel.run() settings branches", () => {
       .run();
   });
 
+  test("database: 'unset' omits database from run_test message", () => {
+    new Hegel((tc) => {
+      tc.draw(booleans());
+    })
+      .settings({ testCases: 5, database: "unset" })
+      .run();
+  });
+
   test("database: custom path sets database to string", () => {
     new Hegel((tc) => {
       tc.draw(booleans());
