@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0 - 2026-04-14
+
+Complete rewrite of the library based on `hegel-rust` architecture. Synchronous stdio-based I/O, explicit `TestCase` parameter, options-object generators, `DataSource` abstraction, `record()` combinator, and dual-path conformance testing via `makeNonBasic`.
+
 ## 0.2.5 - 2026-04-10
 
 Update to new protocol version.

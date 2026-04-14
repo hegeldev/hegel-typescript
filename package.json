@@ -1,6 +1,6 @@
 {
   "name": "hegel",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "description": "Hegel property-based testing library for TypeScript",
   "type": "module",
   "main": "dist/index.js",
