@@ -86,4 +86,4 @@ export type {
 } from "./generators/index.js";
 
 // Conformance testing
-export { getTestCases, writeMetrics } from "./conformance.js";
+export { getTestCases, makeNonBasic, writeMetrics } from "./conformance.js";

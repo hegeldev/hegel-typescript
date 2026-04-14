@@ -9,6 +9,24 @@
  */
 
 import * as fs from "node:fs";
+import type { Generator } from "./generators/index.js";
+
+// ---------------------------------------------------------------------------
+// makeNonBasic
+// ---------------------------------------------------------------------------
+
+/** Predicate that always returns true — used by {@link makeNonBasic}. */
+function alwaysTrue(): boolean {
+  return true;
+}
+
+/**
+ * Wrap a generator so it loses its schema, forcing the compositional
+ * fallback path. Used by conformance binaries when `mode` is `"non_basic"`.
+ */
+export function makeNonBasic<T>(gen: Generator<T>): Generator<T> {
+  return gen.filter(alwaysTrue);
+}
 
 // ---------------------------------------------------------------------------
 // getTestCases
