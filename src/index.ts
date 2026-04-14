@@ -69,7 +69,7 @@ export {
   // Composition
   composite,
   record,
-} from "./generators.js";
+} from "./generators/index.js";
 
 export type {
   IntegerOptions,
@@ -83,7 +83,7 @@ export type {
   DomainOptions,
   CollectionOptions,
   ArrayOptions,
-} from "./generators.js";
+} from "./generators/index.js";
 
 // Conformance testing
 export { getTestCases, writeMetrics } from "./conformance.js";

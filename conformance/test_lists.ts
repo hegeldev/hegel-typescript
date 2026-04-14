@@ -12,7 +12,7 @@
  */
 
 import { getTestCases, writeMetrics } from "../src/conformance.js";
-import { integers, arrays } from "../src/generators.js";
+import { integers, arrays } from "../src/generators/index.js";
 import { hegel } from "../src/runner.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};

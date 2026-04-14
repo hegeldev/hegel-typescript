@@ -6,7 +6,7 @@
  */
 
 import { getTestCases, writeMetrics } from "../src/conformance.js";
-import { booleans } from "../src/generators.js";
+import { booleans } from "../src/generators/index.js";
 import { hegel } from "../src/runner.js";
 
 const testCases = getTestCases();
