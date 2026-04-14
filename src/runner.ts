@@ -425,7 +425,7 @@ export class Hegel {
     // Database field
     if (this._settings.database === "disabled") {
       runTestMsg["database"] = null;
-    } else if (this._settings.database !== "unset" && this._settings.database !== "disabled") {
+    } else if (this._settings.database !== "unset") {
       runTestMsg["database"] = this._settings.database;
     }
 
