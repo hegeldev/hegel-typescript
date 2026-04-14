@@ -27,8 +27,7 @@ import {
   optional,
   maps,
   arrays,
-  recordGenerator,
-  variantGenerator,
+  composite,
 } from "hegel";
 
 // ---------------------------------------------------------------------------
@@ -751,7 +750,7 @@ test(
 );
 
 // ---------------------------------------------------------------------------
-// Showcase: recordGenerator -- point distance is always non-negative
+// Showcase: composite record -- point distance is always non-negative
 // ---------------------------------------------------------------------------
 
 /**
@@ -760,13 +759,13 @@ test(
  * meaningful mathematical property).
  */
 test(
-  "recordGenerator: distance between two points is non-negative",
+  "composite record: distance between two points is non-negative",
   hegel(
     (tc) => {
-      const pointGen = recordGenerator({
-        x: floats({ minValue: -100, maxValue: 100 }),
-        y: floats({ minValue: -100, maxValue: 100 }),
-      });
+      const pointGen = composite((inner) => ({
+        x: inner.draw(floats({ minValue: -100, maxValue: 100 })),
+        y: inner.draw(floats({ minValue: -100, maxValue: 100 })),
+      }));
 
       const p1 = tc.draw(pointGen);
       const p2 = tc.draw(pointGen);
@@ -788,22 +787,22 @@ test(
 );
 
 // ---------------------------------------------------------------------------
-// Showcase: recordGenerator -- Vector2D magnitude is bounded
+// Showcase: composite record -- Vector2D magnitude is bounded
 // ---------------------------------------------------------------------------
 
 /**
- * A 2D vector generated with recordGenerator. The magnitude is always
+ * A 2D vector generated with composite. The magnitude is always
  * bounded by sqrt(x^2 + y^2), and for bounded floats this is always
  * <= sqrt(2) * 1000.
  */
 test(
-  "recordGenerator: Vector2D magnitude is bounded by sqrt(2)*1000",
+  "composite record: Vector2D magnitude is bounded by sqrt(2)*1000",
   hegel(
     (tc) => {
-      const vecGen = recordGenerator({
-        x: floats({ minValue: -1000, maxValue: 1000 }),
-        y: floats({ minValue: -1000, maxValue: 1000 }),
-      });
+      const vecGen = composite((inner) => ({
+        x: inner.draw(floats({ minValue: -1000, maxValue: 1000 })),
+        y: inner.draw(floats({ minValue: -1000, maxValue: 1000 })),
+      }));
 
       const v = tc.draw(vecGen);
       const mag = Math.sqrt(v.x * v.x + v.y * v.y);
@@ -817,7 +816,7 @@ test(
 );
 
 // ---------------------------------------------------------------------------
-// Showcase: variantGenerator -- discriminated union covers all variants
+// Showcase: oneOf -- discriminated union covers all variants
 // ---------------------------------------------------------------------------
 
 /**
@@ -827,7 +826,7 @@ test(
  * Property: the area of every shape is non-negative.
  */
 test(
-  "variantGenerator: every Shape has non-negative area",
+  "oneOf: every Shape has non-negative area",
   hegel(
     (tc) => {
       type Shape =
@@ -835,16 +834,24 @@ test(
         | { type: "rectangle"; width: number; height: number }
         | { type: "point" };
 
-      const shapeGen = variantGenerator<Shape>({
-        circle: recordGenerator({
-          radius: floats({ minValue: 0, maxValue: 100, allowNan: false, allowInfinity: false }),
-        }),
-        rectangle: recordGenerator({
-          width: floats({ minValue: 0, maxValue: 100, allowNan: false, allowInfinity: false }),
-          height: floats({ minValue: 0, maxValue: 100, allowNan: false, allowInfinity: false }),
-        }),
-        point: null,
-      });
+      const shapeGen = oneOf<Shape>(
+        composite((inner) => ({
+          type: "circle" as const,
+          radius: inner.draw(
+            floats({ minValue: 0, maxValue: 100, allowNan: false, allowInfinity: false }),
+          ),
+        })),
+        composite((inner) => ({
+          type: "rectangle" as const,
+          width: inner.draw(
+            floats({ minValue: 0, maxValue: 100, allowNan: false, allowInfinity: false }),
+          ),
+          height: inner.draw(
+            floats({ minValue: 0, maxValue: 100, allowNan: false, allowInfinity: false }),
+          ),
+        })),
+        composite(() => ({ type: "point" as const })),
+      );
 
       const shape = tc.draw(shapeGen);
 
@@ -867,35 +874,33 @@ test(
 );
 
 // ---------------------------------------------------------------------------
-// Showcase: nested derivation -- derived record inside variant
+// Showcase: nested composition -- composite record inside oneOf variant
 // ---------------------------------------------------------------------------
 
 /**
  * A message type where each variant carries different structured payload.
- * Demonstrates composing recordGenerator inside variantGenerator for
- * non-trivial nested types.
+ * Demonstrates composing composite inside oneOf for non-trivial nested types.
  */
 test(
-  "variantGenerator: nested records in message protocol",
+  "oneOf: nested records in message protocol",
   hegel(
     (tc) => {
       type Message =
         | { kind: "text"; body: string; sender: string }
         | { kind: "image"; url: string; width: number; height: number };
 
-      const msgGen = variantGenerator<Message>(
-        {
-          text: recordGenerator({
-            body: text({ minSize: 1, maxSize: 50 }),
-            sender: text({ minSize: 1, maxSize: 10 }),
-          }),
-          image: recordGenerator({
-            url: text({ minSize: 5, maxSize: 30 }),
-            width: integers({ minValue: 1, maxValue: 4096 }),
-            height: integers({ minValue: 1, maxValue: 4096 }),
-          }),
-        },
-        "kind",
+      const msgGen = oneOf<Message>(
+        composite((inner) => ({
+          kind: "text" as const,
+          body: inner.draw(text({ minSize: 1, maxSize: 50 })),
+          sender: inner.draw(text({ minSize: 1, maxSize: 10 })),
+        })),
+        composite((inner) => ({
+          kind: "image" as const,
+          url: inner.draw(text({ minSize: 5, maxSize: 30 })),
+          width: inner.draw(integers({ minValue: 1, maxValue: 4096 })),
+          height: inner.draw(integers({ minValue: 1, maxValue: 4096 })),
+        })),
       );
 
       const msg = tc.draw(msgGen);

@@ -67,8 +67,6 @@ export {
   datetimes,
   // Composition
   composite,
-  recordGenerator,
-  variantGenerator,
 } from "./generators.js";
 
 export type {
@@ -82,7 +80,6 @@ export type {
   DomainOptions,
   CollectionOptions,
   ArrayOptions,
-  RecordSchema,
 } from "./generators.js";
 
 // Conformance testing

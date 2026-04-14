@@ -21,8 +21,6 @@ import {
   optional,
   tuples,
   composite,
-  recordGenerator,
-  variantGenerator,
   text,
   characters,
   binary,
@@ -309,13 +307,6 @@ describe("Generator parse error paths", () => {
     const tc = new TestCase(ds, false);
     expect(() => tc.draw(tuples(integers(), integers()))).toThrow("Expected array");
   });
-
-  it("recordGenerator parse throws on non-array", () => {
-    const ds = new FakeDataSource({ generates: ["not array"] });
-    const tc = new TestCase(ds, false);
-    const gen = recordGenerator({ x: integers(), y: integers() });
-    expect(() => tc.draw(gen)).toThrow("Expected array");
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -572,42 +563,6 @@ describe("binary parse paths", () => {
 });
 
 // ---------------------------------------------------------------------------
-// generators.ts: variantGenerator
-// ---------------------------------------------------------------------------
-
-describe("variantGenerator with fake DataSource", () => {
-  it("generates variant with data", () => {
-    // sampledFrom will generate an index, then recordGenerator draws fields
-    // Tag is index into ["circle", "point"] -> sampledFrom uses integers(0, 1)
-    // Index 0 = "circle", then recordGenerator needs a generate for radius
-    const ds = new FakeDataSource({ generates: [0, [5.0]] });
-    const tc = new TestCase(ds, false);
-    type Shape = { type: "circle"; radius: number } | { type: "point" };
-    const gen = variantGenerator<Shape>({
-      circle: recordGenerator({ radius: integers() }),
-      point: null,
-    });
-    const result = tc.draw(gen);
-    expect(result.type).toBe("circle");
-    if (result.type === "circle") {
-      expect(result.radius).toBe(5);
-    }
-  });
-
-  it("generates data-less variant", () => {
-    const ds = new FakeDataSource({ generates: [1] });
-    const tc = new TestCase(ds, false);
-    type Shape = { type: "circle"; radius: number } | { type: "point" };
-    const gen = variantGenerator<Shape>({
-      circle: recordGenerator({ radius: integers() }),
-      point: null,
-    });
-    const result = tc.draw(gen);
-    expect(result.type).toBe("point");
-  });
-});
-
-// ---------------------------------------------------------------------------
 // generators.ts: error validation
 // ---------------------------------------------------------------------------
 
@@ -626,10 +581,6 @@ describe("Generator validation errors", () => {
 
   it("oneOf throws on empty generators", () => {
     expect(() => oneOf()).toThrow("oneOf requires at least one generator");
-  });
-
-  it("variantGenerator throws on empty variants", () => {
-    expect(() => variantGenerator({})).toThrow("variantGenerator requires at least one variant");
   });
 
   it("sampledFrom throws on empty array", () => {

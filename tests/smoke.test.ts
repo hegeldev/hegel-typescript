@@ -18,8 +18,6 @@ import {
   tuples,
   tuples3,
   composite,
-  recordGenerator,
-  variantGenerator,
   fromRegex,
   emails,
   dates,
@@ -202,12 +200,12 @@ describe("basic property tests", () => {
   );
 
   test(
-    "recordGenerator",
+    "composite record",
     hegel((tc) => {
-      const userGen = recordGenerator({
-        name: text({ minSize: 1, maxSize: 20 }),
-        age: integers({ minValue: 0, maxValue: 120 }),
-      });
+      const userGen = composite((inner) => ({
+        name: inner.draw(text({ minSize: 1, maxSize: 20 })),
+        age: inner.draw(integers({ minValue: 0, maxValue: 120 })),
+      }));
 
       const user = tc.draw(userGen);
       expect(typeof user.name).toBe("string");
@@ -217,16 +215,19 @@ describe("basic property tests", () => {
   );
 
   test(
-    "variantGenerator",
+    "oneOf variant",
     hegel((tc) => {
       type Shape = { type: "circle"; radius: number } | { type: "point" };
 
-      const shapeGen = variantGenerator<Shape>({
-        circle: recordGenerator({
-          radius: floats({ minValue: 0, maxValue: 100, allowNan: false, allowInfinity: false }),
-        }),
-        point: null,
-      });
+      const shapeGen = oneOf<Shape>(
+        composite((inner) => ({
+          type: "circle" as const,
+          radius: inner.draw(
+            floats({ minValue: 0, maxValue: 100, allowNan: false, allowInfinity: false }),
+          ),
+        })),
+        composite(() => ({ type: "point" as const })),
+      );
 
       const shape = tc.draw(shapeGen);
       expect(["circle", "point"]).toContain(shape.type);

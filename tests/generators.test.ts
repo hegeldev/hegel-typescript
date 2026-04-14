@@ -7,7 +7,7 @@
  * 3. Format generators (emails, urls, domains, ipAddresses, dates, times, datetimes)
  * 4. Collection generators (arrays/lists, sets, maps/dicts)
  * 5. Combinators (map, filter, flatMap, oneOf, optional, tuples)
- * 6. Composition (composite, recordGenerator, variantGenerator)
+ * 6. Composition (composite)
  * 7. Argument validation
  */
 
@@ -43,8 +43,6 @@ import {
   times,
   datetimes,
   composite,
-  recordGenerator,
-  variantGenerator,
   Generator,
   BasicGenerator,
 } from "hegel";
@@ -1165,99 +1163,6 @@ describe("composite()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// recordGenerator()
-// ---------------------------------------------------------------------------
-
-describe("recordGenerator()", () => {
-  test(
-    "generates plain objects with correct field types",
-    hegel(
-      (tc) => {
-        const userGen = recordGenerator({
-          name: text({ minSize: 1, maxSize: 20 }),
-          age: integers({ minValue: 0, maxValue: 120 }),
-        });
-        const user = tc.draw(userGen);
-        expect(typeof user.name).toBe("string");
-        expect(typeof user.age).toBe("number");
-        expect(user.age).toBeGreaterThanOrEqual(0);
-        expect(user.age).toBeLessThanOrEqual(120);
-      },
-      { testCases: 20 },
-    ),
-  );
-
-  test(
-    "works with non-basic field generators",
-    hegel(
-      (tc) => {
-        const gen = recordGenerator({
-          value: integers({ minValue: 0, maxValue: 100 }).filter((x) => x % 2 === 0),
-          label: text({ minSize: 1, maxSize: 5 }),
-        });
-        const obj = tc.draw(gen);
-        expect(obj.value % 2).toBe(0);
-        expect(typeof obj.label).toBe("string");
-      },
-      { testCases: 20 },
-    ),
-  );
-});
-
-// ---------------------------------------------------------------------------
-// variantGenerator()
-// ---------------------------------------------------------------------------
-
-describe("variantGenerator()", () => {
-  test(
-    "generates discriminated union variants",
-    hegel(
-      (tc) => {
-        type Shape = { type: "circle"; radius: number } | { type: "point" };
-
-        const shapeGen = variantGenerator<Shape>({
-          circle: recordGenerator({
-            radius: floats({ minValue: 0, maxValue: 100, allowNan: false, allowInfinity: false }),
-          }),
-          point: null,
-        });
-
-        const shape = tc.draw(shapeGen);
-        expect(["circle", "point"]).toContain(shape.type);
-        if (shape.type === "circle") {
-          expect(shape.radius).toBeGreaterThanOrEqual(0);
-        }
-      },
-      { testCases: 30 },
-    ),
-  );
-
-  test("throws on empty variants", () => {
-    expect(() => variantGenerator({})).toThrow("variantGenerator requires at least one variant");
-  });
-
-  test(
-    "always generates a valid variant tag",
-    hegel(
-      (tc) => {
-        type V = { type: "a"; x: number } | { type: "b" };
-        const gen = variantGenerator<V>({
-          a: recordGenerator({ x: integers({ minValue: 0, maxValue: 10 }) }),
-          b: null,
-        });
-        const v = tc.draw(gen);
-        expect(["a", "b"]).toContain(v.type);
-        if (v.type === "a") {
-          expect(v.x).toBeGreaterThanOrEqual(0);
-          expect(v.x).toBeLessThanOrEqual(10);
-        }
-      },
-      { testCases: 50 },
-    ),
-  );
-});
-
-// ---------------------------------------------------------------------------
 // Argument validation
 // ---------------------------------------------------------------------------
 
@@ -1299,12 +1204,6 @@ describe("argument validation", () => {
   describe("sampledFrom()", () => {
     test("throws on empty array", () => {
       expect(() => sampledFrom([])).toThrow("sampledFrom requires at least one element");
-    });
-  });
-
-  describe("variantGenerator()", () => {
-    test("throws on empty variants", () => {
-      expect(() => variantGenerator({})).toThrow("variantGenerator requires at least one variant");
     });
   });
 });
