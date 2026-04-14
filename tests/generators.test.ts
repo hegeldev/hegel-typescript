@@ -15,6 +15,8 @@ import { describe, test, expect } from "vitest";
 import {
   hegel,
   integers,
+  bigIntegers,
+  record,
   floats,
   booleans,
   text,
@@ -92,6 +94,11 @@ describe("integers()", () => {
     expect(integers()).toBeInstanceOf(BasicGenerator);
   });
 
+  test("throws if bounds exceed safe integer range", () => {
+    expect(() => integers({ minValue: Number.MIN_SAFE_INTEGER - 1 })).toThrow("Use bigIntegers()");
+    expect(() => integers({ maxValue: Number.MAX_SAFE_INTEGER + 1 })).toThrow("Use bigIntegers()");
+  });
+
   test("returns a BasicGenerator with minValue only", () => {
     const gen = integers({ minValue: 5 });
     expect(gen).toBeInstanceOf(BasicGenerator);
@@ -100,6 +107,53 @@ describe("integers()", () => {
   test("returns a BasicGenerator with maxValue only", () => {
     const gen = integers({ maxValue: 100 });
     expect(gen).toBeInstanceOf(BasicGenerator);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// bigIntegers()
+// ---------------------------------------------------------------------------
+
+describe("bigIntegers()", () => {
+  test(
+    "generates bigint values",
+    hegel(
+      (tc) => {
+        const v = tc.draw(bigIntegers());
+        expect(typeof v).toBe("bigint");
+      },
+      { testCases: 20 },
+    ),
+  );
+
+  test(
+    "respects bounds",
+    hegel(
+      (tc) => {
+        const v = tc.draw(bigIntegers({ minValue: 0n, maxValue: 1000n }));
+        expect(v).toBeGreaterThanOrEqual(0n);
+        expect(v).toBeLessThanOrEqual(1000n);
+      },
+      { testCases: 20 },
+    ),
+  );
+
+  test(
+    "can generate values outside safe integer range",
+    hegel(
+      (tc) => {
+        const big = BigInt(Number.MAX_SAFE_INTEGER) + 1000n;
+        const v = tc.draw(bigIntegers({ minValue: big, maxValue: big + 1000n }));
+        expect(v).toBeGreaterThanOrEqual(big);
+      },
+      { testCases: 10 },
+    ),
+  );
+
+  test("throws when minValue > maxValue", () => {
+    expect(() => bigIntegers({ minValue: 10n, maxValue: 5n })).toThrow(
+      "Cannot have maxValue < minValue",
+    );
   });
 });
 
@@ -1135,6 +1189,60 @@ describe("tuples4()", () => {
         expect(typeof f).toBe("number");
       },
       { testCases: 30 },
+    ),
+  );
+});
+
+// ---------------------------------------------------------------------------
+// record()
+// ---------------------------------------------------------------------------
+
+describe("record()", () => {
+  test(
+    "generates plain objects with correct field types",
+    hegel(
+      (tc) => {
+        const gen = record({
+          name: text({ minSize: 1, maxSize: 10 }),
+          age: integers({ minValue: 0, maxValue: 120 }),
+          active: booleans(),
+        });
+        const obj = tc.draw(gen);
+        expect(typeof obj.name).toBe("string");
+        expect(typeof obj.age).toBe("number");
+        expect(typeof obj.active).toBe("boolean");
+      },
+      { testCases: 20 },
+    ),
+  );
+
+  test(
+    "works with non-basic field generators (composite path)",
+    hegel(
+      (tc) => {
+        const gen = record({
+          value: integers({ minValue: 0, maxValue: 100 }).filter((x) => x > 10),
+        });
+        const obj = tc.draw(gen);
+        expect(obj.value).toBeGreaterThan(10);
+      },
+      { testCases: 20 },
+    ),
+  );
+
+  test(
+    "works with just() for constant fields",
+    hegel(
+      (tc) => {
+        const gen = record({
+          type: just("user" as const),
+          id: integers({ minValue: 1, maxValue: 1000 }),
+        });
+        const obj = tc.draw(gen);
+        expect(obj.type).toBe("user");
+        expect(obj.id).toBeGreaterThanOrEqual(1);
+      },
+      { testCases: 20 },
     ),
   );
 });
