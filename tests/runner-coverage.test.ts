@@ -52,13 +52,7 @@ describe("defaultSettings CI detection", () => {
       "TEAMCITY_VERSION",
       "bamboo.buildKey",
     ];
-    const valueVars = [
-      "BUILDKITE",
-      "CIRCLECI",
-      "CIRRUS_CI",
-      "GITHUB_ACTIONS",
-      "TF_BUILD",
-    ];
+    const valueVars = ["BUILDKITE", "CIRCLECI", "CIRRUS_CI", "GITHUB_ACTIONS", "TF_BUILD"];
     const allVars = [...nullVars, ...valueVars];
     for (const key of allVars) {
       savedVars[key] = process.env[key];
