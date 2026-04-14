@@ -35,6 +35,7 @@ export {
   BasicGenerator,
   // Primitives
   integers,
+  bigIntegers,
   floats,
   booleans,
   text,
@@ -71,6 +72,7 @@ export {
 
 export type {
   IntegerOptions,
+  BigIntegerOptions,
   FloatOptions,
   CharacterFilterOptions,
   TextOptions,

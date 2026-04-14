@@ -191,12 +191,46 @@ export interface IntegerOptions {
   maxValue?: number;
 }
 
-/** Generate integers. Defaults to the safe integer range. */
+/**
+ * Generate integers as JS numbers. Defaults to the safe integer range.
+ * Throws if bounds are outside Number.MAX_SAFE_INTEGER.
+ * Use bigIntegers() for arbitrary-precision integers.
+ */
 export function integers(options?: IntegerOptions): BasicGenerator<number> {
-  const min = options?.minValue ?? -(2 ** 53 - 1);
-  const max = options?.maxValue ?? 2 ** 53 - 1;
+  const min = options?.minValue ?? Number.MIN_SAFE_INTEGER;
+  const max = options?.maxValue ?? Number.MAX_SAFE_INTEGER;
   if (min > max) throw new Error("Cannot have maxValue < minValue");
-  return new BasicGenerator({ type: "integer", min_value: min, max_value: max });
+  if (min < Number.MIN_SAFE_INTEGER || max > Number.MAX_SAFE_INTEGER) {
+    throw new Error(
+      "integers() bounds must be within Number.MIN_SAFE_INTEGER..Number.MAX_SAFE_INTEGER. Use bigIntegers() for larger ranges.",
+    );
+  }
+  return new BasicGenerator({ type: "integer", min_value: min, max_value: max }, (raw) => {
+    // cbor-x may decode values near the safe integer boundary as BigInt
+    if (typeof raw === "bigint") return Number(raw);
+    return raw as number;
+  });
+}
+
+export interface BigIntegerOptions {
+  minValue?: bigint;
+  maxValue?: bigint;
+}
+
+/** Generate arbitrary-precision integers as BigInt. */
+export function bigIntegers(options?: BigIntegerOptions): BasicGenerator<bigint> {
+  const min = options?.minValue;
+  const max = options?.maxValue;
+  if (min !== undefined && max !== undefined && min > max) {
+    throw new Error("Cannot have maxValue < minValue");
+  }
+  const schema: Record<string, unknown> = { type: "integer" };
+  if (min !== undefined) schema["min_value"] = min;
+  if (max !== undefined) schema["max_value"] = max;
+  return new BasicGenerator(schema, (raw) => {
+    if (typeof raw === "bigint") return raw;
+    return BigInt(raw as number);
+  });
 }
 
 // ---------------------------------------------------------------------------

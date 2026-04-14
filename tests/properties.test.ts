@@ -12,10 +12,6 @@
 import { describe, test, expect } from "vitest";
 import { hegel, integers, floats, text, booleans, arrays, oneOf, composite } from "hegel";
 
-// Default integers() can return BigInt for values outside Number.MAX_SAFE_INTEGER.
-// Use bounded integers for tests that need JS number operations.
-const ints = () => integers({ minValue: -1_000_000, maxValue: 1_000_000 });
-
 // =========================================================================
 // Array properties
 // =========================================================================
@@ -24,7 +20,7 @@ describe("Array properties", () => {
   test(
     "sort is idempotent",
     hegel((tc) => {
-      const arr = tc.draw(arrays(ints()));
+      const arr = tc.draw(arrays(integers()));
       const sorted = [...arr].sort((a, b) => a - b);
       const sortedTwice = [...sorted].sort((a, b) => a - b);
       expect(sorted).toEqual(sortedTwice);
@@ -34,7 +30,7 @@ describe("Array properties", () => {
   test(
     "sort preserves length",
     hegel((tc) => {
-      const arr = tc.draw(arrays(ints()));
+      const arr = tc.draw(arrays(integers()));
       expect([...arr].sort((a, b) => a - b).length).toBe(arr.length);
     }),
   );
@@ -42,7 +38,7 @@ describe("Array properties", () => {
   test(
     "sort produces ordered output",
     hegel((tc) => {
-      const arr = tc.draw(arrays(ints()));
+      const arr = tc.draw(arrays(integers()));
       const sorted = [...arr].sort((a, b) => a - b);
       for (let i = 1; i < sorted.length; i++) {
         expect(sorted[i]).toBeGreaterThanOrEqual(sorted[i - 1]);
@@ -62,7 +58,7 @@ describe("Array properties", () => {
   test(
     "reverse is an involution",
     hegel((tc) => {
-      const arr = tc.draw(arrays(ints()));
+      const arr = tc.draw(arrays(integers()));
       expect([...arr].reverse().reverse()).toEqual(arr);
     }),
   );
@@ -70,8 +66,8 @@ describe("Array properties", () => {
   test(
     "concat length is sum of lengths",
     hegel((tc) => {
-      const a = tc.draw(arrays(ints()));
-      const b = tc.draw(arrays(ints()));
+      const a = tc.draw(arrays(integers()));
+      const b = tc.draw(arrays(integers()));
       expect(a.concat(b).length).toBe(a.length + b.length);
     }),
   );
@@ -79,9 +75,9 @@ describe("Array properties", () => {
   test(
     "concat associativity",
     hegel((tc) => {
-      const a = tc.draw(arrays(ints(), { maxSize: 10 }));
-      const b = tc.draw(arrays(ints(), { maxSize: 10 }));
-      const c = tc.draw(arrays(ints(), { maxSize: 10 }));
+      const a = tc.draw(arrays(integers(), { maxSize: 10 }));
+      const b = tc.draw(arrays(integers(), { maxSize: 10 }));
+      const c = tc.draw(arrays(integers(), { maxSize: 10 }));
       expect(a.concat(b).concat(c)).toEqual(a.concat(b.concat(c)));
     }),
   );
@@ -89,8 +85,8 @@ describe("Array properties", () => {
   test(
     "filter preserves order and reduces length",
     hegel((tc) => {
-      const arr = tc.draw(arrays(ints()));
-      const threshold = tc.draw(ints());
+      const arr = tc.draw(arrays(integers()));
+      const threshold = tc.draw(integers());
       const filtered = arr.filter((x) => x > threshold);
       expect(filtered.length).toBeLessThanOrEqual(arr.length);
       // Check order is preserved
@@ -105,7 +101,7 @@ describe("Array properties", () => {
   test(
     "map preserves length",
     hegel((tc) => {
-      const arr = tc.draw(arrays(ints()));
+      const arr = tc.draw(arrays(integers()));
       const mapped = arr.map((x) => x * 2);
       expect(mapped.length).toBe(arr.length);
     }),
@@ -139,7 +135,7 @@ describe("Array properties", () => {
   test(
     "chunksOf(n) then flatten equals original (for even-length arrays)",
     hegel((tc) => {
-      const arr = tc.draw(arrays(ints(), { maxSize: 20 }));
+      const arr = tc.draw(arrays(integers(), { maxSize: 20 }));
       const n = tc.draw(integers({ minValue: 1, maxValue: 5 }));
 
       const chunks: number[][] = [];
@@ -160,8 +156,8 @@ describe("Number properties", () => {
   test(
     "addition is commutative",
     hegel((tc) => {
-      const a = tc.draw(ints());
-      const b = tc.draw(ints());
+      const a = tc.draw(integers());
+      const b = tc.draw(integers());
       expect(a + b).toBe(b + a);
     }),
   );
@@ -179,8 +175,8 @@ describe("Number properties", () => {
   test(
     "multiplication is commutative",
     hegel((tc) => {
-      const a = tc.draw(ints());
-      const b = tc.draw(ints());
+      const a = tc.draw(integers());
+      const b = tc.draw(integers());
       expect(a * b).toBe(b * a);
     }),
   );
@@ -188,7 +184,7 @@ describe("Number properties", () => {
   test(
     "abs is non-negative",
     hegel((tc) => {
-      const n = tc.draw(ints());
+      const n = tc.draw(integers());
       expect(Math.abs(n)).toBeGreaterThanOrEqual(0);
     }),
   );
@@ -196,8 +192,8 @@ describe("Number properties", () => {
   test(
     "min/max identity: min(a,b) <= max(a,b)",
     hegel((tc) => {
-      const a = tc.draw(ints());
-      const b = tc.draw(ints());
+      const a = tc.draw(integers());
+      const b = tc.draw(integers());
       expect(Math.min(a, b)).toBeLessThanOrEqual(Math.max(a, b));
     }),
   );
@@ -205,8 +201,8 @@ describe("Number properties", () => {
   test(
     "min/max coverage: {min(a,b), max(a,b)} == {a, b}",
     hegel((tc) => {
-      const a = tc.draw(ints());
-      const b = tc.draw(ints());
+      const a = tc.draw(integers());
+      const b = tc.draw(integers());
       expect(new Set([Math.min(a, b), Math.max(a, b)])).toEqual(new Set([a, b]));
     }),
   );
@@ -352,7 +348,7 @@ describe("Map properties", () => {
     "set then get returns the value",
     hegel((tc) => {
       const key = tc.draw(text({ minSize: 1, maxSize: 10, codec: "ascii" }));
-      const value = tc.draw(ints());
+      const value = tc.draw(integers());
       const map = new Map<string, number>();
       map.set(key, value);
       expect(map.get(key)).toBe(value);
@@ -366,7 +362,7 @@ describe("Map properties", () => {
         arrays(
           composite((inner) => ({
             key: inner.draw(text({ minSize: 1, maxSize: 5, codec: "ascii" })),
-            value: inner.draw(ints()),
+            value: inner.draw(integers()),
           })),
           { maxSize: 5 },
         ),
