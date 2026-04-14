@@ -12,26 +12,25 @@
  */
 
 import { getTestCases, writeMetrics } from "../src/conformance.js";
-import { integers, lists } from "../src/generators/index.js";
-import { draw } from "../src/runner.js";
-import { runHegelTest } from "../src/session.js";
+import { integers, arrays } from "../src/generators.js";
+import { hegel } from "../src/runner.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
 
 const minSize = params["min_size"] != null ? Number(params["min_size"]) : 0;
-const maxSize = params["max_size"] != null ? Number(params["max_size"]) : null;
-const minValue = params["min_value"] != null ? Number(params["min_value"]) : null;
-const maxValue = params["max_value"] != null ? Number(params["max_value"]) : null;
+const maxSize = params["max_size"] != null ? Number(params["max_size"]) : undefined;
+const minValue = params["min_value"] != null ? Number(params["min_value"]) : undefined;
+const maxValue = params["max_value"] != null ? Number(params["max_value"]) : undefined;
 
 const testCases = getTestCases();
-// Use .filter(() => true) to force CompositeListGenerator (collection protocol),
+// Use .filter(() => true) to force composite path (collection protocol),
 // which is required for stop_test_on_collection_more/new_collection test modes.
-const elemGen = integers(minValue, maxValue).filter(() => true);
-const gen = lists(elemGen, minSize, maxSize);
+const elemGen = integers({ minValue, maxValue }).filter(() => true);
+const gen = arrays(elemGen, { minSize, maxSize });
 
-await runHegelTest(
-  async function conformance_lists() {
-    const items = await draw(gen);
+hegel(
+  function conformance_lists(tc) {
+    const items = tc.draw(gen);
     const size = items.length;
 
     let minElement: number | null = null;
@@ -48,6 +47,6 @@ await runHegelTest(
     writeMetrics({ size, min_element: minElement, max_element: maxElement });
   },
   { testCases },
-);
+)();
 
 process.exit(0);

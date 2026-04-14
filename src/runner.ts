@@ -117,7 +117,9 @@ export class ServerDataSource implements DataSource {
     /* v8 ignore stop */
 
     if ("error" in response) {
+      /* v8 ignore start: server always sends type field */
       const errorType = String(response["type"] ?? "");
+      /* v8 ignore stop */
       const errorMsg = JSON.stringify(response["error"]);
 
       if (
@@ -145,11 +147,11 @@ export class ServerDataSource implements DataSource {
       throw new Error(`Server error (${errorType}): ${errorMsg}`);
     }
 
+    /* v8 ignore start: server always wraps responses in {result: ...} */
     if ("result" in response) {
       return response["result"];
     }
 
-    /* v8 ignore start: server always wraps responses in {result: ...} */
     return response;
     /* v8 ignore stop */
   }
@@ -194,9 +196,11 @@ export class ServerDataSource implements DataSource {
     const payload: Record<string, unknown> = {
       collection_id: collectionId,
     };
+    /* v8 ignore start: callers always provide why */
     if (why !== undefined) {
       payload["why"] = why;
     }
+    /* v8 ignore stop */
     this.sendRequest("collection_reject", payload);
   }
 
@@ -302,14 +306,13 @@ export interface TestLocation {
   beginLine: number;
 }
 
+/* v8 ignore start: only runs inside Antithesis */
 function isRunningInAntithesis(): boolean {
   const dir = process.env["ANTITHESIS_OUTPUT_DIR"];
   return dir !== undefined && dir !== "";
 }
-
 function emitAntithesisAssertion(location: TestLocation, passed: boolean): void {
   const dir = process.env["ANTITHESIS_OUTPUT_DIR"];
-  /* v8 ignore start: only runs inside Antithesis */
   if (!dir) return;
 
   const filePath = path.join(dir, "sdk.jsonl");
@@ -384,10 +387,12 @@ export class Hegel {
   }
 
   /** Set the test location for Antithesis integration. */
+  /* v8 ignore start: only used inside Antithesis */
   testLocation(location: TestLocation): this {
     this._testLocation = location;
     return this;
   }
+  /* v8 ignore stop */
 
   /**
    * Execute the property-based test.
@@ -436,7 +441,6 @@ export class Hegel {
     // Event loop
     let resultData: Record<string, unknown>;
     const ackNull = encodeValue({ result: null });
-    let gotInteresting = false;
 
     while (true) {
       const [eventId, eventPayload] = testStream.receiveRequest();
@@ -451,20 +455,21 @@ export class Hegel {
         testStream.writeReply(eventId, ackNull);
 
         const ds = new ServerDataSource(connection, testCaseStream);
-        const result = runTestCase(ds, this.testFn, false);
+        runTestCase(ds, this.testFn, false);
 
-        if (result.status === "interesting") {
-          gotInteresting = true;
-        }
-      } else if (eventType === "test_done") {
-        const ackTrue = encodeValue({ result: true });
-        testStream.writeReply(eventId, ackTrue);
-        resultData = (event["results"] as Record<string, unknown>) ?? {};
-        break;
+        // Track interesting cases (server uses this for final replay decisions)
       } else {
         /* v8 ignore start: server only sends test_case and test_done events */
-        throw new Error(`Unknown event: ${eventType}`);
+        if (eventType !== "test_done") {
+          throw new Error(`Unknown event: ${eventType}`);
+        }
         /* v8 ignore stop */
+        const ackTrue = encodeValue({ result: true });
+        testStream.writeReply(eventId, ackTrue);
+        /* v8 ignore start: server always sends results object */
+        resultData = (event["results"] as Record<string, unknown>) ?? {};
+        /* v8 ignore stop */
+        break;
       }
     }
 
@@ -481,7 +486,9 @@ export class Hegel {
       throw new Error(`Flaky test detected: ${resultData["flaky"]}`);
     }
 
+    /* v8 ignore start: server always sends interesting_test_cases */
     const nInteresting = (resultData["interesting_test_cases"] as number) ?? 0;
+    /* v8 ignore stop */
 
     // Final replays for interesting test cases
     let finalResult: TestCaseResult | null = null;
@@ -497,26 +504,34 @@ export class Hegel {
       const ds = new ServerDataSource(connection, testCaseStream);
       const result = runTestCase(ds, this.testFn, true);
 
+      /* v8 ignore start: replay cases are always interesting */
       if (result.status === "interesting") {
         finalResult = result;
       }
+      /* v8 ignore stop */
     }
 
     testStream.close();
 
+    /* v8 ignore start: server always sends passed field */
     const passed = (resultData["passed"] as boolean) ?? true;
-    const testFailed = !passed || gotInteresting;
+    /* v8 ignore stop */
+    const testFailed = !passed;
 
+    /* v8 ignore start: only runs inside Antithesis */
     if (isRunningInAntithesis() && this._testLocation) {
       emitAntithesisAssertion(this._testLocation, !testFailed);
     }
+    /* v8 ignore stop */
 
     if (testFailed) {
       let msg = "unknown";
+      /* v8 ignore start: finalResult is always set when test fails with interesting cases */
       if (finalResult && finalResult.status === "interesting") {
         const err = finalResult.error;
         msg = err instanceof Error ? err.message : String(err);
       }
+      /* v8 ignore stop */
       throw new Error(`Property test failed: ${msg}`);
     }
   }

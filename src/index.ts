@@ -20,6 +20,12 @@ export {
 } from "./runner.js";
 export type { Settings, TestCaseResult, TestLocation } from "./runner.js";
 
+// Protocol
+export type { Packet } from "./protocol.js";
+
+// Connection
+export { Connection, Stream } from "./connection.js";
+
 // Session
 export { HegelSession, HEGEL_SERVER_VERSION } from "./session.js";
 
@@ -76,6 +82,7 @@ export type {
   DomainOptions,
   CollectionOptions,
   ArrayOptions,
+  RecordSchema,
 } from "./generators.js";
 
 // Conformance testing

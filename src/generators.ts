@@ -793,7 +793,7 @@ export function composite<T>(fn: (tc: TestCase) => T): Generator<T> {
 // Record generator
 // ---------------------------------------------------------------------------
 
-type RecordSchema<T> = { [K in keyof T]: Generator<T[K]> };
+export type RecordSchema<T> = { [K in keyof T]: Generator<T[K]> };
 
 /**
  * Generate plain objects by drawing each field from its generator.

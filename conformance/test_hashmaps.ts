@@ -12,9 +12,8 @@
  */
 
 import { getTestCases, writeMetrics } from "../src/conformance.js";
-import { dicts, integers, text } from "../src/generators/index.js";
-import { draw } from "../src/runner.js";
-import { runHegelTest } from "../src/session.js";
+import { maps, integers, text } from "../src/generators.js";
+import { hegel } from "../src/runner.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
 
@@ -28,14 +27,14 @@ const maxVal = params["max_value"] != null ? Number(params["max_value"]) : 1000;
 
 const testCases = getTestCases();
 
-const keysGen = keyType === "string" ? text() : integers(minKey, maxKey);
-const valsGen = integers(minVal, maxVal);
-const gen = dicts(keysGen, valsGen, minSize, maxSize);
+const keysGen = keyType === "string" ? text() : integers({ minValue: minKey, maxValue: maxKey });
+const valsGen = integers({ minValue: minVal, maxValue: maxVal });
+const gen = maps(keysGen, valsGen, { minSize, maxSize });
 
-await runHegelTest(
-  async function conformance_hashmaps() {
-    const dict = await draw(gen);
-    const entries = Object.entries(dict);
+hegel(
+  function conformance_hashmaps(tc) {
+    const dict = tc.draw(gen);
+    const entries = [...dict.entries()];
     const size = entries.length;
 
     let minKeyOut: string | number | null = null;
@@ -51,11 +50,11 @@ await runHegelTest(
         if (maxValueOut === null || numVal > maxValueOut) maxValueOut = numVal;
 
         if (keyType === "string") {
-          const strKey = k;
+          const strKey = k as string;
           if (firstEntry || strKey < (minKeyOut as string)) minKeyOut = strKey;
           if (firstEntry || strKey > (maxKeyOut as string)) maxKeyOut = strKey;
         } else {
-          const numKey = Number(k);
+          const numKey = k as number;
           if (firstEntry || numKey < (minKeyOut as number)) minKeyOut = numKey;
           if (firstEntry || numKey > (maxKeyOut as number)) maxKeyOut = numKey;
         }
@@ -72,6 +71,6 @@ await runHegelTest(
     });
   },
   { testCases },
-);
+)();
 
 process.exit(0);

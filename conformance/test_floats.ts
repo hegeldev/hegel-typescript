@@ -9,27 +9,27 @@
  */
 
 import { getTestCases, writeMetrics } from "../src/conformance.js";
-import { floats } from "../src/generators/index.js";
-import { draw } from "../src/runner.js";
-import { runHegelTest } from "../src/session.js";
+import { floats } from "../src/generators.js";
+import { hegel } from "../src/runner.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
 
-const minValue = params["min_value"] != null ? Number(params["min_value"]) : null;
-const maxValue = params["max_value"] != null ? Number(params["max_value"]) : null;
-const allowNan = params["allow_nan"] != null ? Boolean(params["allow_nan"]) : null;
-const allowInfinity = params["allow_infinity"] != null ? Boolean(params["allow_infinity"]) : null;
+const minValue = params["min_value"] != null ? Number(params["min_value"]) : undefined;
+const maxValue = params["max_value"] != null ? Number(params["max_value"]) : undefined;
+const allowNan = params["allow_nan"] != null ? Boolean(params["allow_nan"]) : undefined;
+const allowInfinity =
+  params["allow_infinity"] != null ? Boolean(params["allow_infinity"]) : undefined;
 // Only apply exclude_min/exclude_max when there is an actual bound —
 // the server rejects exclude_min=true when min_value is None.
-const excludeMin = minValue !== null && Boolean(params["exclude_min"]);
-const excludeMax = maxValue !== null && Boolean(params["exclude_max"]);
+const excludeMin = minValue !== undefined ? Boolean(params["exclude_min"]) : undefined;
+const excludeMax = maxValue !== undefined ? Boolean(params["exclude_max"]) : undefined;
 
 const testCases = getTestCases();
-const gen = floats(minValue, maxValue, allowNan, allowInfinity, excludeMin, excludeMax);
+const gen = floats({ minValue, maxValue, allowNan, allowInfinity, excludeMin, excludeMax });
 
-await runHegelTest(
-  async function conformance_floats() {
-    const value = await draw(gen);
+hegel(
+  function conformance_floats(tc) {
+    const value = tc.draw(gen);
     const isNan = Number.isNaN(value);
     const isInfinite = !isNan && !Number.isFinite(value);
     writeMetrics({
@@ -39,6 +39,6 @@ await runHegelTest(
     });
   },
   { testCases },
-);
+)();
 
 process.exit(0);

@@ -28,6 +28,7 @@ import {
   binary,
   booleans,
   sampledFrom,
+  domains,
 } from "hegel";
 import type { DataSource } from "hegel";
 
@@ -753,5 +754,68 @@ describe("Collection protocol via fake DataSource", () => {
         [2, 20],
       ]),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// drawSilent
+// ---------------------------------------------------------------------------
+
+describe("drawSilent", () => {
+  it("draws a value without recording output", () => {
+    const ds = new FakeDataSource({ generates: [42] });
+    const tc = new TestCase(ds, false);
+    const value = tc.drawSilent(integers());
+    expect(value).toBe(42);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Validation error paths
+// ---------------------------------------------------------------------------
+
+describe("validation errors", () => {
+  it("text() throws when alphabet combined with other char filter options", () => {
+    expect(() => text({ alphabet: "abc", minCodepoint: 65 })).toThrow(
+      "Cannot combine alphabet with other character filtering options",
+    );
+  });
+
+  it("text() accepts individual character filter options", () => {
+    // Each of these should create a generator without throwing
+    const gen1 = text({ codec: "utf-8" });
+    expect(gen1).toBeInstanceOf(BasicGenerator);
+
+    const gen2 = text({ minCodepoint: 32, maxCodepoint: 126 });
+    expect(gen2).toBeInstanceOf(BasicGenerator);
+
+    const gen3 = text({ categories: ["L", "Nd"] });
+    expect(gen3).toBeInstanceOf(BasicGenerator);
+
+    const gen4 = text({ excludeCategories: ["Cc"] });
+    expect(gen4).toBeInstanceOf(BasicGenerator);
+
+    const gen5 = text({ includeCharacters: "abc" });
+    expect(gen5).toBeInstanceOf(BasicGenerator);
+
+    const gen6 = text({ excludeCharacters: "xyz" });
+    expect(gen6).toBeInstanceOf(BasicGenerator);
+  });
+
+  it("sets() throws when minSize > maxSize", () => {
+    expect(() => sets(integers(), { minSize: 5, maxSize: 2 })).toThrow(
+      "Cannot have maxSize < minSize",
+    );
+  });
+
+  it("maps() throws when minSize > maxSize", () => {
+    expect(() => maps(integers(), integers(), { minSize: 5, maxSize: 2 })).toThrow(
+      "Cannot have maxSize < minSize",
+    );
+  });
+
+  it("domains() accepts maxLength option", () => {
+    const gen = domains({ maxLength: 50 });
+    expect(gen).toBeInstanceOf(BasicGenerator);
   });
 });

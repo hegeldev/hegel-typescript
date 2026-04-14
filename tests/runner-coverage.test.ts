@@ -15,10 +15,29 @@ import {
   booleans,
   BasicGenerator,
   runTestCase,
+  defaultSettings,
   type DataSource,
   StopTestError,
   AssumeError,
 } from "hegel";
+
+describe("defaultSettings CI detection", () => {
+  test("defaultSettings returns database='disabled' when CI env var is set", () => {
+    const original = process.env["CI"];
+    try {
+      process.env["CI"] = "true";
+      const settings = defaultSettings();
+      expect(settings.database).toBe("disabled");
+      expect(settings.derandomize).toBe(true);
+    } finally {
+      if (original === undefined) {
+        delete process.env["CI"];
+      } else {
+        process.env["CI"] = original;
+      }
+    }
+  });
+});
 
 describe("Hegel.run() settings branches", () => {
   test("database: 'disabled' sets database to null", () => {

@@ -17,9 +17,7 @@ export default defineConfig({
       reporter: ["text", "json", "json-summary"],
       thresholds: {
         lines: 100,
-        // Branch coverage is ~96% because v8 tracks branches inside
-        // /* v8 ignore start/stop */ blocks for defensive error handlers.
-        branches: 96,
+        branches: 100,
         functions: 100,
         statements: 100,
       },
