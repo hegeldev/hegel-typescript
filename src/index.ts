@@ -68,6 +68,7 @@ export {
   datetimes,
   // Composition
   composite,
+  record,
 } from "./generators.js";
 
 export type {
