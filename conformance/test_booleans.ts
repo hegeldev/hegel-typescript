@@ -7,18 +7,17 @@
 
 import { getTestCases, writeMetrics } from "../src/conformance.js";
 import { booleans } from "../src/generators/index.js";
-import { draw } from "../src/runner.js";
-import { runHegelTest } from "../src/session.js";
+import { hegel } from "../src/runner.js";
 
 const testCases = getTestCases();
 const gen = booleans();
 
-await runHegelTest(
-  async function conformance_booleans() {
-    const value = await draw(gen);
+hegel(
+  function conformance_booleans(tc) {
+    const value = tc.draw(gen);
     writeMetrics({ value });
   },
   { testCases },
-);
+)();
 
 process.exit(0);

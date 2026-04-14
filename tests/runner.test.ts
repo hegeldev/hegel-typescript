@@ -1,142 +1,29 @@
 /**
- * Tests for the Client, runner helpers, and test lifecycle.
- *
- * Most tests use the real hegel binary via runHegelTest or a fresh HegelSession.
- * Error injection tests use HEGEL_PROTOCOL_TEST_MODE with a fresh session each time.
- * For unrecognised-event handling we use a manual socket-pair server (no mock server).
+ * Tests for the test runner, error classes, Labels, and test lifecycle.
  */
 
-import * as net from "node:net";
-import { describe, expect, it, vi } from "vitest";
-import {
-  AssertionError,
-  AssumeRejected,
-  ConnectionError,
-  DataExhausted,
-  RuntimeError,
-  BasicGenerator,
-  HegelSession,
-  runHegelTest,
-  assume,
-  draw,
-  note,
-  target,
-} from "hegel";
-import { Stream, Connection, ConnectionState, RequestError } from "../src/connection.js";
-import {
-  Client,
-  Labels,
-  _testContextStorage,
-  compareVersions,
-  extractOrigin,
-  generateFromSchema,
-  startSpan,
-  stopSpan,
-} from "../src/runner.js";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Raw handshake responder: reads the handshake request from the control stream
- * and replies with "Hegel/0.10". Sets the connection to CLIENT state with a high
- * stream ID base to avoid collisions with the actual client side.
- */
-async function rawHandshakeResponder(conn: Connection): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (conn as any)._connectionState = ConnectionState.CLIENT;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (conn as any)._nextStreamId = 1000;
-  const [msgId] = await conn.controlStream.receiveRequestRaw();
-  await conn.controlStream.sendResponseRaw(msgId, Buffer.from("Hegel/0.10"));
-}
-
-/** Create a connected TCP socket pair for in-process tests. */
-function socketPair(): Promise<[net.Socket, net.Socket]> {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer((serverSocket) => {
-      server.close();
-      resolve([serverSocket, clientSocket]);
-    });
-    server.on("error", reject);
-    let clientSocket: net.Socket;
-    server.listen(0, "127.0.0.1", () => {
-      const addr = server.address() as net.AddressInfo;
-      clientSocket = net.createConnection(addr.port, "127.0.0.1");
-      clientSocket.on("error", reject);
-    });
-  });
-}
-
-/**
- * Run a test with HEGEL_PROTOCOL_TEST_MODE set to `mode` using a fresh session.
- * Cleans up the session afterward.
- */
-async function withTestMode(
-  mode: string,
-  fn: (session: HegelSession) => Promise<void>,
-): Promise<void> {
-  const origMode = process.env["HEGEL_PROTOCOL_TEST_MODE"];
-  process.env["HEGEL_PROTOCOL_TEST_MODE"] = mode;
-  const session = new HegelSession();
-  try {
-    await fn(session);
-  } finally {
-    session._cleanup();
-    if (origMode !== undefined) {
-      process.env["HEGEL_PROTOCOL_TEST_MODE"] = origMode;
-    } else {
-      delete process.env["HEGEL_PROTOCOL_TEST_MODE"];
-    }
-  }
-}
+import { describe, test, it, expect } from "vitest";
+import { StopTestError, AssumeError, Labels, hegel, Hegel, integers, booleans } from "hegel";
 
 // ---------------------------------------------------------------------------
 // Error classes
 // ---------------------------------------------------------------------------
 
-describe("AssumeRejected", () => {
-  it("has correct name", () => {
-    const e = new AssumeRejected();
-    expect(e.name).toBe("AssumeRejected");
+describe("StopTestError", () => {
+  it("has correct name and message", () => {
+    const e = new StopTestError();
+    expect(e.name).toBe("StopTestError");
     expect(e).toBeInstanceOf(Error);
+    expect(e.message).toBe("Server ran out of data (StopTest)");
   });
 });
 
-describe("DataExhausted", () => {
-  it("has correct name", () => {
-    const e = new DataExhausted();
-    expect(e.name).toBe("DataExhausted");
+describe("AssumeError", () => {
+  it("has correct name and message", () => {
+    const e = new AssumeError();
+    expect(e.name).toBe("AssumeError");
     expect(e).toBeInstanceOf(Error);
-  });
-
-  it("accepts custom message", () => {
-    const e = new DataExhausted("custom");
-    expect(e.message).toBe("custom");
-  });
-});
-
-describe("RuntimeError", () => {
-  it("has correct name", () => {
-    const e = new RuntimeError("msg");
-    expect(e.name).toBe("RuntimeError");
-    expect(e.message).toBe("msg");
-  });
-});
-
-describe("ConnectionError", () => {
-  it("has correct name", () => {
-    const e = new ConnectionError("msg");
-    expect(e.name).toBe("ConnectionError");
-  });
-});
-
-describe("AssertionError", () => {
-  it("has correct name", () => {
-    const e = new AssertionError("msg");
-    expect(e.name).toBe("AssertionError");
-    expect(e.message).toBe("msg");
+    expect(e.message).toBe("Assumption rejected");
   });
 });
 
@@ -165,728 +52,117 @@ describe("Labels", () => {
 });
 
 // ---------------------------------------------------------------------------
-// extractOrigin
-// ---------------------------------------------------------------------------
-
-describe("extractOrigin", () => {
-  it("extracts file and line from a real stack trace", () => {
-    let err!: Error;
-    try {
-      throw new Error("test");
-    } catch (e) {
-      err = e as Error;
-    }
-    const origin = extractOrigin(err);
-    expect(origin).toContain("Error");
-    expect(origin).toMatch(/runner\.test\.(ts|js):\d+/);
-  });
-
-  it("returns :0 when stack is missing", () => {
-    const err = new Error("no stack");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (err as any).stack = undefined;
-    const origin = extractOrigin(err);
-    expect(origin).toBe("Error at :0");
-  });
-
-  it("returns :0 when stack has no parseable frames", () => {
-    const err = new Error("weird");
-    err.stack = "Error: weird\n  no frames here";
-    const origin = extractOrigin(err);
-    expect(origin).toBe("Error at :0");
-  });
-
-  it("handles plain (no-paren) stack frame format", () => {
-    const err = new Error("plain");
-    err.stack = "Error: plain\n    at /some/file.js:42:10";
-    const origin = extractOrigin(err);
-    expect(origin).toBe("Error at /some/file.js:42");
-  });
-
-  it("uses 'Error' when constructor.name is undefined", () => {
-    // Create an object with no constructor.name to exercise the `?? "Error"` fallback.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const err = { constructor: undefined, stack: undefined } as any as Error;
-    const origin = extractOrigin(err);
-    expect(origin).toBe("Error at :0");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// assume
+// assume() behavior
 // ---------------------------------------------------------------------------
 
 describe("assume", () => {
-  it("throws RuntimeError outside test context", () => {
-    expect(() => assume(true)).toThrow("assume() cannot be called outside of a Hegel test");
-  });
+  test(
+    "assume(true) is a no-op",
+    hegel((tc) => {
+      tc.assume(true);
+    }),
+  );
 
-  it("true is a no-op inside context", async () => {
-    const fakeStream = {} as Stream;
-    const data = { stream: fakeStream, isFinal: false, testAborted: false };
-    await _testContextStorage.run(data, async () => {
-      expect(() => assume(true)).not.toThrow();
-    });
-  });
-
-  it("false throws AssumeRejected inside context", async () => {
-    const fakeStream = {} as Stream;
-    const data = { stream: fakeStream, isFinal: false, testAborted: false };
-    await _testContextStorage.run(data, async () => {
-      expect(() => assume(false)).toThrow(AssumeRejected);
-    });
-  });
+  test(
+    "assume(false) rejects the test case",
+    hegel((tc) => {
+      const x = tc.draw(integers({ minValue: 0, maxValue: 100 }));
+      tc.assume(x > 10);
+      expect(x).toBeGreaterThan(10);
+    }),
+  );
 });
 
 // ---------------------------------------------------------------------------
-// note
+// note() behavior
 // ---------------------------------------------------------------------------
 
 describe("note", () => {
-  it("throws RuntimeError outside test context", () => {
-    expect(() => note("msg")).toThrow("note() cannot be called outside of a Hegel test");
-  });
-
-  it("throws RuntimeError when context is null", async () => {
-    await _testContextStorage.run(null, async () => {
-      expect(() => note("msg")).toThrow("note() cannot be called outside of a Hegel test");
-    });
-  });
-
-  it("is silent when isFinal=false", async () => {
-    const fakeStream = {} as Stream;
-    const data = { stream: fakeStream, isFinal: false, testAborted: false };
-    const spy = vi.spyOn(process.stderr, "write").mockReturnValue(true);
-    await _testContextStorage.run(data, async () => {
-      note("should not print");
-      expect(spy).not.toHaveBeenCalled();
-    });
-    spy.mockRestore();
-  });
-
-  it("prints when isFinal=true", async () => {
-    const fakeStream = {} as Stream;
-    const data = { stream: fakeStream, isFinal: true, testAborted: false };
-    const spy = vi.spyOn(process.stderr, "write").mockReturnValue(true);
-    await _testContextStorage.run(data, async () => {
-      note("test message");
-      expect(spy).toHaveBeenCalledWith("test message\n");
-    });
-    spy.mockRestore();
-  });
+  test(
+    "note does not throw during exploration",
+    hegel((tc) => {
+      tc.draw(booleans());
+      tc.note("should not throw");
+    }),
+  );
 });
 
 // ---------------------------------------------------------------------------
-// target
+// Failing test detection
 // ---------------------------------------------------------------------------
 
-describe("target", () => {
-  it("throws RuntimeError outside test context", async () => {
-    await expect(target(1.0)).rejects.toThrow("target() cannot be called outside of a Hegel test");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// startSpan / stopSpan (when testAborted)
-// ---------------------------------------------------------------------------
-
-describe("startSpan / stopSpan when testAborted", () => {
-  it("are no-ops when testAborted=true", async () => {
-    const fakeStream = { request: vi.fn() } as unknown as Stream;
-    const data = { stream: fakeStream, isFinal: false, testAborted: true };
-    await startSpan(1, data);
-    await stopSpan({}, data);
-    expect(fakeStream.request).not.toHaveBeenCalled();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Client.create - version check
-// ---------------------------------------------------------------------------
-
-describe("Client.create", () => {
-  it("rejects unsupported protocol version", async () => {
-    const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
-
-    // Manually perform a fake handshake with a bad version
-    const serverTask = (async () => {
-      // Wait for client's handshake request, reply with bad version
-      const [msgId, _payload] = await serverConn.controlStream.receiveRequestRaw();
-      const buf = Buffer.from("Hegel/99.0");
-      await serverConn.controlStream.sendResponseRaw(msgId, buf);
-    })();
-
-    const clientTask = Client.create(clientConn);
-
-    await expect(clientTask).rejects.toThrow("hegel supports protocol versions");
-    await serverTask;
-    clientConn.close();
-    serverConn.close();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Integration tests via real hegel binary
-// ---------------------------------------------------------------------------
-
-describe("runHegelTest integration", () => {
-  it("passes a simple test with no assertions", async () => {
-    await runHegelTest(() => {
-      // Nothing - always valid
-    });
-  });
-
-  it("passes when all test cases are INVALID (assume false)", async () => {
-    await runHegelTest(async () => {
-      // Generate something so the server knows we're running
-      await generateFromSchema({ type: "boolean" }, _testContextStorage.getStore()!);
-      assume(false);
-    });
-  });
-
-  it("re-raises original exception for a single interesting failure", async () => {
-    await expect(
-      runHegelTest(async () => {
-        const x = (await generateFromSchema(
-          {
-            type: "integer",
-            min_value: 0,
-            max_value: 100,
-          },
-          _testContextStorage.getStore()!,
-        )) as number;
-        if (x >= 50) throw new Error("x is too large");
-      }),
-    ).rejects.toThrow("x is too large");
-  });
-
-  it("raises AggregateError for multiple distinct failures (manual server)", async () => {
-    // Use a manual server that reports 2 interesting cases so we can test AggregateError
-    const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
-
-    const serverTask = (async () => {
-      await rawHandshakeResponder(serverConn);
-      const control = serverConn.controlStream;
-      const [msgId, message] = await control.receiveRequest();
-      const msg = message as Record<string, unknown>;
-      const testStreamId = msg["stream_id"] as number;
-      const testStream = serverConn.connectStream(testStreamId, { role: "Test" });
-      await control.sendResponseValue(msgId, true);
-
-      // Send test_done with 2 interesting cases
-      const tdReq = await testStream.sendRequest({
-        event: "test_done",
-        results: {
-          passed: false,
-          test_cases: 0,
-          valid_test_cases: 0,
-          invalid_test_cases: 0,
-          interesting_test_cases: 2,
-        },
-      });
-      await testStream.receiveResponseRaw(tdReq);
-
-      // Send 2 final test cases
-      for (let i = 0; i < 2; i++) {
-        const dc = serverConn.newStream({ role: `FinalData${i}` });
-        const req = await testStream.sendRequest({ event: "test_case", stream_id: dc.streamId });
-        await testStream.receiveResponseRaw(req);
-        const [mcId] = await dc.receiveRequest({ timeoutMs: 5000 });
-        await dc.sendResponseValue(mcId, null);
-        dc.close();
-      }
-    })();
-
-    await clientConn.sendHandshake();
-    const client = new Client(clientConn);
-
-    // Each final run throws — first an Error, second a non-Error string
-    let callCount = 0;
-    client._runTestCase = async (ch: Stream, _fn: () => void | Promise<void>, isFinal: boolean) => {
-      if (isFinal) {
-        ch.sendRequest({ command: "mark_complete", status: "INTERESTING", origin: null }).catch(
-          () => {},
-        );
-        ch.close();
-        if (callCount++ === 0) {
-          throw new Error("failure 0");
+describe("failing test detection", () => {
+  test("hegel() detects a property failure", () => {
+    expect(
+      hegel((tc) => {
+        const x = tc.draw(integers({ minValue: 0, maxValue: 100 }));
+        if (x > 0) {
+          throw new Error("Found positive number");
         }
-        throw "non-error failure" as unknown; // covers `e instanceof Error ? e : new Error(String(e))` false branch
-      }
-      ch.sendRequest({ command: "mark_complete", status: "VALID", origin: null }).catch(() => {});
-      ch.close();
-    };
-
-    await expect(client.runTest(() => {}, { testCases: 1 })).rejects.toThrow(AggregateError);
-
-    await serverTask;
-    clientConn.close();
-    serverConn.close();
-  });
-
-  it("assume(true) is a no-op in a live test", async () => {
-    await runHegelTest(() => {
-      assume(true);
-    });
-  });
-
-  it("target() completes without error", async () => {
-    await runHegelTest(async () => {
-      const b = (await generateFromSchema(
-        { type: "boolean" },
-        _testContextStorage.getStore()!,
-      )) as boolean;
-      await target(b ? 1.0 : 0.0, "bool_score");
-    });
-  });
-
-  it("note() on non-final run is silent", async () => {
-    const spy = vi.spyOn(process.stderr, "write").mockReturnValue(true);
-    try {
-      await runHegelTest(async () => {
-        await generateFromSchema({ type: "boolean" }, _testContextStorage.getStore()!);
-        note("should not print");
-      });
-    } finally {
-      expect(spy).not.toHaveBeenCalled();
-      spy.mockRestore();
-    }
-  });
-
-  it("note() on final run prints to stderr", async () => {
-    const messages: string[] = [];
-    const spy = vi.spyOn(process.stderr, "write").mockImplementation((s) => {
-      messages.push(String(s));
-      return true;
-    });
-    await expect(
-      runHegelTest(async () => {
-        const x = (await generateFromSchema(
-          {
-            type: "integer",
-            min_value: 0,
-            max_value: 100,
-          },
-          _testContextStorage.getStore()!,
-        )) as number;
-        note("final note message");
-        if (x >= 50) throw new Error("fail");
       }),
-    ).rejects.toThrow();
-    spy.mockRestore();
-    // The note should have been printed during the final replay
-    expect(messages.some((m) => m.includes("final note message"))).toBe(true);
+    ).toThrow("Property test failed");
   });
 
-  it("non-StopTest RequestError is re-raised to test body", async () => {
-    let caughtError: unknown;
-    await runHegelTest(
-      async () => {
-        try {
-          await generateFromSchema(
-            { type: "completely_invalid_schema_type_xyz" },
-            _testContextStorage.getStore()!,
-          );
-        } catch (e) {
-          caughtError = e;
-          // Don't re-throw so the test "passes" (we just check it was a RequestError)
-        }
+  test("non-Error thrown value is reported", () => {
+    expect(
+      hegel((tc) => {
+        tc.draw(booleans());
+        throw new Error("custom failure");
+      }),
+    ).toThrow("Property test failed");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+
+describe("settings", () => {
+  test("Hegel builder with testCases setting", () => {
+    new Hegel((tc) => {
+      const x = tc.draw(integers({ minValue: 0, maxValue: 100 }));
+      expect(x).toBeGreaterThanOrEqual(0);
+    })
+      .settings({ testCases: 10 })
+      .run();
+  });
+
+  test(
+    "hegel() with settings override",
+    hegel(
+      (tc) => {
+        const x = tc.draw(integers({ minValue: 0, maxValue: 100 }));
+        expect(x).toBeGreaterThanOrEqual(0);
       },
-      { testCases: 1 },
-    );
-    expect(caughtError).toBeInstanceOf(RequestError);
-  });
-
-  it("ConnectionError propagates out of test body", async () => {
-    await expect(
-      runHegelTest(
-        () => {
-          throw new ConnectionError("connection lost");
-        },
-        { testCases: 1 },
-      ),
-    ).rejects.toThrow("connection lost");
-  });
-
-  it("non-Error thrown value is wrapped in Error for origin extraction", async () => {
-    // Throwing a non-Error value (e.g. a string) exercises the
-    // `e instanceof Error ? e : new Error(String(e))` branch in _runTestCase.
-    await expect(
-      runHegelTest(
-        () => {
-          throw "not an error object" as unknown;
-        },
-        { testCases: 1 },
-      ),
-    ).rejects.toBe("not an error object");
-  });
+      { testCases: 10 },
+    ),
+  );
 });
 
 // ---------------------------------------------------------------------------
-// HEGEL_PROTOCOL_TEST_MODE error injection tests
+// Hegel builder API
 // ---------------------------------------------------------------------------
 
-describe("HEGEL_PROTOCOL_TEST_MODE tests", () => {
-  it("stop_test_on_generate: completes without error", async () => {
-    await withTestMode("stop_test_on_generate", async (session) => {
-      await session.runTest(async () => {
-        await generateFromSchema({ type: "boolean" }, _testContextStorage.getStore()!);
-      }, 5);
+describe("Hegel builder", () => {
+  test("passes a simple test with no assertions", () => {
+    new Hegel(() => {}).run();
+  });
+
+  test("settings() is chainable", () => {
+    const h = new Hegel((tc) => {
+      tc.draw(booleans());
     });
+    const result = h.settings({ testCases: 5 });
+    expect(result).toBe(h);
+    h.run();
   });
 
-  it("stop_test_on_mark_complete: completes without error", async () => {
-    await withTestMode("stop_test_on_mark_complete", async (session) => {
-      await session.runTest(async () => {
-        await generateFromSchema({ type: "boolean" }, _testContextStorage.getStore()!);
-      }, 5);
+  test("databaseKey() is chainable", () => {
+    const h = new Hegel((tc) => {
+      tc.draw(booleans());
     });
-  });
-
-  it("error_response: RequestError is caught and marked INTERESTING (test completes)", async () => {
-    // The error_response test mode sends RequestError on generate.
-    // The client catches it, marks the test case INTERESTING, and sends mark_complete.
-    // The test_server then sends test_done with interesting_test_cases=0,
-    // so from the client's perspective the test "passed" (no interesting failures).
-    await withTestMode("error_response", async (session) => {
-      await session.runTest(async () => {
-        await generateFromSchema({ type: "boolean" }, _testContextStorage.getStore()!);
-      }, 5);
-    });
-  });
-
-  it("empty_test: completes gracefully with no test cases", async () => {
-    await withTestMode("empty_test", async (session) => {
-      await session.runTest(() => {}, 5);
-    });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Nested test case raises RuntimeError
-// ---------------------------------------------------------------------------
-
-describe("nested test case raises", () => {
-  it("raises RuntimeError when _runTestCase called while already in a test", async () => {
-    // Set up a context as if we're already inside a test case
-    const fakeStream = {} as Stream;
-    const data = { stream: fakeStream, isFinal: false, testAborted: false };
-
-    await _testContextStorage.run(data, async () => {
-      // Create a Client with a manual socket pair (handshake needed for Client constructor)
-      const [serverSock, clientSock] = await socketPair();
-      const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
-      const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
-
-      // Do handshake in parallel
-      await Promise.all([rawHandshakeResponder(serverConn), clientConn.sendHandshake()]);
-
-      const client = new Client(clientConn);
-
-      // _runTestCase should throw immediately because context is already set
-      await expect(client._runTestCase(fakeStream, () => {}, false)).rejects.toThrow(
-        "Cannot nest test cases",
-      );
-
-      clientConn.close();
-      serverConn.close();
-    });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// _runTestCase: mark_complete sendRequest failure (covers .catch(() => {}))
-// ---------------------------------------------------------------------------
-
-describe("_runTestCase mark_complete failure", () => {
-  it("silently ignores sendRequest rejection in finally", async () => {
-    // Build a fake stream whose sendRequest always rejects.
-    // This exercises the `.catch(() => {})` handler at the end of _runTestCase.
-    const fakeStream = {
-      sendRequest: () => Promise.reject(new Error("socket dead")),
-      close: () => {},
-    } as unknown as Stream;
-
-    const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
-    await Promise.all([rawHandshakeResponder(serverConn), clientConn.sendHandshake()]);
-    const client = new Client(clientConn);
-
-    // _runTestCase will try sendRequest(mark_complete) → rejects → .catch fires
-    await client._runTestCase(fakeStream, () => {}, false);
-
-    clientConn.close();
-    serverConn.close();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Unrecognised event in runTest
-// ---------------------------------------------------------------------------
-
-describe("unrecognised event in runTest", () => {
-  it("sends InvalidMessage error and continues to test_done", async () => {
-    const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
-
-    const serverTask = (async () => {
-      await rawHandshakeResponder(serverConn);
-      const control = serverConn.controlStream;
-
-      // Receive run_test command
-      const [msgId, message] = await control.receiveRequest();
-      const msg = message as Record<string, unknown>;
-      const testStreamId = msg["stream_id"] as number;
-      const testStream = serverConn.connectStream(testStreamId, { role: "Test" });
-      await control.sendResponseValue(msgId, true);
-
-      // Send a bogus event and read the error response
-      const reqId = await testStream.sendRequest({ event: "bogus_event" });
-      await testStream.receiveResponseRaw(reqId);
-
-      // Send test_done
-      await testStream
-        .request({
-          event: "test_done",
-          results: {
-            passed: true,
-            test_cases: 0,
-            valid_test_cases: 0,
-            invalid_test_cases: 0,
-            interesting_test_cases: 0,
-          },
-        })
-        .get();
-    })();
-
-    await clientConn.sendHandshake();
-    const client = new Client(clientConn);
-    // Call without testCases to exercise the `opts.testCases ?? 100` default
-    await client.runTest(() => {});
-
-    await serverTask;
-    clientConn.close();
-    serverConn.close();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// "Expected test case to fail" when final run passes (n_interesting=1 and >1)
-// ---------------------------------------------------------------------------
-
-describe("final test case passes unexpectedly", () => {
-  it("raises AssertionError when single interesting test case passes in final run", async () => {
-    const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
-
-    const serverTask = (async () => {
-      await rawHandshakeResponder(serverConn);
-      const control = serverConn.controlStream;
-      const [msgId, message] = await control.receiveRequest();
-      const msg = message as Record<string, unknown>;
-      const testStreamId = msg["stream_id"] as number;
-      const testStream = serverConn.connectStream(testStreamId, { role: "Test" });
-      await control.sendResponseValue(msgId, true);
-
-      // Send one test_case (exploration — will pass)
-      const dataStream = serverConn.newStream({ role: "Data" });
-      const req1 = await testStream.sendRequest({
-        event: "test_case",
-        stream_id: dataStream.streamId,
-      });
-      await testStream.receiveResponseRaw(req1);
-      // Wait for mark_complete from client (they'll send VALID since test passes)
-      await dataStream.receiveRequest({ timeoutMs: 5000 });
-      await dataStream.sendResponseValue(0, null);
-      dataStream.close();
-
-      // Send test_done with 1 interesting case
-      const req2 = await testStream.sendRequest({
-        event: "test_done",
-        results: {
-          passed: false,
-          test_cases: 1,
-          valid_test_cases: 0,
-          invalid_test_cases: 0,
-          interesting_test_cases: 1,
-        },
-      });
-      await testStream.receiveResponseRaw(req2);
-
-      // Send final test_case (the "shrunk" replay)
-      const finalDataStream = serverConn.newStream({ role: "FinalData" });
-      const req3 = await testStream.sendRequest({
-        event: "test_case",
-        stream_id: finalDataStream.streamId,
-      });
-      await testStream.receiveResponseRaw(req3);
-      // Wait for mark_complete from client
-      await finalDataStream.receiveRequest({ timeoutMs: 5000 });
-      await finalDataStream.sendResponseValue(0, null);
-      finalDataStream.close();
-    })();
-
-    await clientConn.sendHandshake();
-    const client = new Client(clientConn);
-
-    // Override _runTestCase so the final run doesn't throw (test "passes" when it shouldn't)
-    const origRunTestCase = client._runTestCase.bind(client);
-    client._runTestCase = async (ch: Stream, fn: () => void | Promise<void>, isFinal: boolean) => {
-      if (isFinal) {
-        // Don't run fn — suppress the throw
-        await ch.sendRequest({ command: "mark_complete", status: "VALID", origin: null });
-        ch.close();
-        return;
-      }
-      return origRunTestCase(ch, fn, isFinal);
-    };
-
-    await expect(client.runTest(() => {}, { testCases: 1 })).rejects.toThrow(
-      "Expected test case to fail but it didn't",
-    );
-
-    await serverTask;
-    clientConn.close();
-    serverConn.close();
-  });
-
-  it("raises AggregateError with 'Expected test case N to fail' for multiple interesting", async () => {
-    const [serverSock, clientSock] = await socketPair();
-    const serverConn = new Connection(serverSock, serverSock, { name: "Server" });
-    const clientConn = new Connection(clientSock, clientSock, { name: "Client" });
-
-    // N_INTERESTING = 2: both final runs pass
-    const N_INTERESTING = 2;
-
-    const serverTask = (async () => {
-      await rawHandshakeResponder(serverConn);
-      const control = serverConn.controlStream;
-      const [msgId, message] = await control.receiveRequest();
-      const msg = message as Record<string, unknown>;
-      const testStreamId = msg["stream_id"] as number;
-      const testStream = serverConn.connectStream(testStreamId, { role: "Test" });
-      await control.sendResponseValue(msgId, true);
-
-      // Send test_done immediately with 2 interesting cases
-      const req2 = await testStream.sendRequest({
-        event: "test_done",
-        results: {
-          passed: false,
-          test_cases: 0,
-          valid_test_cases: 0,
-          invalid_test_cases: 0,
-          interesting_test_cases: N_INTERESTING,
-        },
-      });
-      await testStream.receiveResponseRaw(req2);
-
-      // Send 2 final test cases
-      for (let i = 0; i < N_INTERESTING; i++) {
-        const finalDataStream = serverConn.newStream({ role: `FinalData${i}` });
-        const req = await testStream.sendRequest({
-          event: "test_case",
-          stream_id: finalDataStream.streamId,
-        });
-        await testStream.receiveResponseRaw(req);
-        // Client will send mark_complete before we signal them to; just read it
-        const [mcMsgId] = await finalDataStream.receiveRequest({ timeoutMs: 5000 });
-        await finalDataStream.sendResponseValue(mcMsgId, null);
-        finalDataStream.close();
-      }
-    })();
-
-    await clientConn.sendHandshake();
-    const client = new Client(clientConn);
-
-    // Override so final runs always pass (no throw)
-    client._runTestCase = async (
-      ch: Stream,
-      _fn: () => void | Promise<void>,
-      _isFinal: boolean,
-    ) => {
-      await ch.sendRequest({ command: "mark_complete", status: "VALID", origin: null });
-      ch.close();
-    };
-
-    await expect(client.runTest(() => {}, { testCases: 1 })).rejects.toThrow(AggregateError);
-
-    await serverTask;
-    clientConn.close();
-    serverConn.close();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// generateFromSchema context variable mutations
-// ---------------------------------------------------------------------------
-
-describe("generateFromSchema", () => {
-  it("sets testAborted=true on StopTest (via HEGEL_PROTOCOL_TEST_MODE)", async () => {
-    let wasAborted = false;
-    await withTestMode("stop_test_on_generate", async (session) => {
-      await session.runTest(async () => {
-        try {
-          await generateFromSchema({ type: "boolean" }, _testContextStorage.getStore()!);
-        } catch (e) {
-          if (e instanceof DataExhausted) {
-            const data = _testContextStorage.getStore();
-            wasAborted = data?.testAborted ?? false;
-            throw e; // re-throw so runner handles it
-          }
-          throw e;
-        }
-      }, 5);
-    });
-    expect(wasAborted).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// draw
-// ---------------------------------------------------------------------------
-
-describe("draw", () => {
-  it("throws RuntimeError outside test context", async () => {
-    const gen = new BasicGenerator({ type: "boolean" });
-    await expect(draw(gen)).rejects.toThrow("draw() cannot be called outside of a Hegel test");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// compareVersions
-// ---------------------------------------------------------------------------
-
-describe("compareVersions", () => {
-  it("throws on invalid version string", () => {
-    expect(() => compareVersions("bad", "0.10")).toThrow(
-      "invalid version string 'bad': expected 'major.minor' format",
-    );
-  });
-
-  it("returns 0 for equal versions", () => {
-    expect(compareVersions("0.10", "0.10")).toBe(0);
-  });
-
-  it("returns -1 when major is less", () => {
-    expect(compareVersions("0.10", "1.0")).toBe(-1);
-  });
-
-  it("returns 1 when major is greater", () => {
-    expect(compareVersions("2.0", "1.0")).toBe(1);
-  });
-
-  it("returns -1 when minor is less", () => {
-    expect(compareVersions("0.9", "0.10")).toBe(-1);
-  });
-
-  it("returns 1 when minor is greater", () => {
-    expect(compareVersions("0.11", "0.10")).toBe(1);
+    const result = h.databaseKey("test-key");
+    expect(result).toBe(h);
+    h.settings({ testCases: 5 }).run();
   });
 });

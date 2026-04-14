@@ -17,8 +17,9 @@ import {
   text,
   lists,
   optional,
-  recordGenerator,
-  variantGenerator,
+  composite,
+  oneOf,
+  sampledFrom,
   assume,
   note,
 } from "../src/index.js";
@@ -92,29 +93,22 @@ function cartSummary(
 // Generators for domain objects
 // ---------------------------------------------------------------------------
 
-const categoryGen = variantGenerator<{ type: Product["category"] }>(
-  {
-    electronics: null,
-    clothing: null,
-    food: null,
-  },
-  "type",
-);
+const categoryGen = sampledFrom<Product["category"]>(["electronics", "clothing", "food"]);
 
-const productGen = recordGenerator({
-  id: text(1, 8),
-  name: text(1, 30),
-  priceInCents: integers(1, 100_000), // 1 cent to $1,000
-});
+const productGen = composite((tc) => ({
+  id: tc.draw(text(1, 8)),
+  name: tc.draw(text(1, 30)),
+  priceInCents: tc.draw(integers(1, 100_000)), // 1 cent to $1,000
+}));
 
-const cartItemGen = recordGenerator({
-  quantity: integers(1, 10),
-});
+const cartItemGen = composite((tc) => ({
+  quantity: tc.draw(integers(1, 10)),
+}));
 
-const couponGen = recordGenerator({
-  code: text(3, 10),
-  discountPercent: integers(1, 99),
-});
+const couponGen = composite((tc) => ({
+  code: tc.draw(text(3, 10)),
+  discountPercent: tc.draw(integers(1, 99)),
+}));
 
 // ---------------------------------------------------------------------------
 // Property tests
@@ -146,8 +140,8 @@ await check("no coupon: total >= subtotal", async () => {
   const items: CartItem[] = [];
   for (let i = 0; i < itemCount; i++) {
     const base = await draw(productGen);
-    const catVal = await draw(categoryGen);
-    const product: Product = { ...base, category: catVal.type };
+    const category = await draw(categoryGen);
+    const product: Product = { ...base, category };
     const { quantity } = await draw(cartItemGen);
     items.push({ product, quantity });
   }
@@ -162,8 +156,8 @@ await check("coupon: discounted <= subtotal", async () => {
   const itemCount = await draw(integers(1, 5));
   for (let i = 0; i < itemCount; i++) {
     const base = await draw(productGen);
-    const catVal = await draw(categoryGen);
-    const product: Product = { ...base, category: catVal.type };
+    const category = await draw(categoryGen);
+    const product: Product = { ...base, category };
     const { quantity } = await draw(cartItemGen);
     items.push({ product, quantity });
   }
@@ -179,8 +173,8 @@ await check("all totals are non-negative integers", async () => {
   const itemCount = await draw(integers(0, 5));
   for (let i = 0; i < itemCount; i++) {
     const base = await draw(productGen);
-    const catVal = await draw(categoryGen);
-    const product: Product = { ...base, category: catVal.type };
+    const category = await draw(categoryGen);
+    const product: Product = { ...base, category };
     const { quantity } = await draw(cartItemGen);
     items.push({ product, quantity });
   }
@@ -201,15 +195,15 @@ await check("adding item increases subtotal", async () => {
   const itemCount = await draw(integers(0, 4));
   for (let i = 0; i < itemCount; i++) {
     const base = await draw(productGen);
-    const catVal = await draw(categoryGen);
-    const product: Product = { ...base, category: catVal.type };
+    const category = await draw(categoryGen);
+    const product: Product = { ...base, category };
     const { quantity } = await draw(cartItemGen);
     items.push({ product, quantity });
   }
 
   const base = await draw(productGen);
-  const catVal = await draw(categoryGen);
-  const newProduct: Product = { ...base, category: catVal.type };
+  const category = await draw(categoryGen);
+  const newProduct: Product = { ...base, category };
   const newQty = await draw(integers(1, 5));
   const newItem: CartItem = { product: newProduct, quantity: newQty };
 
@@ -247,8 +241,8 @@ await check("cart total is order-independent", async () => {
   const itemCount = await draw(integers(2, 5));
   for (let i = 0; i < itemCount; i++) {
     const base = await draw(productGen);
-    const catVal = await draw(categoryGen);
-    const product: Product = { ...base, category: catVal.type };
+    const category = await draw(categoryGen);
+    const product: Product = { ...base, category };
     const { quantity } = await draw(cartItemGen);
     items.push({ product, quantity });
   }

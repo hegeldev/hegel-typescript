@@ -6,7 +6,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { getTestCases, writeMetrics } from "hegel";
+import { BasicGenerator, getTestCases, hegel, integers, makeNonBasic, writeMetrics } from "hegel";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -155,7 +155,7 @@ describe("writeMetrics", () => {
     withEnv({ CONFORMANCE_METRICS_FILE: metricsFile }, () => {
       // These Unicode line terminators are NOT escaped by JSON.stringify,
       // but Python's splitlines() splits on them, breaking JSONL parsing.
-      const nel = "\u0085"; // NEL — also a Python splitlines() separator
+      const nel = "\u0085"; // NEL
       const lineSep = "\u2028";
       const paraSep = "\u2029";
       writeMetrics({ a: `hello${nel}there`, b: `hi${lineSep}world`, c: `foo${paraSep}bar` });
@@ -176,4 +176,28 @@ describe("writeMetrics", () => {
       expect(parsed.c).toBe(`foo${paraSep}bar`);
     });
   });
+});
+
+// ---------------------------------------------------------------------------
+// makeNonBasic
+// ---------------------------------------------------------------------------
+
+describe("makeNonBasic", () => {
+  it("returns a non-basic generator", () => {
+    const gen = integers({ minValue: 0, maxValue: 100 });
+    expect(gen).toBeInstanceOf(BasicGenerator);
+    const nonBasic = makeNonBasic(gen);
+    expect(nonBasic).not.toBeInstanceOf(BasicGenerator);
+  });
+
+  it(
+    "generates values via the compositional path",
+    hegel((tc) => {
+      const gen = makeNonBasic(integers({ minValue: 0, maxValue: 1000 }));
+      const value = tc.draw(gen);
+      expect(typeof value).toBe("number");
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThanOrEqual(1000);
+    }),
+  );
 });

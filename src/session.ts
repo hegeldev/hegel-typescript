@@ -1,220 +1,177 @@
 /**
- * Session management for the Hegel library.
+ * Global lazy session that manages the hegel server subprocess.
  *
- * Manages the lifecycle of the hegel subprocess and the global session used
- * by {@link runHegelTest}. Communicates with the hegel binary via stdio pipes.
+ * The session is created on first use and persists for the lifetime of
+ * the process. It spawns the hegel binary with `--stdio` and communicates
+ * over synchronous pipe I/O.
  *
  * @packageDocumentation
  */
 
-import * as childProcess from "node:child_process";
+import { spawn } from "node:child_process";
 import * as fs from "node:fs";
-import * as path from "node:path";
-import { Connection } from "./connection.js";
-import { Client } from "./runner.js";
+import { Connection, Stream } from "./connection.js";
+import { HANDSHAKE_STRING } from "./protocol.js";
 
 // ---------------------------------------------------------------------------
-// Binary discovery
+// Constants
 // ---------------------------------------------------------------------------
 
-/**
- * Locate the hegel binary.
- *
- * Search order:
- * 1. `.venv/bin/hegel` relative to the current working directory
- * 2. `hegel` on the system PATH
- * 3. Fallback: `"python3 -m hegel"`
- */
-export function _findHegeld(): string {
-  // 1. Check .venv/bin/hegel relative to cwd (typical project setup)
-  const venvHegel = path.join(process.cwd(), ".venv", "bin", "hegel");
-  if (fs.existsSync(venvHegel)) {
-    return venvHegel;
-  }
+export const HEGEL_SERVER_VERSION = "0.4.0";
+const SUPPORTED_PROTOCOL_MIN = "0.10";
+const SUPPORTED_PROTOCOL_MAX = "0.10";
+const HEGEL_SERVER_COMMAND_ENV = "HEGEL_SERVER_COMMAND";
+const HEGEL_SERVER_DIR = ".hegel";
 
-  // 2. Search PATH directories
-  const pathEnv = process.env["PATH"] ?? "";
-  for (const dir of pathEnv.split(path.delimiter)) {
-    if (!dir) continue;
-    const candidate = path.join(dir, "hegel");
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-  }
+// ---------------------------------------------------------------------------
+// Version parsing
+// ---------------------------------------------------------------------------
 
-  // 3. Fallback
-  return "python3 -m hegel";
+function parseVersion(s: string): [number, number] {
+  const parts = s.split(".");
+  if (parts.length !== 2) {
+    throw new Error(`Invalid version string '${s}': expected 'major.minor' format`);
+  }
+  const major = parseInt(parts[0], 10);
+  const minor = parseInt(parts[1], 10);
+  if (!Number.isFinite(major) || !Number.isFinite(minor)) {
+    throw new Error(`Invalid version string '${s}'`);
+  }
+  return [major, minor];
+}
+
+function versionInRange(version: string, min: string, max: string): boolean {
+  const v = parseVersion(version);
+  const lo = parseVersion(min);
+  const hi = parseVersion(max);
+  if (v[0] < lo[0] || (v[0] === lo[0] && v[1] < lo[1])) return false;
+  if (v[0] > hi[0] || (v[0] === hi[0] && v[1] > hi[1])) return false;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Server log file
+// ---------------------------------------------------------------------------
+
+let logFileCounter = 0;
+
+function serverLogFile(): number {
+  try {
+    fs.mkdirSync(HEGEL_SERVER_DIR, { recursive: true });
+  } catch {
+    // ignore
+  }
+  const pid = process.pid;
+  const ix = logFileCounter++;
+  const path = `${HEGEL_SERVER_DIR}/server.${pid}-${ix}.log`;
+  return fs.openSync(path, "a");
 }
 
 // ---------------------------------------------------------------------------
 // HegelSession
 // ---------------------------------------------------------------------------
 
-/**
- * Manages a shared hegel subprocess for the test suite.
- *
- * Spawns the hegel binary on first use and keeps it running for all tests.
- * Communicates via stdio pipes (`--stdio` mode). Cleans up automatically
- * when the process exits.
- */
+let session: HegelSession | null = null;
+
 export class HegelSession {
-  private _process: childProcess.ChildProcess | null = null;
-  private _connection: Connection | null = null;
-  private _client: Client | null = null;
-  private _startPromise: Promise<void> | null = null;
-  private _cleanupRegistered = false;
+  readonly connection: Connection;
+  private _controlStream: Stream;
 
-  private _hasWorkingClient(): boolean {
-    return this._client !== null && this._connection !== null && this._connection.live;
+  private constructor(connection: Connection, controlStream: Stream) {
+    this.connection = connection;
+    this._controlStream = controlStream;
   }
 
-  /**
-   * Start the hegel subprocess if not already running.
-   * Idempotent — safe to call concurrently or multiple times.
-   */
-  async _start(): Promise<void> {
-    if (this._hasWorkingClient()) return;
-
-    // If already starting (concurrent call), wait for the in-flight promise
-    if (this._startPromise !== null) {
-      await this._startPromise;
-      return;
-    }
-
-    this._startPromise = this._doStart();
-    // Attach a no-op catch to prevent "unhandled rejection" warnings when the
-    // promise rejects; the actual rejection is re-thrown by the await below.
-    this._startPromise.catch(() => {});
-    try {
-      await this._startPromise;
-    } finally {
-      this._startPromise = null;
-    }
+  get controlStream(): Stream {
+    return this._controlStream;
   }
 
-  private async _doStart(): Promise<void> {
-    const hegelCmd = _findHegeld();
-    const cmdParts = hegelCmd.split(" ");
-    const binary = cmdParts[0]!;
-    const args = [...cmdParts.slice(1), "--stdio", "--verbosity", "normal"];
+  static get(): HegelSession {
+    if (session === null) {
+      session = HegelSession.init();
+    }
+    return session;
+  }
 
-    this._process = childProcess.spawn(binary, args, {
-      stdio: ["pipe", "pipe", "pipe"],
+  private static init(): HegelSession {
+    const { command, args } = hegelCommand();
+    const logFd = serverLogFile();
+
+    const child = spawn(command, [...args, "--stdio", "--verbosity", "normal"], {
+      stdio: ["pipe", "pipe", logFd],
+      env: { ...process.env, PYTHONUNBUFFERED: "1" },
     });
 
-    const connection = new Connection(this._process.stdout!, this._process.stdin!, {
-      name: "Client",
-    });
-    const client = await Client.create(connection);
-    this._connection = connection;
-    this._client = client;
+    // Prevent Node.js from consuming pipe data via its event loop
+    child.stdout!.pause();
+    child.stdin!.cork();
 
-    // Register process-exit cleanup once
-    if (!this._cleanupRegistered) {
-      this._cleanupRegistered = true;
-      process.on("exit", this._cleanup.bind(this));
+    // Extract raw file descriptors for synchronous I/O
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const readFd = (child.stdout as any)._handle.fd as number;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const writeFd = (child.stdin as any)._handle.fd as number;
+
+    if (typeof readFd !== "number" || typeof writeFd !== "number") {
+      child.kill();
+      throw new Error("Failed to extract file descriptors from child process pipes");
     }
-  }
 
-  /**
-   * Clean up the hegel subprocess.
-   * Suppresses all errors during cleanup.
-   */
-  _cleanup(): void {
-    try {
-      this._connection?.close();
-    } catch {
-      /* ignore */
+    const connection = new Connection(readFd, writeFd);
+    const control = connection.controlStream();
+
+    // Handshake: raw bytes, not CBOR-encoded
+    const handshakePayload = Buffer.from(HANDSHAKE_STRING, "utf-8");
+    const reqId = control.sendRequest(handshakePayload);
+    const responseBytes = control.receiveReply(reqId);
+    const responseStr = responseBytes.toString("utf-8");
+    if (!responseStr.startsWith("Hegel/")) {
+      child.kill();
+      throw new Error(`Bad handshake response: ${JSON.stringify(responseStr)}`);
     }
-    this._connection = null;
-    this._client = null;
 
-    if (this._process) {
+    const serverVersion = responseStr.slice("Hegel/".length);
+    if (!versionInRange(serverVersion, SUPPORTED_PROTOCOL_MIN, SUPPORTED_PROTOCOL_MAX)) {
+      child.kill();
+      throw new Error(
+        `hegel-typescript supports protocol versions ${SUPPORTED_PROTOCOL_MIN} through ${SUPPORTED_PROTOCOL_MAX}, ` +
+          `but the connected server is using protocol version ${serverVersion}`,
+      );
+    }
+
+    // Register cleanup on process exit
+    process.on("exit", () => {
       try {
-        this._process.kill("SIGTERM");
+        child.kill();
       } catch {
-        /* ignore */
+        // ignore
       }
-      this._process = null;
-    }
-  }
-
-  /**
-   * Run a property test using the shared hegel process.
-   *
-   * @param testFn - The test body.
-   * @param testCases - Number of test cases to run.
-   */
-  async runTest(testFn: () => void | Promise<void>, testCases: number): Promise<void> {
-    await this._start();
-    const client = this._client!;
-    await client.runTest(testFn, { testCases });
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Global session
-// ---------------------------------------------------------------------------
-
-const _session = new HegelSession();
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-/**
- * Run a property test using the global hegel session.
- *
- * The hegel subprocess starts lazily on the first call and shuts down when
- * the process exits. If the test fails, the original exception is re-raised
- * for a single failure, or an `AggregateError` is thrown for multiple failures.
- *
- * @param testFn - The test function to run (may be async).
- * @param opts - Options: `testCases` (default 100).
- *
- * @example
- * ```typescript
- * await runHegelTest(async () => {
- *   const x = await draw(integers(0, 100));
- *   const y = await draw(integers(0, 100));
- *   expect(x + y).toBe(y + x);
- * }, { testCases: 200 });
- * ```
- */
-export async function runHegelTest(
-  testFn: () => void | Promise<void>,
-  opts: { testCases?: number } = {},
-): Promise<void> {
-  await _session.runTest(testFn, opts.testCases ?? 100);
-}
-
-/**
- * Decorator factory for property-based tests.
- *
- * Returns a wrapper function that calls {@link runHegelTest} with the given
- * options when invoked.
- *
- * @param opts - Options: `testCases` (default 100).
- *
- * @example
- * ```typescript
- * it("addition is commutative", hegel({ testCases: 200 })(async () => {
- *   const a = await draw(integers());
- *   const b = await draw(integers());
- *   expect(a + b).toBe(b + a);
- * }));
- * ```
- */
-export function hegel(
-  opts: { testCases?: number } = {},
-): (testFn: () => void | Promise<void>) => () => Promise<void> {
-  return (testFn: () => void | Promise<void>) => {
-    const wrapper = async (): Promise<void> => {
-      await runHegelTest(testFn, opts);
-    };
-    Object.defineProperty(wrapper, "name", {
-      value: testFn.name || "test",
     });
-    return wrapper;
+
+    // Close the log fd since the child has inherited it
+    try {
+      fs.closeSync(logFd);
+    } catch {
+      // ignore
+    }
+
+    return new HegelSession(connection, control);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Hegel command discovery
+// ---------------------------------------------------------------------------
+
+function hegelCommand(): { command: string; args: string[] } {
+  const override = process.env[HEGEL_SERVER_COMMAND_ENV];
+  if (override) {
+    return { command: override, args: [] };
+  }
+
+  // Default: use uv tool run
+  return {
+    command: "uv",
+    args: ["tool", "run", "--from", `hegel-core==${HEGEL_SERVER_VERSION}`, "hegel"],
   };
 }

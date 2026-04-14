@@ -5,18 +5,19 @@
  *   { min_size?: number, max_size?: number,
  *     key_type?: "string"|"integer",
  *     min_key?: number, max_key?: number,
- *     min_value?: number, max_value?: number }
+ *     min_value?: number, max_value?: number,
+ *     mode?: "basic"|"non_basic" }
  * Metrics:
  *   { size: number, min_key: ...|null, max_key: ...|null,
  *     min_value: number|null, max_value: number|null }
  */
 
-import { getTestCases, writeMetrics } from "../src/conformance.js";
-import { dicts, integers, text } from "../src/generators/index.js";
-import { draw } from "../src/runner.js";
-import { runHegelTest } from "../src/session.js";
+import { getTestCases, makeNonBasic, writeMetrics } from "../src/conformance.js";
+import { maps, integers, text } from "../src/generators/index.js";
+import { hegel } from "../src/runner.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
+const mode = (params["mode"] as string | undefined) ?? "basic";
 
 const minSize = params["min_size"] != null ? Number(params["min_size"]) : 0;
 const maxSize = params["max_size"] != null ? Number(params["max_size"]) : 10;
@@ -28,14 +29,17 @@ const maxVal = params["max_value"] != null ? Number(params["max_value"]) : 1000;
 
 const testCases = getTestCases();
 
-const keysGen = keyType === "string" ? text() : integers(minKey, maxKey);
-const valsGen = integers(minVal, maxVal);
-const gen = dicts(keysGen, valsGen, minSize, maxSize);
+const baseKeysGen =
+  keyType === "string" ? text() : integers({ minValue: minKey, maxValue: maxKey });
+const baseValsGen = integers({ minValue: minVal, maxValue: maxVal });
+const keysGen = mode === "non_basic" ? makeNonBasic(baseKeysGen) : baseKeysGen;
+const valsGen = mode === "non_basic" ? makeNonBasic(baseValsGen) : baseValsGen;
+const gen = maps(keysGen, valsGen, { minSize, maxSize });
 
-await runHegelTest(
-  async function conformance_hashmaps() {
-    const dict = await draw(gen);
-    const entries = Object.entries(dict);
+hegel(
+  function conformance_hashmaps(tc) {
+    const dict = tc.draw(gen);
+    const entries = [...dict.entries()];
     const size = entries.length;
 
     let minKeyOut: string | number | null = null;
@@ -51,11 +55,11 @@ await runHegelTest(
         if (maxValueOut === null || numVal > maxValueOut) maxValueOut = numVal;
 
         if (keyType === "string") {
-          const strKey = k;
+          const strKey = k as string;
           if (firstEntry || strKey < (minKeyOut as string)) minKeyOut = strKey;
           if (firstEntry || strKey > (maxKeyOut as string)) maxKeyOut = strKey;
         } else {
-          const numKey = Number(k);
+          const numKey = k as number;
           if (firstEntry || numKey < (minKeyOut as number)) minKeyOut = numKey;
           if (firstEntry || numKey > (maxKeyOut as number)) maxKeyOut = numKey;
         }
@@ -72,6 +76,6 @@ await runHegelTest(
     });
   },
   { testCases },
-);
+)();
 
 process.exit(0);

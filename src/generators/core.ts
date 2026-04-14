@@ -1,64 +1,49 @@
 /**
- * Core generator infrastructure: abstract class, BasicGenerator,
- * composite generators (Mapped, FlatMapped, Filtered), Collection protocol,
- * and span helpers.
+ * Generator base class and core internal combinators.
  *
  * @packageDocumentation
  */
 
-import { RequestError } from "../connection.js";
-import {
-  assume,
-  DataExhausted,
-  generateFromSchema,
-  Labels,
-  startSpan,
-  stopSpan,
-} from "../runner.js";
-import type { TestCaseData } from "../runner.js";
+import { TestCase, Labels, generateRaw, type GeneratorLike } from "../testCase.js";
 
 // ---------------------------------------------------------------------------
 // Generator base class
 // ---------------------------------------------------------------------------
 
 /**
- * Base class for all generators.
- *
- * Subclasses implement `doDraw` to produce a value. The {@link map},
- * {@link flatMap}, and {@link filter} combinators produce new generators.
- *
- * {@link BasicGenerator} is special: its {@link BasicGenerator.map} preserves
- * the schema (stays basic), enabling the server to see the original schema for
- * better shrinking.
+ * Base class for all generators. Generators produce values of type T
+ * synchronously by communicating with the hegel server.
  */
-export abstract class Generator<T = unknown> {
+export abstract class Generator<T> implements GeneratorLike<T> {
   /** @internal */
-  abstract doDraw(data: TestCaseData): Promise<T>;
+  abstract doDraw(tc: TestCase): T;
+
+  /** @internal */
+  asBasic(): BasicGenerator<T> | null {
+    return null;
+  }
 
   /**
-   * Transform each generated value with `f`.
-   *
-   * On a {@link BasicGenerator} this stays basic (preserves schema).
-   * On any other generator it returns a MappedGenerator.
+   * Transform generated values using a function.
+   * When the source has a schema, the schema is preserved.
    */
   map<U>(f: (value: T) => U): Generator<U> {
-    return new MappedGenerator<T, U>(this, f);
+    return new MappedGenerator(this, f);
   }
 
   /**
-   * Dependent generation: generate a value then use it to choose a second generator.
+   * Generate a value, then use it to choose another generator.
    */
   flatMap<U>(f: (value: T) => Generator<U>): Generator<U> {
-    return new FlatMappedGenerator<T, U>(this, f);
+    return new FlatMappedGenerator(this, f);
   }
 
   /**
-   * Filter generated values. Tries up to 3 times before giving up.
-   *
-   * Prefer narrow schemas over filters when possible — filters slow shrinking.
+   * Only keep values that satisfy the predicate.
+   * Retries up to 3 times, then rejects the test case.
    */
   filter(predicate: (value: T) => boolean): Generator<T> {
-    return new FilteredGenerator<T>(this, predicate);
+    return new FilteredGenerator(this, predicate);
   }
 }
 
@@ -67,250 +52,125 @@ export abstract class Generator<T = unknown> {
 // ---------------------------------------------------------------------------
 
 /**
- * A generator backed by a raw schema sent to the server.
- *
- * `map()` on a BasicGenerator **preserves the schema** — it composes the
- * transform client-side so the server still sees the original schema. This is
- * the key optimization: the server can shrink within the original schema space.
+ * Schema-based generator that sends a schema to the server and parses the response.
  */
-export class BasicGenerator<T = unknown> extends Generator<T> {
-  /** @internal */
-  readonly _rawSchema: Record<string, unknown>;
-  /** @internal */
-  readonly _transform: ((raw: unknown) => T) | null;
+export class BasicGenerator<T> extends Generator<T> {
+  readonly schema: Record<string, unknown>;
+  private readonly parse: ((raw: unknown) => T) | null;
 
-  constructor(rawSchema: Record<string, unknown>, transform: ((raw: unknown) => T) | null = null) {
+  constructor(schema: Record<string, unknown>, parse?: (raw: unknown) => T) {
     super();
-    this._rawSchema = rawSchema;
-    this._transform = transform;
+    this.schema = schema;
+    this.parse = parse ?? null;
   }
 
-  /** The raw schema sent to the server. */
-  schema(): Record<string, unknown> {
-    return this._rawSchema;
-  }
-
-  /** @internal */
-  async doDraw(data: TestCaseData): Promise<T> {
-    const raw = await generateFromSchema(this._rawSchema, data);
-    if (this._transform !== null) {
-      return this._transform(raw);
+  doDraw(tc: TestCase): T {
+    const raw = generateRaw(tc, this.schema);
+    if (this.parse) {
+      return this.parse(raw);
     }
     return raw as T;
   }
 
-  /**
-   * Transform values while **preserving the schema**.
-   *
-   * If this generator already has a transform `t`, the new transform is
-   * `f(t(raw))`. This keeps the generator basic (server sees original schema).
-   */
+  asBasic(): BasicGenerator<T> {
+    return this;
+  }
+
+  parseRaw(raw: unknown): T {
+    if (this.parse) {
+      return this.parse(raw);
+    }
+    return raw as T;
+  }
+
   override map<U>(f: (value: T) => U): BasicGenerator<U> {
-    const current = this._transform;
-    const composed: (raw: unknown) => U =
-      current !== null ? (raw) => f(current(raw)) : (raw) => f(raw as T);
-    return new BasicGenerator<U>(this._rawSchema, composed);
+    const oldParse = this.parse;
+    return new BasicGenerator(this.schema, (raw: unknown) => {
+      const t = oldParse ? oldParse(raw) : (raw as T);
+      return f(t);
+    });
   }
 }
 
 // ---------------------------------------------------------------------------
-// MappedGenerator
+// Internal combinators
 // ---------------------------------------------------------------------------
 
-/**
- * A generator that applies a transform to values from another generator.
- * Uses a MAPPED span so the server can track the transformation.
- */
-export class MappedGenerator<T, U> extends Generator<U> {
-  private readonly _source: Generator<T>;
-  private readonly _f: (value: T) => U;
+class MappedGenerator<T, U> extends Generator<U> {
+  private source: Generator<T>;
+  private f: (value: T) => U;
 
   constructor(source: Generator<T>, f: (value: T) => U) {
     super();
-    this._source = source;
-    this._f = f;
+    this.source = source;
+    this.f = f;
   }
 
-  async doDraw(data: TestCaseData): Promise<U> {
-    await startSpan(Labels.MAPPED, data);
-    try {
-      const value = await this._source.doDraw(data);
-      return this._f(value);
-    } finally {
-      await stopSpan({}, data);
-    }
+  doDraw(tc: TestCase): U {
+    // MappedGenerator is only created for non-basic sources (BasicGenerator
+    // overrides .map() to return a BasicGenerator directly). So asBasic()
+    // would always return null here — we go straight to the span-based path.
+    tc.startSpan(Labels.MAPPED);
+    const result = this.f(this.source.doDraw(tc));
+    tc.stopSpan(false);
+    return result;
   }
 }
 
-// ---------------------------------------------------------------------------
-// FlatMappedGenerator
-// ---------------------------------------------------------------------------
-
-/**
- * A generator for dependent generation.
- * Generates a first value, uses it to choose a second generator, then generates from that.
- */
-export class FlatMappedGenerator<T, U> extends Generator<U> {
-  private readonly _source: Generator<T>;
-  private readonly _f: (value: T) => Generator<U>;
+class FlatMappedGenerator<T, U> extends Generator<U> {
+  private source: Generator<T>;
+  private f: (value: T) => Generator<U>;
 
   constructor(source: Generator<T>, f: (value: T) => Generator<U>) {
     super();
-    this._source = source;
-    this._f = f;
+    this.source = source;
+    this.f = f;
   }
 
-  async doDraw(data: TestCaseData): Promise<U> {
-    await startSpan(Labels.FLAT_MAP, data);
-    try {
-      const first = await this._source.doDraw(data);
-      const secondGen = this._f(first);
-      return await secondGen.doDraw(data);
-    } finally {
-      await stopSpan({}, data);
-    }
+  doDraw(tc: TestCase): U {
+    tc.startSpan(Labels.FLAT_MAP);
+    const intermediate = this.source.doDraw(tc);
+    const nextGen = this.f(intermediate);
+    const result = nextGen.doDraw(tc);
+    tc.stopSpan(false);
+    return result;
   }
 }
 
-// ---------------------------------------------------------------------------
-// FilteredGenerator
-// ---------------------------------------------------------------------------
-
-/** Maximum number of filter attempts before giving up. */
-const FILTER_MAX_ATTEMPTS = 3;
-
-/**
- * A generator that filters values from another generator.
- *
- * Tries up to 3 times. Each failed attempt discards the span.
- * After all attempts fail, calls `assume(false)` to mark the test case as invalid.
- */
-export class FilteredGenerator<T> extends Generator<T> {
-  private readonly _source: Generator<T>;
-  private readonly _predicate: (value: T) => boolean;
+class FilteredGenerator<T> extends Generator<T> {
+  private source: Generator<T>;
+  private predicate: (value: T) => boolean;
 
   constructor(source: Generator<T>, predicate: (value: T) => boolean) {
     super();
-    this._source = source;
-    this._predicate = predicate;
+    this.source = source;
+    this.predicate = predicate;
   }
 
-  async doDraw(data: TestCaseData): Promise<T> {
-    for (let i = 0; i < FILTER_MAX_ATTEMPTS; i++) {
-      await startSpan(Labels.FILTER, data);
-      const value = await this._source.doDraw(data);
-      if (this._predicate(value)) {
-        await stopSpan({}, data);
+  doDraw(tc: TestCase): T {
+    for (let i = 0; i < 3; i++) {
+      tc.startSpan(Labels.FILTER);
+      const value = this.source.doDraw(tc);
+      if (this.predicate(value)) {
+        tc.stopSpan(false);
         return value;
       }
-      await stopSpan({ discard: true }, data);
+      tc.stopSpan(true);
     }
-    assume(false);
-    // unreachable (assume(false) always throws)
+    tc.assume(false);
     throw new Error("unreachable");
   }
 }
 
-// ---------------------------------------------------------------------------
-// Span helpers
-// ---------------------------------------------------------------------------
+export class CompositeGenerator<T> extends Generator<T> {
+  private fn: (tc: TestCase) => T;
 
-// ---------------------------------------------------------------------------
-// Collection protocol
-// ---------------------------------------------------------------------------
-
-/**
- * Server-managed collection for generating variable-length sequences.
- *
- * The server decides how many elements to generate based on the configured
- * size constraints. Call `more()` in a loop; when it returns false, the
- * collection is done. Call `reject()` to discard the most recently
- * generated element.
- *
- * StopTest errors from any collection command propagate as {@link DataExhausted}
- * (same as in `generateFromSchema`).
- */
-export class Collection {
-  private _collectionId: unknown = null;
-  private _collectionIdResolved = false;
-  private _finished = false;
-
-  /** Minimum number of elements. */
-  readonly minSize: number;
-  /** Maximum number of elements (null = unlimited). */
-  readonly maxSize: number | null;
-
-  constructor(minSize = 0, maxSize: number | null = null) {
-    this.minSize = minSize;
-    this.maxSize = maxSize;
+  constructor(fn: (tc: TestCase) => T) {
+    super();
+    this.fn = fn;
   }
 
-  /**
-   * Get (or lazily initialize) the collection ID.
-   * Sends `new_collection` on first call.
-   */
-  private async _getCollectionId(data: TestCaseData): Promise<unknown> {
-    if (!this._collectionIdResolved) {
-      this._collectionIdResolved = true;
-      const stream = data.stream;
-      try {
-        this._collectionId = await stream
-          .request({
-            command: "new_collection",
-            min_size: this.minSize,
-            max_size: this.maxSize,
-          })
-          .get();
-      } catch (e) {
-        if (isStopTest(e)) {
-          data.testAborted = true;
-          throw new DataExhausted("Server ran out of data");
-        }
-        throw e;
-      }
-    }
-    return this._collectionId;
+  doDraw(tc: TestCase): T {
+    return this.fn(tc);
   }
-
-  /** @internal */
-  async more(data: TestCaseData): Promise<boolean> {
-    if (this._finished) return false;
-    const collectionId = await this._getCollectionId(data);
-    const stream = data.stream;
-    let result: unknown;
-    try {
-      result = await stream
-        .request({ command: "collection_more", collection_id: collectionId })
-        .get();
-    } catch (e) {
-      if (isStopTest(e)) {
-        data.testAborted = true;
-        throw new DataExhausted("Server ran out of data");
-      }
-      throw e;
-    }
-    if (!result) {
-      this._finished = true;
-    }
-    return result as boolean;
-  }
-
-  /** @internal */
-  async reject(data: TestCaseData, why: string | null = null): Promise<void> {
-    if (this._finished) return;
-    const collectionId = await this._getCollectionId(data);
-    const stream = data.stream;
-    await stream
-      .request({
-        command: "collection_reject",
-        collection_id: collectionId,
-        why,
-      })
-      .get();
-  }
-}
-
-/** Check if a caught value is a StopTest RequestError. */
-function isStopTest(e: unknown): boolean {
-  return e instanceof RequestError && e.errorType === "StopTest";
 }

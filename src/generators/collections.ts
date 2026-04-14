@@ -1,218 +1,184 @@
 /**
- * Collection generators: lists and dicts.
+ * Collection generators: arrays/lists, sets, and maps/dicts.
  *
  * @packageDocumentation
  */
 
-import { BasicGenerator, Collection, Generator } from "./core.js";
-import { generateFromSchema, Labels, startSpan, stopSpan } from "../runner.js";
-import type { TestCaseData } from "../runner.js";
+import { TestCase, Collection, Labels } from "../testCase.js";
+import { Generator, BasicGenerator, CompositeGenerator } from "./core.js";
 
 // ---------------------------------------------------------------------------
-// CompositeListGenerator
+// Options
 // ---------------------------------------------------------------------------
 
-/**
- * A list generator for elements that are not basic (e.g., filtered or mapped
- * through a non-basic path). Uses the collection protocol in a LIST span.
- *
- * @typeParam T - The element type.
- */
-export class CompositeListGenerator<T = unknown> extends Generator<T[]> {
-  private readonly _elements: Generator<T>;
-  private readonly _minSize: number;
-  private readonly _maxSize: number | null;
+export interface CollectionOptions {
+  minSize?: number;
+  maxSize?: number;
+}
 
-  constructor(elements: Generator<T>, minSize = 0, maxSize: number | null = null) {
-    super();
-    this._elements = elements;
-    this._minSize = minSize;
-    this._maxSize = maxSize;
-  }
-
-  async doDraw(data: TestCaseData): Promise<T[]> {
-    // Create a fresh Collection for each doDraw() call so that _finished
-    // state from prior calls does not carry over.
-    const collection = new Collection(this._minSize, this._maxSize);
-    await startSpan(Labels.LIST, data);
-    try {
-      const result: T[] = [];
-      while (await collection.more(data)) {
-        result.push(await this._elements.doDraw(data));
-      }
-      return result;
-    } finally {
-      await stopSpan({}, data);
-    }
-  }
+export interface ArrayOptions extends CollectionOptions {
+  unique?: boolean;
 }
 
 // ---------------------------------------------------------------------------
-// lists()
+// Arrays (lists)
 // ---------------------------------------------------------------------------
 
-/**
- * Generate lists of elements.
- *
- * When `elements` is a {@link BasicGenerator}, the list schema is sent to the
- * server directly (optimal shrinking). If the element generator has a transform,
- * a list-level transform is composed that applies it to each item. When elements
- * is a composite generator (e.g., filtered or mapped), the collection protocol
- * is used in a LIST span via CompositeListGenerator.
- *
- * @param elements - Generator for list elements.
- * @param minSize - Minimum list length. Defaults to 0.
- * @param maxSize - Maximum list length, or null for unbounded.
- */
-export function lists<T>(
-  elements: Generator<T>,
-  minSize = 0,
-  maxSize: number | null = null,
-): Generator<T[]> {
-  if (minSize < 0) {
-    throw new Error(`min_size=${minSize} must be non-negative`);
-  }
-  if (maxSize !== null && maxSize < 0) {
-    throw new Error(`max_size=${maxSize} must be non-negative`);
-  }
+/** Generate arrays with elements from the given generator. */
+export function arrays<T>(elements: Generator<T>, options?: ArrayOptions): Generator<T[]> {
+  const minSize = options?.minSize ?? 0;
+  const maxSize = options?.maxSize ?? null;
+  const unique = options?.unique ?? false;
+
   if (maxSize !== null && minSize > maxSize) {
-    throw new Error(`Cannot have max_size=${maxSize} < min_size=${minSize}`);
+    throw new Error("Cannot have maxSize < minSize");
   }
-  if (elements instanceof BasicGenerator) {
-    const rawSchema: Record<string, unknown> = {
+
+  // Try schema-based path
+  const elementBasic = elements.asBasic();
+  if (elementBasic) {
+    const schema: Record<string, unknown> = {
       type: "list",
-      elements: elements._rawSchema,
+      unique,
+      elements: elementBasic.schema,
       min_size: minSize,
     };
-    if (maxSize !== null) {
-      rawSchema["max_size"] = maxSize;
-    }
-    const elemTransform = elements._transform as ((raw: unknown) => T) | null;
-    if (elemTransform !== null) {
-      const listTransform = (rawList: unknown): T[] =>
-        (rawList as unknown[]).map((item) => elemTransform(item));
-      return new BasicGenerator<T[]>(rawSchema, listTransform);
-    }
-    return new BasicGenerator<T[]>(rawSchema);
-  }
-  return new CompositeListGenerator<T>(elements, minSize, maxSize);
-}
+    if (maxSize !== null) schema["max_size"] = maxSize;
 
-// ---------------------------------------------------------------------------
-// CompositeDictGenerator
-// ---------------------------------------------------------------------------
-
-/**
- * A dict generator for keys or values that are not basic (have no server schema).
- *
- * Uses the MAP span (label 5) for the whole dict and MAP_ENTRY spans (label 6)
- * for each key-value pair. The server decides the size via generateFromSchema.
- */
-export class CompositeDictGenerator<K, V> extends Generator<Map<K, V>> {
-  /** @internal */
-  readonly _keys: Generator<K>;
-  /** @internal */
-  readonly _values: Generator<V>;
-  /** @internal */
-  readonly _minSize: number;
-  /** @internal */
-  readonly _maxSize: number | null;
-
-  constructor(keys: Generator<K>, values: Generator<V>, minSize: number, maxSize: number | null) {
-    super();
-    this._keys = keys;
-    this._values = values;
-    this._minSize = minSize;
-    this._maxSize = maxSize;
+    return new BasicGenerator(schema, (raw) => {
+      if (!Array.isArray(raw)) throw new Error(`Expected array, got ${typeof raw}`);
+      return raw.map((v: unknown) => elementBasic.parseRaw(v));
+    });
   }
 
-  async doDraw(data: TestCaseData): Promise<Map<K, V>> {
-    await startSpan(Labels.MAP, data);
-    try {
-      const maxSz = this._maxSize !== null ? this._maxSize : this._minSize + 10;
-      const size = (await generateFromSchema(
-        {
-          type: "integer",
-          min_value: this._minSize,
-          max_value: maxSz,
-        },
-        data,
-      )) as number;
-      const result = new Map<K, V>();
-      for (let i = 0; i < size; i++) {
-        await startSpan(Labels.MAP_ENTRY, data);
-        const key = await this._keys.doDraw(data);
-        const value = await this._values.doDraw(data);
-        result.set(key, value);
-        await stopSpan({}, data);
+  // Fallback: collection protocol
+  return new CompositeGenerator((tc: TestCase) => {
+    tc.startSpan(Labels.LIST);
+    const collection = new Collection(tc, minSize, maxSize ?? undefined);
+    const result: T[] = [];
+    while (collection.more()) {
+      const element = elements.doDraw(tc);
+      if (unique) {
+        if (result.some((existing) => JSON.stringify(existing) === JSON.stringify(element))) {
+          collection.reject("duplicate element");
+          continue;
+        }
       }
-      return result;
-    } finally {
-      await stopSpan({}, data);
+      result.push(element);
     }
+    tc.stopSpan(false);
+    return result;
+  });
+}
+
+export { arrays as lists };
+
+// ---------------------------------------------------------------------------
+// Sets
+// ---------------------------------------------------------------------------
+
+/** Generate Sets with elements from the given generator. */
+export function sets<T>(elements: Generator<T>, options?: CollectionOptions): Generator<Set<T>> {
+  const minSize = options?.minSize ?? 0;
+  const maxSize = options?.maxSize ?? null;
+
+  if (maxSize !== null && minSize > maxSize) {
+    throw new Error("Cannot have maxSize < minSize");
   }
+
+  const elementBasic = elements.asBasic();
+  if (elementBasic) {
+    const schema: Record<string, unknown> = {
+      type: "list",
+      unique: true,
+      elements: elementBasic.schema,
+      min_size: minSize,
+    };
+    if (maxSize !== null) schema["max_size"] = maxSize;
+
+    return new BasicGenerator(schema, (raw) => {
+      if (!Array.isArray(raw)) throw new Error(`Expected array, got ${typeof raw}`);
+      return new Set(raw.map((v: unknown) => elementBasic.parseRaw(v)));
+    });
+  }
+
+  return new CompositeGenerator((tc: TestCase) => {
+    tc.startSpan(Labels.SET);
+    const collection = new Collection(tc, minSize, maxSize ?? undefined);
+    const result = new Set<T>();
+    while (collection.more()) {
+      const element = elements.doDraw(tc);
+      if (result.has(element)) {
+        collection.reject("duplicate element");
+        continue;
+      }
+      result.add(element);
+    }
+    tc.stopSpan(false);
+    return result;
+  });
 }
 
 // ---------------------------------------------------------------------------
-// dicts()
+// Maps (dicts)
 // ---------------------------------------------------------------------------
 
-/**
- * Generate dictionaries with keys and values from the given generators.
- *
- * When both `keys` and `values` are {@link BasicGenerator}s, the server handles
- * the full dict generation (basic path) and the result is a plain
- * `Record<string, unknown>`. Otherwise a CompositeDictGenerator is used
- * (non-basic path) which returns a `Map<K, V>`.
- *
- * @param keys - Generator for dictionary keys.
- * @param values - Generator for dictionary values.
- * @param minSize - Minimum number of entries. Defaults to 0.
- * @param maxSize - Maximum number of entries, or null for unbounded.
- */
-export function dicts<K, V>(
+/** Generate Maps with keys and values from the given generators. */
+export function maps<K, V>(
   keys: Generator<K>,
   values: Generator<V>,
-  minSize = 0,
-  maxSize: number | null = null,
-): Generator<Record<string, unknown>> | Generator<Map<K, V>> {
-  if (minSize < 0) {
-    throw new Error(`min_size=${minSize} must be non-negative`);
-  }
-  if (maxSize !== null && maxSize < 0) {
-    throw new Error(`max_size=${maxSize} must be non-negative`);
-  }
+  options?: CollectionOptions,
+): Generator<Map<K, V>> {
+  const minSize = options?.minSize ?? 0;
+  const maxSize = options?.maxSize ?? null;
+
   if (maxSize !== null && minSize > maxSize) {
-    throw new Error(`Cannot have max_size=${maxSize} < min_size=${minSize}`);
+    throw new Error("Cannot have maxSize < minSize");
   }
-  if (keys instanceof BasicGenerator && values instanceof BasicGenerator) {
-    const rawSchema: Record<string, unknown> = {
+
+  const keyBasic = keys.asBasic();
+  const valueBasic = values.asBasic();
+
+  if (keyBasic && valueBasic) {
+    const schema: Record<string, unknown> = {
       type: "dict",
-      keys: keys._rawSchema,
-      values: values._rawSchema,
+      keys: keyBasic.schema,
+      values: valueBasic.schema,
       min_size: minSize,
     };
-    if (maxSize !== null) rawSchema["max_size"] = maxSize;
+    if (maxSize !== null) schema["max_size"] = maxSize;
 
-    const keyTransform = keys._transform as ((raw: unknown) => unknown) | null;
-    const valueTransform = values._transform as ((raw: unknown) => unknown) | null;
-
-    if (keyTransform === null && valueTransform === null) {
-      return new BasicGenerator<Record<string, unknown>>(rawSchema, (items) => {
-        return Object.fromEntries(items as Array<[unknown, unknown]>);
-      });
-    } else {
-      return new BasicGenerator<Record<string, unknown>>(rawSchema, (items) => {
-        const result: Record<string, unknown> = {};
-        for (const [k, v] of items as Array<[unknown, unknown]>) {
-          const key = keyTransform !== null ? String(keyTransform(k)) : String(k);
-          const value = valueTransform !== null ? valueTransform(v) : v;
-          result[key] = value;
+    return new BasicGenerator(schema, (raw) => {
+      if (!Array.isArray(raw)) throw new Error(`Expected array, got ${typeof raw}`);
+      const map = new Map<K, V>();
+      for (const entry of raw) {
+        if (!Array.isArray(entry) || entry.length !== 2) {
+          throw new Error("Expected [key, value] pair");
         }
-        return result;
-      });
-    }
-  } else {
-    return new CompositeDictGenerator<K, V>(keys, values, minSize, maxSize);
+        map.set(keyBasic.parseRaw(entry[0]), valueBasic.parseRaw(entry[1]));
+      }
+      return map;
+    });
   }
+
+  return new CompositeGenerator((tc: TestCase) => {
+    tc.startSpan(Labels.MAP);
+    const collection = new Collection(tc, minSize, maxSize ?? undefined);
+    const result = new Map<K, V>();
+    while (collection.more()) {
+      tc.startSpan(Labels.MAP_ENTRY);
+      const key = keys.doDraw(tc);
+      const value = values.doDraw(tc);
+      tc.stopSpan(false);
+      if (result.has(key)) {
+        collection.reject("duplicate key");
+        continue;
+      }
+      result.set(key, value);
+    }
+    tc.stopSpan(false);
+    return result;
+  });
 }
+
+export { maps as dicts };

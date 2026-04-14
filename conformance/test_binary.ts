@@ -7,23 +7,22 @@
 
 import { getTestCases, writeMetrics } from "../src/conformance.js";
 import { binary } from "../src/generators/index.js";
-import { draw } from "../src/runner.js";
-import { runHegelTest } from "../src/session.js";
+import { hegel } from "../src/runner.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
 
 const minSize = params["min_size"] != null ? Number(params["min_size"]) : 0;
-const maxSize = params["max_size"] != null ? Number(params["max_size"]) : null;
+const maxSize = params["max_size"] != null ? Number(params["max_size"]) : undefined;
 
 const testCases = getTestCases();
-const gen = binary(minSize, maxSize);
+const gen = binary({ minSize, maxSize });
 
-await runHegelTest(
-  async function conformance_binary() {
-    const value = await draw(gen);
+hegel(
+  function conformance_binary(tc) {
+    const value = tc.draw(gen);
     writeMetrics({ length: value.length });
   },
   { testCases },
-);
+)();
 
 process.exit(0);

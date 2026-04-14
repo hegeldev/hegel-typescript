@@ -4,32 +4,38 @@
  * @packageDocumentation
  */
 
-/** Returns the version of the Hegel library. */
-export function version(): string {
-  return "0.1.0";
-}
+// Core types
+export { TestCase, Collection, Labels, StopTestError, AssumeError } from "./testCase.js";
+export type { GeneratorLike, DataSource } from "./testCase.js";
 
-// Error classes
+// Runner
 export {
-  AssumeRejected,
-  AssertionError,
-  ConnectionError,
-  DataExhausted,
-  RuntimeError,
+  Hegel,
+  hegel,
+  Verbosity,
+  HealthCheck,
+  defaultSettings,
+  ServerDataSource,
+  runTestCase,
 } from "./runner.js";
+export type { Settings, TestCaseResult, TestLocation } from "./runner.js";
 
-// Test entry points
-export { runHegelTest, hegel, HegelSession } from "./session.js";
+// Protocol
+export type { Packet } from "./protocol.js";
 
-// Test helpers
-export { assume, draw, note, target } from "./runner.js";
+// Connection
+export { Connection, Stream } from "./connection.js";
+
+// Session
+export { HegelSession, HEGEL_SERVER_VERSION } from "./session.js";
 
 // Generators
 export {
   Generator,
   BasicGenerator,
-  Collection,
+  // Primitives
   integers,
+  bigIntegers,
   floats,
   booleans,
   text,
@@ -38,36 +44,46 @@ export {
   just,
   sampledFrom,
   fromRegex,
+  // Collections
+  arrays,
+  lists,
+  sets,
+  maps,
+  dicts,
+  // Combinators
+  oneOf,
+  optional,
+  tuples,
+  tuples3,
+  tuples4,
+  // Format generators
   emails,
   urls,
   domains,
+  ipv4Addresses,
+  ipv6Addresses,
+  ipAddresses,
   dates,
   times,
   datetimes,
-  lists,
-  tuples2,
-  tuples3,
-  tuples4,
-  oneOf,
-  optional,
-  ipAddresses,
-  dicts,
+  // Composition
+  composite,
+  record,
 } from "./generators/index.js";
 
-export type { CharacterOptions } from "./generators/index.js";
-
-// Type-directed derivation
-export {
-  field,
-  DerivedGenerator,
-  deriveGenerator,
-  RecordDerivedGenerator,
-  recordGenerator,
-  VariantGenerator,
-  variantGenerator,
-} from "./derive.js";
-
-export type { VariantDef, FieldMeta } from "./derive.js";
+export type {
+  IntegerOptions,
+  BigIntegerOptions,
+  FloatOptions,
+  CharacterFilterOptions,
+  TextOptions,
+  CharacterOptions,
+  BinaryOptions,
+  RegexOptions,
+  DomainOptions,
+  CollectionOptions,
+  ArrayOptions,
+} from "./generators/index.js";
 
 // Conformance testing
-export { getTestCases, writeMetrics } from "./conformance.js";
+export { getTestCases, makeNonBasic, writeMetrics } from "./conformance.js";
