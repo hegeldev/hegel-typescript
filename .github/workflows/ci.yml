@@ -49,10 +49,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/base
-        with:
-          ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
-
       - name: Install just
         run: sudo apt-get update && sudo apt-get install -y just
       - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
@@ -65,6 +61,45 @@ jobs:
       - run: just setup
       - name: Run tests
         run: npm run test
+
+  test-node-16:
+    name: test (node 16)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+
+      - name: Install hegel-core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python hegel-core
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "16"
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Install fixture
+        working-directory: tests/old_node
+        run: npm install --no-audit --no-fund
+
+      - name: Run old-Node tests
+        working-directory: tests/old_node
+        env:
+          VENV_BIN: ${{ github.workspace }}/.venv/bin
+        run: |
+          export PATH="${VENV_BIN}:$PATH"
+          for f in *.mjs; do
+            echo "Running $f"
+            node "$f"
+          done
 
   docs:
     name: docs
@@ -94,10 +129,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/base
-        with:
-          ssh-key: ${{ secrets.HEGEL_DEPLOY_KEY }}
-
       - name: Install just
         run: sudo apt-get update && sudo apt-get install -y just
       - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
@@ -117,7 +148,7 @@ jobs:
   release:
     name: release
     if: github.event_name == 'push' && github.repository == 'hegeldev/hegel-typescript'
-    needs: [lint, test, docs, conformance]
+    needs: [lint, test, test-node-16, docs, conformance]
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -166,7 +166,7 @@ Failing to handle StopTest correctly causes `FlakyStrategyDefinition` errors.
 | Linter         | `eslint` + `typescript-eslint` | 10.0.2 / 8.56.1 | Type-aware linting with ESLint v10 flat config         |
 | Formatter      | `prettier`                     | 3.8.1           | Code formatting                                        |
 | Documentation  | `typedoc`                      | 0.28.17         | API docs from TSDoc comments                           |
-| Runtime        | Node.js                        | 22.x            | LTS runtime                                            |
+| Runtime        | Node.js                        | 16.x            | LTS runtime                                            |
 
 ### Build Commands Detail
 

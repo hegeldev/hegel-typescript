@@ -7,7 +7,6 @@
  * with a readExact callback instead of sockets.
  */
 
-import { createRequire } from "module";
 import { describe, it, expect } from "vitest";
 import {
   MAGIC,
@@ -23,13 +22,11 @@ import {
   encodeValue,
   decodeValue,
 } from "../src/protocol.js";
+import { crc32 } from "../src/crc32.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const require = createRequire(import.meta.url);
-const zlib = require("node:zlib") as typeof import("zlib");
 
 /**
  * Create a readExact function backed by a buffer.
@@ -70,7 +67,7 @@ function makeRawPacket({
   headerForCheck.writeUInt32BE(messageId, 12);
   headerForCheck.writeUInt32BE(payload.length, 16);
 
-  const crcVal = checksum ?? zlib.crc32(Buffer.concat([headerForCheck, payload]));
+  const crcVal = checksum ?? crc32(Buffer.concat([headerForCheck, payload]));
 
   const header = Buffer.alloc(20);
   header.writeUInt32BE(magic, 0);
