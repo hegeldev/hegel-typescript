@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 - 2026-04-20
+
+* Rename `arrays` to `lists`.
+* Rename `dicts` to `maps`.
+* Replace `tuples2`, `tuples3`, etc, with a generic `tuples` generator which accepts a variable number of arguments.
+* `Settings.database` now accepts a proper tagged struct `Database`, instead of interpreting magic strings like `"unset"`.
+* Replace `ipv4Addresses` and `ipv6Addresses` with a unified `ipAddresses` generator that takes a `version` argument.
+
 ## 0.3.0 - 2026-04-14
 
 Complete rewrite of the library based on `hegel-rust` architecture. Synchronous stdio-based I/O, explicit `TestCase` parameter, options-object generators, `DataSource` abstraction, `record()` combinator, and dual-path conformance testing via `makeNonBasic`.
