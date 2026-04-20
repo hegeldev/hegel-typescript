@@ -13,10 +13,11 @@ export const HANDSHAKE_STRING = "hegel_handshake_start";
 // cbor-x requires a Class for addExtension, but we only use the decode
 // path (tag 91 is sent by the server, never by the client).
 addExtension({
+  /* v8 ignore start */
   Class: class HegelString {},
   tag: 91,
-  /* v8 ignore next: encode is never called — tag 91 is only received from server */
   encode: () => Buffer.alloc(0),
+  /* v8 ignore stop */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   decode(data: unknown): any {
     if (Buffer.isBuffer(data)) return wtf8ToString(data);

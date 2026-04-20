@@ -90,6 +90,17 @@ export class HegelSession {
     child.stdout!.pause();
     child.stdin!.cork();
 
+    // Unref the child and its pipes so they don't keep Node's event loop
+    // alive. Otherwise a plain `node script.mjs` hangs after the last
+    // Hegel.run() completes — Node waits for the subprocess, the subprocess
+    // waits for more protocol commands, and the `exit` handler that would
+    // kill the child never fires because Node never decides to exit.
+    // stdin/stdout for piped stdio are Socket instances at runtime, but
+    // TypeScript types them as Writable/Readable which don't declare unref().
+    child.unref();
+    (child.stdout as unknown as { unref(): void }).unref();
+    (child.stdin as unknown as { unref(): void }).unref();
+
     // Extract raw file descriptors for synchronous I/O
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const readFd = (child.stdout as any)._handle.fd as number;
