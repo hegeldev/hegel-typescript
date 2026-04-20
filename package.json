@@ -39,5 +39,9 @@
   },
   "dependencies": {
     "cbor-x": "^1.6.0"
+  },
+  "//overrides": "fix vitest peerOptional declaring @types/node >=20, which is incompatible with us",
+  "overrides": {
+    "@types/node": "$@types/node"
   }
 }
