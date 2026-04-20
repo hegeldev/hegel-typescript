@@ -10,6 +10,7 @@ import {
   hegel,
   Hegel,
   integers,
+  bigIntegers,
   floats,
   booleans,
   text,
@@ -469,5 +470,106 @@ describe("edge cases", () => {
       },
       { testCases: 10 },
     ),
+  );
+});
+
+describe("asBasic composition", () => {
+  test(
+    "sets nested in tuples",
+    hegel((tc) => {
+      const [s, n] = tc.draw(
+        tuples(sets(integers({ minValue: 0, maxValue: 10 }), { maxSize: 3 }), integers()),
+      );
+      expect(s).toBeInstanceOf(Set);
+      expect(Number.isInteger(n)).toBe(true);
+    }),
+  );
+
+  test(
+    "maps nested in tuples",
+    hegel((tc) => {
+      const [m, n] = tc.draw(
+        tuples(
+          maps(text({ minSize: 1, maxSize: 3 }), integers({ minValue: 0, maxValue: 10 }), {
+            maxSize: 3,
+          }),
+          integers(),
+        ),
+      );
+      expect(m).toBeInstanceOf(Map);
+      expect(Number.isInteger(n)).toBe(true);
+    }),
+  );
+
+  test(
+    "oneOf nested in tuples",
+    hegel((tc) => {
+      const [v, n] = tc.draw(
+        tuples(
+          oneOf(
+            integers({ minValue: 0, maxValue: 10 }),
+            integers({ minValue: 100, maxValue: 110 }),
+          ),
+          integers(),
+        ),
+      );
+      expect(Number.isInteger(v)).toBe(true);
+      expect(Number.isInteger(n)).toBe(true);
+    }),
+  );
+
+  test(
+    "optional nested in tuples",
+    hegel((tc) => {
+      const [v, n] = tc.draw(tuples(optional(integers({ minValue: 0, maxValue: 10 })), integers()));
+      expect(v === null || Number.isInteger(v)).toBe(true);
+      expect(Number.isInteger(n)).toBe(true);
+    }),
+  );
+
+  test(
+    "tuples nested in tuples",
+    hegel((tc) => {
+      const [inner, n] = tc.draw(tuples(tuples(integers(), booleans()), integers()));
+      expect(Array.isArray(inner)).toBe(true);
+      expect(Number.isInteger(inner[0])).toBe(true);
+      expect(typeof inner[1]).toBe("boolean");
+      expect(Number.isInteger(n)).toBe(true);
+    }),
+  );
+
+  test(
+    "bigIntegers nested in tuples",
+    hegel((tc) => {
+      const [big, n] = tc.draw(tuples(bigIntegers({ minValue: 0n, maxValue: 1000n }), integers()));
+      expect(typeof big).toBe("bigint");
+      expect(Number.isInteger(n)).toBe(true);
+    }),
+  );
+
+  test(
+    "sampledFrom nested in tuples",
+    hegel((tc) => {
+      const [color, n] = tc.draw(tuples(sampledFrom(["red", "green", "blue"]), integers()));
+      expect(["red", "green", "blue"]).toContain(color);
+      expect(Number.isInteger(n)).toBe(true);
+    }),
+  );
+
+  test(
+    "map on non-basic source returns null asBasic",
+    hegel((tc) => {
+      // filter produces a non-basic generator (FilteredGenerator inherits the
+      // base asBasic() that returns null). Mapping on top of it and then
+      // nesting in tuples() causes MappedGenerator.asBasic() to see a null
+      // source and return null -- exercising the null-source branch.
+      const nonBasicMapped = integers({ minValue: 0, maxValue: 10 })
+        .filter((x) => x >= 0)
+        .map((x) => x * 2);
+      const [v, n] = tc.draw(tuples(nonBasicMapped, integers()));
+      expect(Number.isInteger(v)).toBe(true);
+      expect(v % 2).toBe(0);
+      expect(Number.isInteger(n)).toBe(true);
+    }),
   );
 });

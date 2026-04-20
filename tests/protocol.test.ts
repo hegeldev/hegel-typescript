@@ -31,11 +31,6 @@ import {
 const require = createRequire(import.meta.url);
 const zlib = require("node:zlib") as typeof import("zlib");
 
-/** Compute CRC32 using Node's zlib. */
-function crc32(buf: Buffer): number {
-  return zlib.crc32(buf) >>> 0;
-}
-
 /**
  * Create a readExact function backed by a buffer.
  * Reads bytes sequentially from the buffer.
@@ -75,7 +70,7 @@ function makeRawPacket({
   headerForCheck.writeUInt32BE(messageId, 12);
   headerForCheck.writeUInt32BE(payload.length, 16);
 
-  const crcVal = checksum ?? crc32(Buffer.concat([headerForCheck, payload]));
+  const crcVal = checksum ?? zlib.crc32(Buffer.concat([headerForCheck, payload]));
 
   const header = Buffer.alloc(20);
   header.writeUInt32BE(magic, 0);

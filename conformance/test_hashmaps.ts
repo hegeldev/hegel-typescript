@@ -12,7 +12,7 @@
  *     min_value: number|null, max_value: number|null }
  */
 
-import { getTestCases, makeNonBasic, writeMetrics } from "../src/conformance.js";
+import { getTestCases, makeNonBasic, writeMetrics } from "./helpers.js";
 import { maps, integers, text } from "../src/generators/index.js";
 import { hegel } from "../src/runner.js";
 

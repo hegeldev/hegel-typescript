@@ -49,7 +49,7 @@ import { runHegelTest, integers } from "hegel";
 
 it("bounded integers", async () => {
   await runHegelTest(async () => {
-    const n = await integers(0, 200).generate();
+    const n = await integers({ minValue: 0, maxValue: 200 }).generate();
     expect(n).toBeLessThan(50); // this will fail!
   });
 });
@@ -126,7 +126,7 @@ import { runHegelTest, integers } from "hegel";
 
 it("stringified integers", async () => {
   await runHegelTest(async () => {
-    const s = await integers(0, 100).map(String).generate();
+    const s = await integers({ minValue: 0, maxValue: 100 }).map(String).generate();
     expect(s).toMatch(/^\d+$/);
   });
 });
@@ -138,13 +138,13 @@ Because generation is imperative in Hegel, you can use earlier results to config
 later generators directly:
 
 ```typescript
-import { runHegelTest, integers, lists } from "hegel";
+import { runHegelTest, integers, arrays } from "hegel";
 
 it("list with valid index", async () => {
   await runHegelTest(async () => {
-    const n = await integers(1, 10).generate();
-    const lst = await lists(integers(), n, n).generate();
-    const index = await integers(0, n - 1).generate();
+    const n = await integers({ minValue: 1, maxValue: 10 }).generate();
+    const lst = await arrays(integers(), { minSize: n, maxSize: n }).generate();
+    const index = await integers({ minValue: 0, maxValue: n - 1 }).generate();
     expect(index).toBeGreaterThanOrEqual(0);
     expect(index).toBeLessThan(lst.length);
   });
@@ -155,12 +155,12 @@ You can also use `.flatMap()` for dependent generation within a single generator
 expression:
 
 ```typescript
-import { runHegelTest, integers, lists } from "hegel";
+import { runHegelTest, integers, arrays } from "hegel";
 
 it("flatMap dependent generation", async () => {
   await runHegelTest(async () => {
-    const result = await integers(1, 5)
-      .flatMap((n) => lists(integers(), n, n))
+    const result = await integers({ minValue: 1, maxValue: 5 })
+      .flatMap((n) => arrays(integers(), { minSize: n, maxSize: n }))
       .generate();
     expect(result.length).toBeGreaterThanOrEqual(1);
     expect(result.length).toBeLessThanOrEqual(5);
@@ -174,10 +174,10 @@ it("flatMap dependent generation", async () => {
 
 ```typescript
 booleans(); // true or false
-integers(minValue?, maxValue?); // integer numbers
-floats(minValue?, maxValue?); // floating-point numbers
-text(minSize?, maxSize?); // Unicode strings
-binary(minSize?, maxSize?); // Uint8Array byte arrays
+integers({ minValue?, maxValue? }); // integer numbers
+floats({ minValue?, maxValue?, allowNan?, allowInfinity? }); // floating-point numbers
+text({ minSize?, maxSize? }); // Unicode strings
+binary({ minSize?, maxSize? }); // Uint8Array byte arrays
 ```
 
 ### Constants and choices
@@ -190,11 +190,10 @@ sampledFrom([a, b, c]); // picks from an array of values
 ### Collections
 
 ```typescript
-lists(elements, minSize?, maxSize?); // arrays of generated elements
-tuples2(gen1, gen2); // [T1, T2] tuple
-tuples3(gen1, gen2, gen3); // [T1, T2, T3] tuple
-tuples4(gen1, gen2, gen3, gen4); // [T1, T2, T3, T4] tuple
-dicts(keys, values, minSize?, maxSize?); // Map<K, V>
+arrays(elements, { minSize?, maxSize?, unique? }); // arrays of generated elements
+sets(elements, { minSize?, maxSize? }); // Set<T>
+tuples(gen1, gen2, ...); // [T1, T2, ...] tuple of arbitrary arity
+maps(keys, values, { minSize?, maxSize? }); // Map<K, V>
 ```
 
 ### Combinators
@@ -232,10 +231,10 @@ Requires `"experimentalDecorators": true` in `tsconfig.json`.
 import { field, deriveGenerator, integers, text, booleans } from "hegel";
 
 class User {
-  @field(text(1, 50))
+  @field(text({ minSize: 1, maxSize: 50 }))
   name!: string;
 
-  @field(integers(18, 120))
+  @field(integers({ minValue: 18, maxValue: 120 }))
   age!: number;
 
   @field(booleans())
@@ -254,8 +253,8 @@ No class or decorators needed:
 import { recordGenerator, floats } from "hegel";
 
 const pointGen = recordGenerator({
-  x: floats(-100, 100),
-  y: floats(-100, 100),
+  x: floats({ minValue: -100, maxValue: 100 }),
+  y: floats({ minValue: -100, maxValue: 100 }),
 });
 // await pointGen.generate() returns { x: number, y: number }
 ```
@@ -271,10 +270,10 @@ type Shape =
   | { type: "point" };
 
 const shapeGen = variantGenerator<Shape>({
-  circle: recordGenerator({ radius: floats(0.1, 100) }),
+  circle: recordGenerator({ radius: floats({ minValue: 0.1, maxValue: 100 }) }),
   rectangle: recordGenerator({
-    width: floats(0.1, 100),
-    height: floats(0.1, 100),
+    width: floats({ minValue: 0.1, maxValue: 100 }),
+    height: floats({ minValue: 0.1, maxValue: 100 }),
   }),
   point: null,
 });
@@ -310,7 +309,7 @@ import { runHegelTest, integers, target } from "hegel";
 it("seek large values", async () => {
   await runHegelTest(
     async () => {
-      const x = await integers(0, 10000).generate();
+      const x = await integers({ minValue: 0, maxValue: 10000 }).generate();
       target(x, "maximize_x");
       expect(x).toBeLessThanOrEqual(9999); // this will fail!
     },
@@ -321,8 +320,3 @@ it("seek large values", async () => {
 
 `target()` is advisory — Hegel will try to maximize the targeted metric, but it
 may still explore other regions of the input space.
-
-## Next steps
-
-- Build the API reference with `just docs`, then open `docs/index.html`.
-- Browse the [`examples/`](../examples/) directory for runnable programs.

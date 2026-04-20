@@ -648,8 +648,12 @@ describe("Generator.asBasic", () => {
     expect(gen.asBasic()).toBeNull();
   });
 
-  it("BasicGenerator asBasic returns itself", () => {
-    const gen = integers();
+  it("basic-backed generator asBasic returns a BasicGenerator", () => {
+    expect(integers().asBasic()).toBeInstanceOf(BasicGenerator);
+  });
+
+  it("BasicGenerator.asBasic() returns itself", () => {
+    const gen = new BasicGenerator<number>({ type: "integer" });
     expect(gen.asBasic()).toBe(gen);
   });
 });
@@ -734,23 +738,12 @@ describe("validation errors", () => {
 
   it("text() accepts individual character filter options", () => {
     // Each of these should create a generator without throwing
-    const gen1 = text({ codec: "utf-8" });
-    expect(gen1).toBeInstanceOf(BasicGenerator);
-
-    const gen2 = text({ minCodepoint: 32, maxCodepoint: 126 });
-    expect(gen2).toBeInstanceOf(BasicGenerator);
-
-    const gen3 = text({ categories: ["L", "Nd"] });
-    expect(gen3).toBeInstanceOf(BasicGenerator);
-
-    const gen4 = text({ excludeCategories: ["Cc"] });
-    expect(gen4).toBeInstanceOf(BasicGenerator);
-
-    const gen5 = text({ includeCharacters: "abc" });
-    expect(gen5).toBeInstanceOf(BasicGenerator);
-
-    const gen6 = text({ excludeCharacters: "xyz" });
-    expect(gen6).toBeInstanceOf(BasicGenerator);
+    expect(text({ codec: "utf-8" }).asBasic()).not.toBeNull();
+    expect(text({ minCodepoint: 32, maxCodepoint: 126 }).asBasic()).not.toBeNull();
+    expect(text({ categories: ["L", "Nd"] }).asBasic()).not.toBeNull();
+    expect(text({ excludeCategories: ["Cc"] }).asBasic()).not.toBeNull();
+    expect(text({ includeCharacters: "abc" }).asBasic()).not.toBeNull();
+    expect(text({ excludeCharacters: "xyz" }).asBasic()).not.toBeNull();
   });
 
   it("sets() throws when minSize > maxSize", () => {
@@ -766,7 +759,6 @@ describe("validation errors", () => {
   });
 
   it("domains() accepts maxLength option", () => {
-    const gen = domains({ maxLength: 50 });
-    expect(gen).toBeInstanceOf(BasicGenerator);
+    expect(domains({ maxLength: 50 }).asBasic()).not.toBeNull();
   });
 });

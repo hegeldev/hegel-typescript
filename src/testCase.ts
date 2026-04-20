@@ -9,10 +9,6 @@
 
 import { inspect } from "node:util";
 
-// ---------------------------------------------------------------------------
-// Error classes
-// ---------------------------------------------------------------------------
-
 export class StopTestError extends Error {
   constructor() {
     super("Server ran out of data (StopTest)");
@@ -49,17 +45,9 @@ export const Labels = {
   ENUM_VARIANT: 15,
 } as const;
 
-// ---------------------------------------------------------------------------
-// Generator interface (forward reference to avoid circular imports)
-// ---------------------------------------------------------------------------
-
 export interface GeneratorLike<T> {
   doDraw(tc: TestCase): T;
 }
-
-// ---------------------------------------------------------------------------
-// DataSource interface
-// ---------------------------------------------------------------------------
 
 /**
  * Abstraction over the data backend for a test case.
@@ -78,10 +66,6 @@ export interface DataSource {
   markComplete(status: string, origin: string | null): void;
   testAborted(): boolean;
 }
-
-// ---------------------------------------------------------------------------
-// TestCase
-// ---------------------------------------------------------------------------
 
 export class TestCase {
   private _dataSource: DataSource;
@@ -174,10 +158,6 @@ export class TestCase {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Generate helper
-// ---------------------------------------------------------------------------
-
 /**
  * Send a generate command to the data source and return the raw result.
  * Throws StopTestError if the data source runs out of data.
@@ -186,10 +166,6 @@ export class TestCase {
 export function generateRaw(tc: TestCase, schema: Record<string, unknown>): unknown {
   return tc.dataSource().generate(schema);
 }
-
-// ---------------------------------------------------------------------------
-// Collection
-// ---------------------------------------------------------------------------
 
 /**
  * Server-managed collection sizing.

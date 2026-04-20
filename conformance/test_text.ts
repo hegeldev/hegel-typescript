@@ -7,7 +7,7 @@
  * Metrics: { codepoints: number[] }  (Unicode codepoint values)
  */
 
-import { getTestCases, writeMetrics } from "../src/conformance.js";
+import { getTestCases, writeMetrics } from "./helpers.js";
 import { text, type CharacterOptions } from "../src/generators/index.js";
 import { hegel } from "../src/runner.js";
 

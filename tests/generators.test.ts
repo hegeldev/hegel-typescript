@@ -5,13 +5,13 @@
  * 1. Primitive generators (integers, floats, booleans, text, characters, binary)
  * 2. Constant and selection generators (just, sampledFrom, fromRegex)
  * 3. Format generators (emails, urls, domains, ipAddresses, dates, times, datetimes)
- * 4. Collection generators (arrays/lists, sets, maps/dicts)
+ * 4. Collection generators (arrays, sets, maps)
  * 5. Combinators (map, filter, flatMap, oneOf, optional, tuples)
  * 6. Composition (composite)
  * 7. Argument validation
  */
 
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, expectTypeOf } from "vitest";
 import {
   hegel,
   integers,
@@ -26,27 +26,20 @@ import {
   sampledFrom,
   fromRegex,
   arrays,
-  lists,
   sets,
   maps,
-  dicts,
   oneOf,
   optional,
   tuples,
-  tuples3,
-  tuples4,
   emails,
   urls,
   domains,
-  ipv4Addresses,
-  ipv6Addresses,
   ipAddresses,
   dates,
   times,
   datetimes,
   composite,
   Generator,
-  BasicGenerator,
 } from "hegel";
 
 // ---------------------------------------------------------------------------
@@ -90,8 +83,8 @@ describe("integers()", () => {
     ),
   );
 
-  test("returns a BasicGenerator", () => {
-    expect(integers()).toBeInstanceOf(BasicGenerator);
+  test("exposes a schema via asBasic", () => {
+    expect(integers().asBasic()).not.toBeNull();
   });
 
   test("throws if bounds exceed safe integer range", () => {
@@ -99,14 +92,12 @@ describe("integers()", () => {
     expect(() => integers({ maxValue: Number.MAX_SAFE_INTEGER + 1 })).toThrow("Use bigIntegers()");
   });
 
-  test("returns a BasicGenerator with minValue only", () => {
-    const gen = integers({ minValue: 5 });
-    expect(gen).toBeInstanceOf(BasicGenerator);
+  test("exposes a schema with minValue only", () => {
+    expect(integers({ minValue: 5 }).asBasic()).not.toBeNull();
   });
 
-  test("returns a BasicGenerator with maxValue only", () => {
-    const gen = integers({ maxValue: 100 });
-    expect(gen).toBeInstanceOf(BasicGenerator);
+  test("exposes a schema with maxValue only", () => {
+    expect(integers({ maxValue: 100 }).asBasic()).not.toBeNull();
   });
 });
 
@@ -162,8 +153,8 @@ describe("bigIntegers()", () => {
 // ---------------------------------------------------------------------------
 
 describe("floats()", () => {
-  test("returns a BasicGenerator", () => {
-    expect(floats()).toBeInstanceOf(BasicGenerator);
+  test("exposes a schema via asBasic", () => {
+    expect(floats().asBasic()).not.toBeNull();
   });
 
   test(
@@ -207,8 +198,8 @@ describe("floats()", () => {
 // ---------------------------------------------------------------------------
 
 describe("booleans()", () => {
-  test("returns a BasicGenerator", () => {
-    expect(booleans()).toBeInstanceOf(BasicGenerator);
+  test("exposes a schema via asBasic", () => {
+    expect(booleans().asBasic()).not.toBeNull();
   });
 
   test(
@@ -228,8 +219,8 @@ describe("booleans()", () => {
 // ---------------------------------------------------------------------------
 
 describe("text()", () => {
-  test("returns a BasicGenerator", () => {
-    expect(text()).toBeInstanceOf(BasicGenerator);
+  test("exposes a schema via asBasic", () => {
+    expect(text().asBasic()).not.toBeNull();
   });
 
   test(
@@ -272,8 +263,8 @@ describe("text()", () => {
 // ---------------------------------------------------------------------------
 
 describe("characters()", () => {
-  test("returns a BasicGenerator", () => {
-    expect(characters()).toBeInstanceOf(BasicGenerator);
+  test("exposes a schema via asBasic", () => {
+    expect(characters().asBasic()).not.toBeNull();
   });
 
   test(
@@ -305,8 +296,8 @@ describe("characters()", () => {
 // ---------------------------------------------------------------------------
 
 describe("binary()", () => {
-  test("returns a BasicGenerator", () => {
-    expect(binary()).toBeInstanceOf(BasicGenerator);
+  test("exposes a schema via asBasic", () => {
+    expect(binary().asBasic()).not.toBeNull();
   });
 
   test(
@@ -374,8 +365,8 @@ describe("just()", () => {
 // ---------------------------------------------------------------------------
 
 describe("sampledFrom()", () => {
-  test("returns a BasicGenerator", () => {
-    expect(sampledFrom([1, 2, 3])).toBeInstanceOf(BasicGenerator);
+  test("exposes a schema via asBasic", () => {
+    expect(sampledFrom([1, 2, 3]).asBasic()).not.toBeNull();
   });
 
   test("throws on empty list", () => {
@@ -431,8 +422,8 @@ describe("sampledFrom()", () => {
 // ---------------------------------------------------------------------------
 
 describe("fromRegex()", () => {
-  test("returns a BasicGenerator", () => {
-    expect(fromRegex("[0-9]+")).toBeInstanceOf(BasicGenerator);
+  test("exposes a schema via asBasic", () => {
+    expect(fromRegex("[0-9]+").asBasic()).not.toBeNull();
   });
 
   test(
@@ -464,8 +455,8 @@ describe("fromRegex()", () => {
 // ---------------------------------------------------------------------------
 
 describe("emails()", () => {
-  test("returns a BasicGenerator", () => {
-    expect(emails()).toBeInstanceOf(BasicGenerator);
+  test("exposes a schema via asBasic", () => {
+    expect(emails().asBasic()).not.toBeNull();
   });
 
   test(
@@ -486,8 +477,8 @@ describe("emails()", () => {
 // ---------------------------------------------------------------------------
 
 describe("urls()", () => {
-  test("returns a BasicGenerator", () => {
-    expect(urls()).toBeInstanceOf(BasicGenerator);
+  test("exposes a schema via asBasic", () => {
+    expect(urls().asBasic()).not.toBeNull();
   });
 
   test(
@@ -508,8 +499,8 @@ describe("urls()", () => {
 // ---------------------------------------------------------------------------
 
 describe("domains()", () => {
-  test("returns a BasicGenerator", () => {
-    expect(domains()).toBeInstanceOf(BasicGenerator);
+  test("exposes a schema via asBasic", () => {
+    expect(domains().asBasic()).not.toBeNull();
   });
 
   test(
@@ -533,8 +524,8 @@ describe("domains()", () => {
 // ---------------------------------------------------------------------------
 
 describe("dates()", () => {
-  test("returns a BasicGenerator", () => {
-    expect(dates()).toBeInstanceOf(BasicGenerator);
+  test("exposes a schema via asBasic", () => {
+    expect(dates().asBasic()).not.toBeNull();
   });
 
   test(
@@ -558,8 +549,8 @@ describe("dates()", () => {
 // ---------------------------------------------------------------------------
 
 describe("times()", () => {
-  test("returns a BasicGenerator", () => {
-    expect(times()).toBeInstanceOf(BasicGenerator);
+  test("exposes a schema via asBasic", () => {
+    expect(times().asBasic()).not.toBeNull();
   });
 
   test(
@@ -580,8 +571,8 @@ describe("times()", () => {
 // ---------------------------------------------------------------------------
 
 describe("datetimes()", () => {
-  test("returns a BasicGenerator", () => {
-    expect(datetimes()).toBeInstanceOf(BasicGenerator);
+  test("exposes a schema via asBasic", () => {
+    expect(datetimes().asBasic()).not.toBeNull();
   });
 
   test(
@@ -598,7 +589,7 @@ describe("datetimes()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// arrays() / lists()
+// arrays()
 // ---------------------------------------------------------------------------
 
 describe("arrays()", () => {
@@ -706,11 +697,6 @@ describe("arrays()", () => {
       { testCases: 50 },
     ),
   );
-
-  test("lists is an alias for arrays", () => {
-    // Both should be the same function
-    expect(lists).toBe(arrays);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -750,7 +736,7 @@ describe("sets()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// maps() / dicts()
+// maps()
 // ---------------------------------------------------------------------------
 
 describe("maps()", () => {
@@ -824,10 +810,6 @@ describe("maps()", () => {
       { testCases: 30 },
     ),
   );
-
-  test("dicts is an alias for maps", () => {
-    expect(dicts).toBe(maps);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -835,9 +817,9 @@ describe("maps()", () => {
 // ---------------------------------------------------------------------------
 
 describe("map combinator", () => {
-  test("BasicGenerator.map() returns a BasicGenerator", () => {
+  test("map on a basic source preserves the schema", () => {
     const gen = integers({ minValue: 0, maxValue: 10 }).map((x) => x * 2);
-    expect(gen).toBeInstanceOf(BasicGenerator);
+    expect(gen.asBasic()).not.toBeNull();
   });
 
   test(
@@ -1094,7 +1076,7 @@ describe("optional()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// tuples() / tuples3() / tuples4()
+// tuples()
 // ---------------------------------------------------------------------------
 
 describe("tuples()", () => {
@@ -1144,13 +1126,13 @@ describe("tuples()", () => {
   );
 });
 
-describe("tuples3()", () => {
+describe("tuples() 3-tuples", () => {
   test(
     "generates 3-tuples with correct types",
     hegel(
       (tc) => {
         const [s, n, f] = tc.draw(
-          tuples3(
+          tuples(
             text({ maxSize: 5 }),
             integers({ minValue: 0, maxValue: 5 }),
             floats({ minValue: 0, maxValue: 1 }),
@@ -1170,13 +1152,13 @@ describe("tuples3()", () => {
   );
 });
 
-describe("tuples4()", () => {
+describe("tuples() 4-tuples", () => {
   test(
     "generates 4-tuples",
     hegel(
       (tc) => {
         const [n, b, s, f] = tc.draw(
-          tuples4(
+          tuples(
             integers({ minValue: 0, maxValue: 10 }),
             booleans(),
             text({ maxSize: 5 }),
@@ -1191,6 +1173,52 @@ describe("tuples4()", () => {
       { testCases: 30 },
     ),
   );
+});
+
+describe("tuples() inferred types", () => {
+  test("empty tuple", () => {
+    const g = tuples();
+    expectTypeOf(g).toEqualTypeOf<Generator<[]>>();
+  });
+
+  test("1-tuple", () => {
+    const g = tuples(integers());
+    expectTypeOf(g).toEqualTypeOf<Generator<[number]>>();
+  });
+
+  test("2-tuple with mixed element types", () => {
+    const g = tuples(integers(), booleans());
+    expectTypeOf(g).toEqualTypeOf<Generator<[number, boolean]>>();
+  });
+
+  test("3-tuple preserves per-position types", () => {
+    const g = tuples(text(), integers(), floats());
+    expectTypeOf(g).toEqualTypeOf<Generator<[string, number, number]>>();
+    // Not Generator<(string | number)[]>
+    expectTypeOf(g).not.toEqualTypeOf<Generator<(string | number)[]>>();
+  });
+
+  test("tuple type survives map()", () => {
+    const g = tuples(integers(), booleans()).map(([n, b]) => ({ n, b }));
+    expectTypeOf(g).toEqualTypeOf<Generator<{ n: number; b: boolean }>>();
+  });
+
+  test("nested tuples infer nested tuple types", () => {
+    const g = tuples(tuples(integers(), booleans()), text());
+    expectTypeOf(g).toEqualTypeOf<Generator<[[number, boolean], string]>>();
+  });
+
+  test("map callback parameter is a tuple, not an array", () => {
+    tuples(integers(), booleans()).map((pair) => {
+      expectTypeOf(pair).toEqualTypeOf<[number, boolean]>();
+      return pair;
+    });
+  });
+
+  test("high-arity tuple (5 elements)", () => {
+    const g = tuples(integers(), booleans(), text(), floats(), integers());
+    expectTypeOf(g).toEqualTypeOf<Generator<[number, boolean, string, number, number]>>();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1386,10 +1414,10 @@ describe("collection composite path without maxSize", () => {
 
 describe("ipAddresses()", () => {
   test(
-    "ipv4Addresses generates valid IPv4",
+    "ipAddresses({ version: 4 }) generates valid IPv4",
     hegel(
       (tc) => {
-        const ip = tc.draw(ipv4Addresses());
+        const ip = tc.draw(ipAddresses({ version: 4 }));
         expect(ip).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
       },
       { testCases: 10 },
@@ -1397,10 +1425,10 @@ describe("ipAddresses()", () => {
   );
 
   test(
-    "ipv6Addresses generates valid IPv6",
+    "ipAddresses({ version: 6 }) generates valid IPv6",
     hegel(
       (tc) => {
-        const ip = tc.draw(ipv6Addresses());
+        const ip = tc.draw(ipAddresses({ version: 6 }));
         expect(typeof ip).toBe("string");
         expect(ip).toContain(":");
       },

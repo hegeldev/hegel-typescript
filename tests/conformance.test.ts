@@ -6,7 +6,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { BasicGenerator, getTestCases, hegel, integers, makeNonBasic, writeMetrics } from "hegel";
+import { hegel, integers } from "hegel";
+import { getTestCases, makeNonBasic, writeMetrics } from "../conformance/helpers.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -185,9 +186,9 @@ describe("writeMetrics", () => {
 describe("makeNonBasic", () => {
   it("returns a non-basic generator", () => {
     const gen = integers({ minValue: 0, maxValue: 100 });
-    expect(gen).toBeInstanceOf(BasicGenerator);
+    expect(gen.asBasic()).not.toBeNull();
     const nonBasic = makeNonBasic(gen);
-    expect(nonBasic).not.toBeInstanceOf(BasicGenerator);
+    expect(nonBasic.asBasic()).toBeNull();
   });
 
   it(
