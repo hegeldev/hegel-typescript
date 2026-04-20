@@ -5,7 +5,7 @@
  * Metrics: { value: boolean }
  */
 
-import { getTestCases, writeMetrics } from "../src/conformance.js";
+import { getTestCases, writeMetrics } from "./helpers.js";
 import { booleans } from "../src/generators/index.js";
 import { hegel } from "../src/runner.js";
 

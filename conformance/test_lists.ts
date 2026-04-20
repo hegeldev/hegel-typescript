@@ -8,7 +8,7 @@
  * Metrics: { size: number, min_element: number|null, max_element: number|null }
  */
 
-import { getTestCases, makeNonBasic, writeMetrics } from "../src/conformance.js";
+import { getTestCases, makeNonBasic, writeMetrics } from "./helpers.js";
 import { integers, arrays } from "../src/generators/index.js";
 import { hegel } from "../src/runner.js";
 

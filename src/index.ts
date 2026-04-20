@@ -14,6 +14,7 @@ export {
   hegel,
   Verbosity,
   HealthCheck,
+  Database,
   defaultSettings,
   ServerDataSource,
   runTestCase,
@@ -46,22 +47,16 @@ export {
   fromRegex,
   // Collections
   arrays,
-  lists,
   sets,
   maps,
-  dicts,
   // Combinators
   oneOf,
   optional,
   tuples,
-  tuples3,
-  tuples4,
   // Format generators
   emails,
   urls,
   domains,
-  ipv4Addresses,
-  ipv6Addresses,
   ipAddresses,
   dates,
   times,
@@ -81,9 +76,7 @@ export type {
   BinaryOptions,
   RegexOptions,
   DomainOptions,
+  IpAddressOptions,
   CollectionOptions,
   ArrayOptions,
 } from "./generators/index.js";
-
-// Conformance testing
-export { getTestCases, makeNonBasic, writeMetrics } from "./conformance.js";

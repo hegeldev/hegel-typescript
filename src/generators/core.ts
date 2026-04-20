@@ -1,14 +1,10 @@
 /**
- * Generator base class and core internal combinators.
+ * Generator base class, BasicGenerator descriptor, and internal combinators.
  *
  * @packageDocumentation
  */
 
 import { TestCase, Labels, generateRaw, type GeneratorLike } from "../testCase.js";
-
-// ---------------------------------------------------------------------------
-// Generator base class
-// ---------------------------------------------------------------------------
 
 /**
  * Base class for all generators. Generators produce values of type T
@@ -18,7 +14,13 @@ export abstract class Generator<T> implements GeneratorLike<T> {
   /** @internal */
   abstract doDraw(tc: TestCase): T;
 
-  /** @internal */
+  /**
+   * Return a BasicGenerator descriptor (schema + parse) if this generator can
+   * be expressed as one, otherwise null. Used by parent generators that want
+   * to compose a schema from their children.
+   *
+   * @internal
+   */
   asBasic(): BasicGenerator<T> | null {
     return null;
   }
@@ -47,12 +49,13 @@ export abstract class Generator<T> implements GeneratorLike<T> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// BasicGenerator
-// ---------------------------------------------------------------------------
-
 /**
- * Schema-based generator that sends a schema to the server and parses the response.
+ * Schema-based generator descriptor. Holds a schema and an optional parse
+ * callback that transforms the raw server response into a value of type T.
+ *
+ * Other generators produce a BasicGenerator from `asBasic()` when they can be
+ * expressed as a single schema, letting parent generators (oneOf, arrays, ...)
+ * compose a unified schema rather than falling back to span-based draws.
  */
 export class BasicGenerator<T> extends Generator<T> {
   readonly schema: Record<string, unknown>;
@@ -65,86 +68,51 @@ export class BasicGenerator<T> extends Generator<T> {
   }
 
   doDraw(tc: TestCase): T {
-    const raw = generateRaw(tc, this.schema);
-    if (this.parse) {
-      return this.parse(raw);
-    }
-    return raw as T;
+    return this.parseRaw(generateRaw(tc, this.schema));
   }
 
-  asBasic(): BasicGenerator<T> {
+  override asBasic(): BasicGenerator<T> {
     return this;
   }
 
   parseRaw(raw: unknown): T {
-    if (this.parse) {
-      return this.parse(raw);
-    }
-    return raw as T;
-  }
-
-  override map<U>(f: (value: T) => U): BasicGenerator<U> {
-    const oldParse = this.parse;
-    return new BasicGenerator(this.schema, (raw: unknown) => {
-      const t = oldParse ? oldParse(raw) : (raw as T);
-      return f(t);
-    });
+    return this.parse ? this.parse(raw) : (raw as T);
   }
 }
-
-// ---------------------------------------------------------------------------
-// Internal combinators
-// ---------------------------------------------------------------------------
 
 class MappedGenerator<T, U> extends Generator<U> {
-  private source: Generator<T>;
-  private f: (value: T) => U;
-
-  constructor(source: Generator<T>, f: (value: T) => U) {
+  constructor(
+    private readonly source: Generator<T>,
+    private readonly f: (value: T) => U,
+  ) {
     super();
-    this.source = source;
-    this.f = f;
   }
 
   doDraw(tc: TestCase): U {
-    // MappedGenerator is only created for non-basic sources (BasicGenerator
-    // overrides .map() to return a BasicGenerator directly). So asBasic()
-    // would always return null here — we go straight to the span-based path.
+    const sourceBasic = this.source.asBasic();
+    if (sourceBasic) {
+      return this.f(sourceBasic.doDraw(tc));
+    }
     tc.startSpan(Labels.MAPPED);
     const result = this.f(this.source.doDraw(tc));
-    tc.stopSpan(false);
+    tc.stopSpan();
     return result;
   }
-}
 
-class FlatMappedGenerator<T, U> extends Generator<U> {
-  private source: Generator<T>;
-  private f: (value: T) => Generator<U>;
-
-  constructor(source: Generator<T>, f: (value: T) => Generator<U>) {
-    super();
-    this.source = source;
-    this.f = f;
-  }
-
-  doDraw(tc: TestCase): U {
-    tc.startSpan(Labels.FLAT_MAP);
-    const intermediate = this.source.doDraw(tc);
-    const nextGen = this.f(intermediate);
-    const result = nextGen.doDraw(tc);
-    tc.stopSpan(false);
-    return result;
+  override asBasic(): BasicGenerator<U> | null {
+    const sourceBasic = this.source.asBasic();
+    if (!sourceBasic) return null;
+    const f = this.f;
+    return new BasicGenerator(sourceBasic.schema, (raw) => f(sourceBasic.parseRaw(raw)));
   }
 }
 
 class FilteredGenerator<T> extends Generator<T> {
-  private source: Generator<T>;
-  private predicate: (value: T) => boolean;
-
-  constructor(source: Generator<T>, predicate: (value: T) => boolean) {
+  constructor(
+    private readonly source: Generator<T>,
+    private readonly predicate: (value: T) => boolean,
+  ) {
     super();
-    this.source = source;
-    this.predicate = predicate;
   }
 
   doDraw(tc: TestCase): T {
@@ -152,7 +120,7 @@ class FilteredGenerator<T> extends Generator<T> {
       tc.startSpan(Labels.FILTER);
       const value = this.source.doDraw(tc);
       if (this.predicate(value)) {
-        tc.stopSpan(false);
+        tc.stopSpan();
         return value;
       }
       tc.stopSpan(true);
@@ -162,15 +130,20 @@ class FilteredGenerator<T> extends Generator<T> {
   }
 }
 
-export class CompositeGenerator<T> extends Generator<T> {
-  private fn: (tc: TestCase) => T;
-
-  constructor(fn: (tc: TestCase) => T) {
+class FlatMappedGenerator<T, U> extends Generator<U> {
+  constructor(
+    private readonly source: Generator<T>,
+    private readonly f: (value: T) => Generator<U>,
+  ) {
     super();
-    this.fn = fn;
   }
 
-  doDraw(tc: TestCase): T {
-    return this.fn(tc);
+  doDraw(tc: TestCase): U {
+    tc.startSpan(Labels.FLAT_MAP);
+    const intermediate = this.source.doDraw(tc);
+    const nextGen = this.f(intermediate);
+    const result = nextGen.doDraw(tc);
+    tc.stopSpan();
+    return result;
   }
 }

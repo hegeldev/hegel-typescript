@@ -11,6 +11,7 @@ import { describe, test, expect } from "vitest";
 import {
   Hegel,
   HealthCheck,
+  Database,
   integers,
   booleans,
   BasicGenerator,
@@ -27,7 +28,7 @@ describe("defaultSettings CI detection", () => {
     try {
       process.env["CI"] = "true";
       const settings = defaultSettings();
-      expect(settings.database).toBe("disabled");
+      expect(settings.database).toEqual(Database.disabled);
       expect(settings.derandomize).toBe(true);
     } finally {
       if (original === undefined) {
@@ -62,7 +63,7 @@ describe("defaultSettings CI detection", () => {
       // Set GITHUB_ACTIONS which expects value "true"
       process.env["GITHUB_ACTIONS"] = "true";
       const settings = defaultSettings();
-      expect(settings.database).toBe("disabled");
+      expect(settings.database).toEqual(Database.disabled);
       expect(settings.derandomize).toBe(true);
     } finally {
       for (const key of allVars) {
@@ -100,7 +101,7 @@ describe("defaultSettings CI detection", () => {
     }
     try {
       const settings = defaultSettings();
-      expect(settings.database).toBe("unset");
+      expect(settings.database).toEqual(Database.unset);
       expect(settings.derandomize).toBe(false);
     } finally {
       for (const key of allVars) {
@@ -119,7 +120,7 @@ describe("Hegel.run() settings branches", () => {
     new Hegel((tc) => {
       tc.draw(booleans());
     })
-      .settings({ testCases: 5, database: "disabled" })
+      .settings({ testCases: 5, database: Database.disabled })
       .run();
   });
 
@@ -127,7 +128,7 @@ describe("Hegel.run() settings branches", () => {
     new Hegel((tc) => {
       tc.draw(booleans());
     })
-      .settings({ testCases: 5, database: "unset" })
+      .settings({ testCases: 5, database: Database.unset })
       .run();
   });
 
@@ -135,7 +136,7 @@ describe("Hegel.run() settings branches", () => {
     new Hegel((tc) => {
       tc.draw(booleans());
     })
-      .settings({ testCases: 5, database: ".hegel/test-db" })
+      .settings({ testCases: 5, database: Database.fromPath(".hegel/test-db") })
       .run();
   });
 

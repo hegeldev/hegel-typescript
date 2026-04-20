@@ -1,24 +1,9 @@
-/**
- * Binary wire protocol for communicating with the hegel server.
- *
- * Packet format:
- * - 20-byte header: magic(4) + CRC32(4) + stream_id(4) + message_id(4) + payload_length(4)
- * - Variable-length CBOR payload
- * - 1-byte terminator (0x0A)
- *
- * @packageDocumentation
- */
-
 import { createRequire } from "node:module";
 import { encode, decode, addExtension } from "cbor-x";
 import { wtf8ToString } from "./wtf8.js";
 
 const require = createRequire(import.meta.url);
 const zlib = require("node:zlib") as { crc32: (buf: Buffer) => number };
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
 
 export const MAGIC = 0x4845474c;
 export const HEADER_SIZE = 20;
@@ -27,10 +12,6 @@ export const REPLY_BIT = 0x80000000;
 export const CLOSE_STREAM_MESSAGE_ID = 0x7fffffff;
 export const CLOSE_STREAM_PAYLOAD = Buffer.from([0xfe]);
 export const HANDSHAKE_STRING = "hegel_handshake_start";
-
-// ---------------------------------------------------------------------------
-// CBOR extension: tag 91 = WTF-8 bytes → string
-// ---------------------------------------------------------------------------
 
 // cbor-x requires a Class for addExtension, but we only use the decode
 // path (tag 91 is sent by the server, never by the client).
@@ -47,28 +28,12 @@ addExtension({
   },
 });
 
-// ---------------------------------------------------------------------------
-// Packet type
-// ---------------------------------------------------------------------------
-
 export interface Packet {
   streamId: number;
   messageId: number;
   isReply: boolean;
   payload: Buffer;
 }
-
-// ---------------------------------------------------------------------------
-// CRC32
-// ---------------------------------------------------------------------------
-
-function crc32(data: Buffer): number {
-  return zlib.crc32(data) >>> 0;
-}
-
-// ---------------------------------------------------------------------------
-// Packet encoding
-// ---------------------------------------------------------------------------
 
 /**
  * Encode a packet into a single Buffer ready for writing.
@@ -84,7 +49,7 @@ export function encodePacket(packet: Packet): Buffer {
   header.writeUInt32BE(packet.payload.length, 16);
 
   // CRC32 over header (checksum zeroed) + payload
-  const checksum = crc32(Buffer.concat([header, packet.payload]));
+  const checksum = zlib.crc32(Buffer.concat([header, packet.payload]));
   header.writeUInt32BE(checksum, 4);
 
   return Buffer.concat([header, packet.payload, Buffer.from([TERMINATOR])]);
@@ -128,7 +93,7 @@ export function readPacketFrom(readExact: (n: number) => Buffer): Packet {
   // Verify CRC32
   const headerForCheck = Buffer.from(header);
   headerForCheck.writeUInt32BE(0, 4); // zero out checksum field
-  const computed = crc32(Buffer.concat([headerForCheck, payload]));
+  const computed = zlib.crc32(Buffer.concat([headerForCheck, payload]));
   if (computed !== checksum) {
     throw new Error(
       `CRC32 mismatch: expected 0x${checksum.toString(16)}, got 0x${computed.toString(16)}`,

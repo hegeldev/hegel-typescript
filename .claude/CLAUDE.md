@@ -85,10 +85,10 @@ plain-object types. Three mechanisms are available:
 import { field, deriveGenerator, integers, text, booleans } from "hegel";
 
 class User {
-  @field(text(1, 50))
+  @field(text({ minSize: 1, maxSize: 50 }))
   name!: string;
 
-  @field(integers(18, 120))
+  @field(integers({ minValue: 18, maxValue: 120 }))
   age!: number;
 
   @field(booleans())
@@ -107,8 +107,8 @@ Requires `"experimentalDecorators": true` in `tsconfig.json`.
 import { recordGenerator, floats } from "hegel";
 
 const pointGen = recordGenerator({
-  x: floats(-100, 100),
-  y: floats(-100, 100),
+  x: floats({ minValue: -100, maxValue: 100 }),
+  y: floats({ minValue: -100, maxValue: 100 }),
 });
 // pointGen.generate() returns { x: number, y: number }
 ```
@@ -124,11 +124,14 @@ type Shape =
   | { type: "point" };
 
 const shapeGen = variantGenerator<Shape>({
-  circle: recordGenerator({ radius: floats(0.1, 100) }),
-  rectangle: recordGenerator({ width: floats(0.1, 100), height: floats(0.1, 100) }),
+  circle: recordGenerator({ radius: floats({ minValue: 0.1, maxValue: 100 }) }),
+  rectangle: recordGenerator({
+    width: floats({ minValue: 0.1, maxValue: 100 }),
+    height: floats({ minValue: 0.1, maxValue: 100 }),
+  }),
   point: null, // data-less variant
 });
-// shapeGen.generate() returns one of the Shape variants uniformly at random
+// shapeGen.generate() returns one of the Shape variants at random
 ```
 
 All derived generators support `.map()`, `.filter()`, and `.flatMap()` combinators.
@@ -185,19 +188,15 @@ src/                 — Library source code (all production code)
   session.ts         — Global lazy session (HegelSession, runHegelTest, hegel)
   generators.ts      — Generator base class, combinators, all built-in generators
   derive.ts          — Type-directed derivation (@field, deriveGenerator, recordGenerator, variantGenerator)
-  conformance.ts     — Conformance test helpers (getTestCases, writeMetrics)
 tests/               — Test files (excluded from coverage)
   *.test.ts          — Vitest test files (one per module)
   showcase.test.ts   — Property tests demonstrating real library usage
   conformance/       — Python-side conformance test runner
 conformance/         — TypeScript conformance test scripts (run as binaries via tsx)
+  helpers.ts         — Shared helpers (getTestCases, writeMetrics, makeNonBasic)
   test_*.ts          — Individual conformance scenarios
 scripts/             — Build/CI scripts
   check-coverage.py  — Secondary coverage validation script
-examples/            — Example programs demonstrating library usage
-  01-basic-properties.ts     — Primitive generators and basic properties
-  02-collections-and-combinators.ts — Collections, combinators, dependent generation
-  03-real-world-scenario.ts  — Domain model with derived generators
 README.md            — Project overview and quick start
 dist/                — Compiled output (gitignored)
 guide/               — User-facing tutorials (getting-started.md)
@@ -256,10 +255,11 @@ coverage/            — Coverage reports (gitignored)
 - **Re-exporting TypeScript interfaces with `isolatedModules: true`** requires
   `export type { Foo }` syntax. Plain `export { Foo }` causes a TS1205 error for
   interface/type re-exports.
-- **CRC32 via Node built-in zlib.** Use `zlib.crc32(buf) >>> 0` to get an unsigned
-  32-bit integer. The `>>> 0` is important because bitwise operations in JavaScript
-  return signed 32-bit integers, but `writeUInt32BE` requires values in `[0, 2^32)`.
-  Import via `createRequire(import.meta.url)` in ESM context: `const zlib = require("zlib")`.
+- **CRC32 via Node built-in zlib.** `zlib.crc32(buf)` already returns an unsigned
+  32-bit integer, so no `>>> 0` coercion is needed before `writeUInt32BE`. The `>>> 0`
+  idiom is only required after bitwise operators (`|`, `&`, `^`, `<<`), which JavaScript
+  evaluates as signed 32-bit. Import via `createRequire(import.meta.url)` in ESM context:
+  `const zlib = require("zlib")`.
 - **REPLY_BIT arithmetic.** `messageId | REPLY_BIT` can produce a negative JS integer
   because `<<` and `|` operate on signed 32-bit integers. Always apply `>>> 0` after
   the bitwise OR to convert to unsigned: `(messageId | REPLY_BIT) >>> 0`.

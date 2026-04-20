@@ -13,19 +13,11 @@ import * as fs from "node:fs";
 import { Connection, Stream } from "./connection.js";
 import { HANDSHAKE_STRING } from "./protocol.js";
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
 export const HEGEL_SERVER_VERSION = "0.4.0";
 const SUPPORTED_PROTOCOL_MIN = "0.10";
 const SUPPORTED_PROTOCOL_MAX = "0.10";
 const HEGEL_SERVER_COMMAND_ENV = "HEGEL_SERVER_COMMAND";
 const HEGEL_SERVER_DIR = ".hegel";
-
-// ---------------------------------------------------------------------------
-// Version parsing
-// ---------------------------------------------------------------------------
 
 function parseVersion(s: string): [number, number] {
   const parts = s.split(".");
@@ -49,10 +41,6 @@ function versionInRange(version: string, min: string, max: string): boolean {
   return true;
 }
 
-// ---------------------------------------------------------------------------
-// Server log file
-// ---------------------------------------------------------------------------
-
 let logFileCounter = 0;
 
 function serverLogFile(): number {
@@ -66,10 +54,6 @@ function serverLogFile(): number {
   const path = `${HEGEL_SERVER_DIR}/server.${pid}-${ix}.log`;
   return fs.openSync(path, "a");
 }
-
-// ---------------------------------------------------------------------------
-// HegelSession
-// ---------------------------------------------------------------------------
 
 let session: HegelSession | null = null;
 
@@ -158,10 +142,6 @@ export class HegelSession {
     return new HegelSession(connection, control);
   }
 }
-
-// ---------------------------------------------------------------------------
-// Hegel command discovery
-// ---------------------------------------------------------------------------
 
 function hegelCommand(): { command: string; args: string[] } {
   const override = process.env[HEGEL_SERVER_COMMAND_ENV];

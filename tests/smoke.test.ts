@@ -16,7 +16,6 @@ import {
   oneOf,
   optional,
   tuples,
-  tuples3,
   composite,
   record,
   fromRegex,
@@ -175,10 +174,10 @@ describe("basic property tests", () => {
   );
 
   test(
-    "tuples3",
+    "tuples 3-arity",
     hegel((tc) => {
       const [a, b, c] = tc.draw(
-        tuples3(integers({ minValue: 0, maxValue: 10 }), booleans(), text({ maxSize: 5 })),
+        tuples(integers({ minValue: 0, maxValue: 10 }), booleans(), text({ maxSize: 5 })),
       );
       expect(typeof a).toBe("number");
       expect(typeof b).toBe("boolean");

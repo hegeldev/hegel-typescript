@@ -22,7 +22,6 @@ import {
   dates,
   datetimes,
   tuples,
-  tuples3,
   oneOf,
   optional,
   maps,
@@ -497,11 +496,11 @@ test(
 );
 
 // ---------------------------------------------------------------------------
-// Showcase 19: tuples3 -- string/integer/float satisfy per-component constraints
+// Showcase 19: tuples 3-arity -- string/integer/float satisfy per-component constraints
 // ---------------------------------------------------------------------------
 
 /**
- * tuples3(text(1, 5), integers(0, 100), floats(0, 1)) generates 3-tuples where
+ * tuples(text(1, 5), integers(0, 100), floats(0, 1)) generates 3-tuples where
  * - the string has 1-5 codepoints
  * - the integer is in [0, 100]
  * - the float is in [0.0, 1.0]
@@ -509,11 +508,11 @@ test(
  * Property: the string length plus the integer is always in [1, 105].
  */
 test(
-  "tuples3: per-component constraints hold independently",
+  "tuples 3-arity: per-component constraints hold independently",
   hegel(
     (tc) => {
       const [s, n, f] = tc.draw(
-        tuples3(
+        tuples(
           text({ minSize: 1, maxSize: 5 }),
           integers({ minValue: 0, maxValue: 100 }),
           floats({ minValue: 0, maxValue: 1 }),

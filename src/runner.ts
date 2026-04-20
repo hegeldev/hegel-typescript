@@ -11,10 +11,6 @@ import { TestCase, StopTestError, AssumeError, type DataSource } from "./testCas
 import { encodeValue, decodeValue } from "./protocol.js";
 import type { Connection, Stream } from "./connection.js";
 
-// ---------------------------------------------------------------------------
-// Enums
-// ---------------------------------------------------------------------------
-
 export enum Verbosity {
   Quiet = "quiet",
   Normal = "normal",
@@ -29,16 +25,20 @@ export enum HealthCheck {
   LargeInitialTestCase = "large_initial_test_case",
 }
 
-// ---------------------------------------------------------------------------
-// Settings
-// ---------------------------------------------------------------------------
+export type Database = { kind: "unset" } | { kind: "disabled" } | { kind: "path"; path: string };
+
+export const Database = {
+  unset: { kind: "unset" } as Database,
+  disabled: { kind: "disabled" } as Database,
+  fromPath: (path: string): Database => ({ kind: "path", path }),
+};
 
 export interface Settings {
   testCases: number;
   seed: number | null;
   verbosity: Verbosity;
   derandomize: boolean;
-  database: "unset" | "disabled" | string;
+  database: Database;
   suppressHealthCheck: HealthCheck[];
 }
 
@@ -72,7 +72,7 @@ export function defaultSettings(): Settings {
     seed: null,
     verbosity: Verbosity.Normal,
     derandomize: inCI,
-    database: inCI ? "disabled" : "unset",
+    database: inCI ? Database.disabled : Database.unset,
     suppressHealthCheck: [],
   };
 }
@@ -225,18 +225,10 @@ export class ServerDataSource implements DataSource {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Test case result
-// ---------------------------------------------------------------------------
-
 export type TestCaseResult =
   | { status: "valid" }
   | { status: "invalid" }
   | { status: "interesting"; error: unknown };
-
-// ---------------------------------------------------------------------------
-// runTestCase (exported for testing)
-// ---------------------------------------------------------------------------
 
 function extractOrigin(error: unknown): string | null {
   if (!(error instanceof Error) || !error.stack) return null;
@@ -294,10 +286,6 @@ export function runTestCase(
 
   return result;
 }
-
-// ---------------------------------------------------------------------------
-// Antithesis integration
-// ---------------------------------------------------------------------------
 
 export interface TestLocation {
   function: string;
@@ -359,10 +347,6 @@ function emitAntithesisAssertion(location: TestLocation, passed: boolean): void 
   /* v8 ignore stop */
 }
 
-// ---------------------------------------------------------------------------
-// Hegel builder
-// ---------------------------------------------------------------------------
-
 export class Hegel {
   private testFn: (tc: TestCase) => void;
   private _settings: Settings;
@@ -423,10 +407,10 @@ export class Hegel {
     };
 
     // Database field
-    if (this._settings.database === "disabled") {
+    if (this._settings.database.kind === "disabled") {
       runTestMsg["database"] = null;
-    } else if (this._settings.database !== "unset") {
-      runTestMsg["database"] = this._settings.database;
+    } else if (this._settings.database.kind === "path") {
+      runTestMsg["database"] = this._settings.database.path;
     }
 
     if (suppressNames.length > 0) {
@@ -536,10 +520,6 @@ export class Hegel {
     }
   }
 }
-
-// ---------------------------------------------------------------------------
-// Convenience function
-// ---------------------------------------------------------------------------
 
 /**
  * Wrap a property-based test body into a function suitable for a test runner.

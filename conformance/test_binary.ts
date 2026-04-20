@@ -5,7 +5,7 @@
  * Metrics: { length: number }  (byte count)
  */
 
-import { getTestCases, writeMetrics } from "../src/conformance.js";
+import { getTestCases, writeMetrics } from "./helpers.js";
 import { binary } from "../src/generators/index.js";
 import { hegel } from "../src/runner.js";
 

@@ -4,12 +4,9 @@
  * @packageDocumentation
  */
 
-import { BasicGenerator, Generator } from "./core.js";
+import { TestCase, generateRaw } from "../testCase.js";
+import { Generator, BasicGenerator } from "./core.js";
 import { oneOf } from "./combinators.js";
-
-// ---------------------------------------------------------------------------
-// Character filtering
-// ---------------------------------------------------------------------------
 
 /**
  * Options for character filtering, shared between text() and characters().
@@ -78,51 +75,8 @@ function buildCharacterSchema(options: CharacterFilterOptions): Record<string, u
   return schema;
 }
 
-// ---------------------------------------------------------------------------
-// Text
-// ---------------------------------------------------------------------------
-
-/** Generate text strings. */
-export function text(options?: TextOptions): BasicGenerator<string> {
-  const schema: Record<string, unknown> = {
-    type: "string",
-    min_size: options?.minSize ?? 0,
-  };
-  if (options?.maxSize !== undefined) {
-    schema["max_size"] = options.maxSize;
-  }
-  if (options) {
-    Object.assign(schema, buildCharacterSchema(options));
-  }
-  return new BasicGenerator(schema, (raw) => String(raw));
-}
-
-// ---------------------------------------------------------------------------
-// Characters
-// ---------------------------------------------------------------------------
-
-export type CharacterOptions = CharacterFilterOptions;
-
-/** Generate single characters. */
-export function characters(options?: CharacterOptions): BasicGenerator<string> {
-  const schema: Record<string, unknown> = {
-    type: "string",
-    min_size: 1,
-    max_size: 1,
-  };
-  if (options) {
-    Object.assign(schema, buildCharacterSchema(options));
-  }
-  return new BasicGenerator(schema, (raw) => String(raw));
-}
-
-// ---------------------------------------------------------------------------
-// Binary
-// ---------------------------------------------------------------------------
-
-export interface BinaryOptions {
-  minSize?: number;
-  maxSize?: number;
+function parseString(raw: unknown): string {
+  return String(raw);
 }
 
 function parseBytes(raw: unknown): Uint8Array {
@@ -131,50 +85,146 @@ function parseBytes(raw: unknown): Uint8Array {
   throw new Error(`Expected bytes, got ${typeof raw}`);
 }
 
-/** Generate binary data (Uint8Array). */
-export function binary(options?: BinaryOptions): BasicGenerator<Uint8Array> {
-  const schema: Record<string, unknown> = {
-    type: "binary",
-    min_size: options?.minSize ?? 0,
-  };
-  if (options?.maxSize !== undefined) {
-    schema["max_size"] = options.maxSize;
+/**
+ * Convenience base for generators that are pure schema+parse wrappers.
+ * Subclasses supply a schema in the constructor; doDraw and asBasic use it.
+ */
+abstract class SchemaStringGenerator extends Generator<string> {
+  protected readonly schema: Record<string, unknown>;
+
+  constructor(schema: Record<string, unknown>) {
+    super();
+    this.schema = schema;
   }
-  return new BasicGenerator(schema, parseBytes);
+
+  doDraw(tc: TestCase): string {
+    return parseString(generateRaw(tc, this.schema));
+  }
+
+  override asBasic(): BasicGenerator<string> {
+    return new BasicGenerator(this.schema, parseString);
+  }
+}
+
+class TextGenerator extends SchemaStringGenerator {
+  constructor(options?: TextOptions) {
+    const schema: Record<string, unknown> = {
+      type: "string",
+      min_size: options?.minSize ?? 0,
+    };
+    if (options?.maxSize !== undefined) {
+      schema["max_size"] = options.maxSize;
+    }
+    if (options) {
+      Object.assign(schema, buildCharacterSchema(options));
+    }
+    super(schema);
+  }
+}
+
+/** Generate text strings. */
+export function text(options?: TextOptions): Generator<string> {
+  return new TextGenerator(options);
 }
 
 // ---------------------------------------------------------------------------
-// FromRegex
+// Characters
 // ---------------------------------------------------------------------------
+
+export type CharacterOptions = CharacterFilterOptions;
+
+class CharactersGenerator extends SchemaStringGenerator {
+  constructor(options?: CharacterOptions) {
+    const schema: Record<string, unknown> = {
+      type: "string",
+      min_size: 1,
+      max_size: 1,
+    };
+    if (options) {
+      Object.assign(schema, buildCharacterSchema(options));
+    }
+    super(schema);
+  }
+}
+
+/** Generate single characters. */
+export function characters(options?: CharacterOptions): Generator<string> {
+  return new CharactersGenerator(options);
+}
+
+export interface BinaryOptions {
+  minSize?: number;
+  maxSize?: number;
+}
+
+class BinaryGenerator extends Generator<Uint8Array> {
+  private readonly schema: Record<string, unknown>;
+
+  constructor(options?: BinaryOptions) {
+    super();
+    const schema: Record<string, unknown> = {
+      type: "binary",
+      min_size: options?.minSize ?? 0,
+    };
+    if (options?.maxSize !== undefined) {
+      schema["max_size"] = options.maxSize;
+    }
+    this.schema = schema;
+  }
+
+  doDraw(tc: TestCase): Uint8Array {
+    return parseBytes(generateRaw(tc, this.schema));
+  }
+
+  override asBasic(): BasicGenerator<Uint8Array> {
+    return new BasicGenerator(this.schema, parseBytes);
+  }
+}
+
+/** Generate binary data (Uint8Array). */
+export function binary(options?: BinaryOptions): Generator<Uint8Array> {
+  return new BinaryGenerator(options);
+}
 
 export interface RegexOptions {
   fullmatch?: boolean;
 }
 
-/** Generate strings matching a regex pattern. Defaults to substring match. */
-export function fromRegex(pattern: string, options?: RegexOptions): BasicGenerator<string> {
-  return new BasicGenerator(
-    {
+class FromRegexGenerator extends SchemaStringGenerator {
+  constructor(pattern: string, options?: RegexOptions) {
+    super({
       type: "regex",
       pattern,
       fullmatch: options?.fullmatch ?? false,
-    },
-    (raw) => String(raw),
-  );
+    });
+  }
 }
 
-// ---------------------------------------------------------------------------
-// Format generators
-// ---------------------------------------------------------------------------
+/** Generate strings matching a regex pattern. Defaults to substring match. */
+export function fromRegex(pattern: string, options?: RegexOptions): Generator<string> {
+  return new FromRegexGenerator(pattern, options);
+}
+
+class EmailsGenerator extends SchemaStringGenerator {
+  constructor() {
+    super({ type: "email" });
+  }
+}
 
 /** Generate email addresses. */
-export function emails(): BasicGenerator<string> {
-  return new BasicGenerator({ type: "email" }, (raw) => String(raw));
+export function emails(): Generator<string> {
+  return new EmailsGenerator();
+}
+
+class UrlsGenerator extends SchemaStringGenerator {
+  constructor() {
+    super({ type: "url" });
+  }
 }
 
 /** Generate URLs. */
-export function urls(): BasicGenerator<string> {
-  return new BasicGenerator({ type: "url" }, (raw) => String(raw));
+export function urls(): Generator<string> {
+  return new UrlsGenerator();
 }
 
 export interface DomainOptions {
@@ -182,41 +232,68 @@ export interface DomainOptions {
   maxLength?: number;
 }
 
-/** Generate domain names. */
-export function domains(options?: DomainOptions): BasicGenerator<string> {
-  const schema: Record<string, unknown> = { type: "domain" };
-  if (options?.maxLength !== undefined) {
-    schema["max_length"] = options.maxLength;
+class DomainsGenerator extends SchemaStringGenerator {
+  constructor(options?: DomainOptions) {
+    const schema: Record<string, unknown> = { type: "domain" };
+    if (options?.maxLength !== undefined) {
+      schema["max_length"] = options.maxLength;
+    }
+    super(schema);
   }
-  return new BasicGenerator(schema, (raw) => String(raw));
 }
 
-/** Generate IPv4 address strings. */
-export function ipv4Addresses(): BasicGenerator<string> {
-  return new BasicGenerator({ type: "ipv4" }, (raw) => String(raw));
+/** Generate domain names. */
+export function domains(options?: DomainOptions): Generator<string> {
+  return new DomainsGenerator(options);
 }
 
-/** Generate IPv6 address strings. */
-export function ipv6Addresses(): BasicGenerator<string> {
-  return new BasicGenerator({ type: "ipv6" }, (raw) => String(raw));
+export interface IpAddressOptions {
+  /** Restrict to a specific IP version. Omit to generate either IPv4 or IPv6. */
+  version?: 4 | 6;
 }
 
-/** Generate IP address strings (IPv4 or IPv6). */
-export function ipAddresses(): Generator<string> {
-  return oneOf(ipv4Addresses(), ipv6Addresses());
+class IpAddressesGenerator extends SchemaStringGenerator {
+  constructor(version: 4 | 6) {
+    super({ type: version === 4 ? "ipv4" : "ipv6" });
+  }
+}
+
+/** Generate IP address strings. Defaults to either IPv4 or IPv6; pass `{ version }` to restrict. */
+export function ipAddresses(options?: IpAddressOptions): Generator<string> {
+  if (options?.version === 4) return new IpAddressesGenerator(4);
+  if (options?.version === 6) return new IpAddressesGenerator(6);
+  return oneOf(new IpAddressesGenerator(4), new IpAddressesGenerator(6));
+}
+
+class DatesGenerator extends SchemaStringGenerator {
+  constructor() {
+    super({ type: "date" });
+  }
 }
 
 /** Generate date strings (ISO 8601). */
-export function dates(): BasicGenerator<string> {
-  return new BasicGenerator({ type: "date" }, (raw) => String(raw));
+export function dates(): Generator<string> {
+  return new DatesGenerator();
+}
+
+class TimesGenerator extends SchemaStringGenerator {
+  constructor() {
+    super({ type: "time" });
+  }
 }
 
 /** Generate time strings (ISO 8601). */
-export function times(): BasicGenerator<string> {
-  return new BasicGenerator({ type: "time" }, (raw) => String(raw));
+export function times(): Generator<string> {
+  return new TimesGenerator();
+}
+
+class DatetimesGenerator extends SchemaStringGenerator {
+  constructor() {
+    super({ type: "datetime" });
+  }
 }
 
 /** Generate datetime strings (ISO 8601). */
-export function datetimes(): BasicGenerator<string> {
-  return new BasicGenerator({ type: "datetime" }, (raw) => String(raw));
+export function datetimes(): Generator<string> {
+  return new DatetimesGenerator();
 }
