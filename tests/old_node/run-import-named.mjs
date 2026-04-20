@@ -1,0 +1,51 @@
+// Verify that named imports from the built bundle resolve.
+import assert from "node:assert/strict";
+import {
+  hegel,
+  Hegel,
+  Generator,
+  BasicGenerator,
+  integers,
+  floats,
+  booleans,
+  text,
+  binary,
+  just,
+  sampledFrom,
+  arrays,
+  sets,
+  maps,
+  oneOf,
+  optional,
+  tuples,
+  record,
+  composite,
+  fromRegex,
+  emails,
+} from "hegel";
+
+for (const [name, value] of [
+  ["hegel", hegel],
+  ["Hegel", Hegel],
+  ["Generator", Generator],
+  ["BasicGenerator", BasicGenerator],
+  ["integers", integers],
+  ["floats", floats],
+  ["booleans", booleans],
+  ["text", text],
+  ["binary", binary],
+  ["just", just],
+  ["sampledFrom", sampledFrom],
+  ["arrays", arrays],
+  ["sets", sets],
+  ["maps", maps],
+  ["oneOf", oneOf],
+  ["optional", optional],
+  ["tuples", tuples],
+  ["record", record],
+  ["composite", composite],
+  ["fromRegex", fromRegex],
+  ["emails", emails],
+]) {
+  assert.equal(typeof value, "function", `expected ${name} to be a function`);
+}

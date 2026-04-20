@@ -1,9 +1,6 @@
-import { createRequire } from "node:module";
 import { encode, decode, addExtension } from "cbor-x";
+import { crc32 } from "./crc32.js";
 import { wtf8ToString } from "./wtf8.js";
-
-const require = createRequire(import.meta.url);
-const zlib = require("node:zlib") as { crc32: (buf: Buffer) => number };
 
 export const MAGIC = 0x4845474c;
 export const HEADER_SIZE = 20;
@@ -49,7 +46,7 @@ export function encodePacket(packet: Packet): Buffer {
   header.writeUInt32BE(packet.payload.length, 16);
 
   // CRC32 over header (checksum zeroed) + payload
-  const checksum = zlib.crc32(Buffer.concat([header, packet.payload]));
+  const checksum = crc32(Buffer.concat([header, packet.payload]));
   header.writeUInt32BE(checksum, 4);
 
   return Buffer.concat([header, packet.payload, Buffer.from([TERMINATOR])]);
@@ -93,7 +90,7 @@ export function readPacketFrom(readExact: (n: number) => Buffer): Packet {
   // Verify CRC32
   const headerForCheck = Buffer.from(header);
   headerForCheck.writeUInt32BE(0, 4); // zero out checksum field
-  const computed = zlib.crc32(Buffer.concat([headerForCheck, payload]));
+  const computed = crc32(Buffer.concat([headerForCheck, payload]));
   if (computed !== checksum) {
     throw new Error(
       `CRC32 mismatch: expected 0x${checksum.toString(16)}, got 0x${computed.toString(16)}`,

@@ -1,0 +1,9 @@
+{
+  "name": "hegel-old-node-tests",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": {
+    "hegel": "file:../.."
+  }
+}
