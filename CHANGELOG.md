@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1 - 2026-04-20
+
+Drop node requirement to node 16.
+
 ## 0.4.0 - 2026-04-20
 
 * Rename `arrays` to `lists`.
