@@ -2,8 +2,7 @@
  * Global lazy session that manages the hegel server subprocess.
  *
  * The session is created on first use and persists for the lifetime of
- * the process. It spawns the hegel binary with `--stdio` and communicates
- * over synchronous pipe I/O.
+ * the process.
  *
  * @packageDocumentation
  */
