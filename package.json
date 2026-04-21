@@ -9,7 +9,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp src/uv-install.sh dist/uv-install.sh",
     "test": "vitest run --coverage",
     "lint": "prettier --check . && eslint . && tsc --noEmit",
     "format": "prettier --write .",

@@ -12,6 +12,7 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import { Connection, Stream } from "./connection.js";
 import { HANDSHAKE_STRING } from "./protocol.js";
+import { findUv } from "./uv.js";
 
 export const HEGEL_SERVER_VERSION = "0.4.0";
 const SUPPORTED_PROTOCOL_MIN = "0.10";
@@ -171,7 +172,7 @@ function hegelCommand(): { command: string; args: string[] } {
 
   // Default: use uv tool run
   return {
-    command: "uv",
+    command: findUv(),
     args: ["tool", "run", "--from", `hegel-core==${HEGEL_SERVER_VERSION}`, "hegel"],
   };
 }

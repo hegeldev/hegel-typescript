@@ -3,7 +3,7 @@
 ## Build Commands
 
 ```bash
-just setup   # Install dependencies and hegel binary
+npm install  # Install dependencies
 just test    # Run tests with coverage (fails if coverage < 100%)
 just format  # Auto-format code
 just lint    # Check formatting + linting
@@ -11,7 +11,9 @@ just docs    # Build API documentation
 just check   # Run lint + docs + test (full CI check)
 ```
 
-Tests must use `PATH=".venv/bin:$PATH"` so the `hegel` binary is found.
+The `hegel` server is auto-installed on first use via `uv tool run` (see
+`src/uv.ts`). Set `HEGEL_SERVER_COMMAND` to point at a pre-built `hegel`
+binary to skip that lookup.
 
 ## What This Is
 

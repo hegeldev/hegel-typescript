@@ -49,8 +49,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install just
-        run: sudo apt-get update && sudo apt-get install -y just
       - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -58,7 +56,6 @@ jobs:
           node-version: "22"
 
       - run: npm ci
-      - run: just setup
       - name: Run tests
         run: npm run test
 
@@ -74,11 +71,6 @@ jobs:
 
       - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
 
-      - name: Install hegel-core
-        run: |
-          uv venv .venv
-          uv pip install --python .venv/bin/python hegel-core
-
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "16"
@@ -92,10 +84,7 @@ jobs:
 
       - name: Run old-Node tests
         working-directory: tests/old_node
-        env:
-          VENV_BIN: ${{ github.workspace }}/.venv/bin
         run: |
-          export PATH="${VENV_BIN}:$PATH"
           for f in *.mjs; do
             echo "Running $f"
             node "$f"
@@ -141,7 +130,7 @@ jobs:
         with:
           node-version: "22"
 
-      - run: just setup
+      - run: npm ci
       - run: pip install pytest
       - run: just conformance
 
@@ -153,10 +142,14 @@ jobs:
     permissions:
       contents: write
       checks: read
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
+          fetch-tags: true
 
       - name: Check for RELEASE.md
         id: check
@@ -172,12 +165,14 @@ jobs:
         with:
           app-id: ${{ vars.HEGEL_RELEASE_APP_ID }}
           private-key: ${{ secrets.HEGEL_RELEASE_APP_PRIVATE_KEY }}
+          repositories: hegel-typescript, website
 
       - name: Re-checkout with app token # zizmor: ignore[artipacked]
         if: steps.check.outputs.skip != 'true'
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           token: ${{ steps.app-token.outputs.token }}
+          fetch-tags: true
 
       - name: Release
         if: steps.check.outputs.skip != 'true'
@@ -185,3 +180,61 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           HEGEL_RELEASE_APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
         run: python .github/scripts/release.py release
+
+      - name: Emit version
+        if: steps.check.outputs.skip != 'true'
+        id: version
+        run: |
+          VERSION=$(python -c "import json; print(json.load(open('package.json'))['version'])")
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Push to main or open PR
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: python .github/scripts/release.py push-or-pr
+
+  pr-docs:
+    name: pr-docs
+    needs: [release]
+    if: needs.release.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Generate app token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        id: app-token
+        with:
+          app-id: ${{ vars.HEGEL_RELEASE_APP_ID }}
+          private-key: ${{ secrets.HEGEL_RELEASE_APP_PRIVATE_KEY }}
+          repositories: hegel-typescript, website
+
+      - name: Checkout hegel-typescript at release tag
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: v${{ needs.release.outputs.version }}
+          persist-credentials: false
+
+      - name: Checkout website
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4 # zizmor: ignore[artipacked]
+        with:
+          repository: hegeldev/website
+          token: ${{ steps.app-token.outputs.token }}
+          path: website
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - run: npm ci
+      - name: Build docs
+        run: npm run docs
+
+      - name: PR docs to website repo
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          HEGEL_RELEASE_APP_ID: ${{ vars.HEGEL_RELEASE_APP_ID }}
+          HEGEL_RELEASE_APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: python3 .github/scripts/pr_docs.py
