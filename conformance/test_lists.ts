@@ -9,8 +9,8 @@
  */
 
 import { getTestCases, makeNonBasic, writeMetrics } from "./helpers.js";
-import { integers, arrays } from "../src/generators/index.js";
-import { hegel } from "../src/runner.js";
+import * as gs from "../src/generators/index.js";
+import * as hegel from "../src/runner.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
 const mode = (params["mode"] as string | undefined) ?? "basic";
@@ -26,11 +26,11 @@ const testCases = getTestCases();
 // HEGEL_PROTOCOL_TEST_MODE requires the collection protocol.
 const testMode = process.env["HEGEL_PROTOCOL_TEST_MODE"] ?? "";
 const needsNonBasic = mode === "non_basic" || testMode.includes("collection");
-const baseElemGen = integers({ minValue, maxValue });
+const baseElemGen = gs.integers({ minValue, maxValue });
 const elemGen = needsNonBasic ? makeNonBasic(baseElemGen) : baseElemGen;
-const gen = arrays(elemGen, { minSize, maxSize });
+const gen = gs.arrays(elemGen, { minSize, maxSize });
 
-hegel(
+hegel.test(
   function conformance_lists(tc) {
     const items = tc.draw(gen);
     const size = items.length;

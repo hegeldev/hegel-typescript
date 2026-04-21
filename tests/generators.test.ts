@@ -5,53 +5,26 @@
  * 1. Primitive generators (integers, floats, booleans, text, characters, binary)
  * 2. Constant and selection generators (just, sampledFrom, fromRegex)
  * 3. Format generators (emails, urls, domains, ipAddresses, dates, times, datetimes)
- * 4. Collection generators (arrays, sets, maps)
+ * 4. hegel.Collection generators (arrays, sets, maps)
  * 5. Combinators (map, filter, flatMap, oneOf, optional, tuples)
  * 6. Composition (composite)
  * 7. Argument validation
  */
 
 import { describe, test, expect, expectTypeOf } from "vitest";
-import {
-  hegel,
-  integers,
-  bigIntegers,
-  record,
-  floats,
-  booleans,
-  text,
-  characters,
-  binary,
-  just,
-  sampledFrom,
-  fromRegex,
-  arrays,
-  sets,
-  maps,
-  oneOf,
-  optional,
-  tuples,
-  emails,
-  urls,
-  domains,
-  ipAddresses,
-  dates,
-  times,
-  datetimes,
-  composite,
-  Generator,
-} from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 // ---------------------------------------------------------------------------
-// integers()
+// gs.integers()
 // ---------------------------------------------------------------------------
 
-describe("integers()", () => {
+describe("gs.integers()", () => {
   test(
     "generates integers in range",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(integers({ minValue: 0, maxValue: 100 }));
+        const v = tc.draw(gs.integers({ minValue: 0, maxValue: 100 }));
         expect(v).toBeGreaterThanOrEqual(0);
         expect(v).toBeLessThanOrEqual(100);
       },
@@ -61,9 +34,9 @@ describe("integers()", () => {
 
   test(
     "generates negative integers",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(integers({ minValue: -100, maxValue: -1 }));
+        const v = tc.draw(gs.integers({ minValue: -100, maxValue: -1 }));
         expect(v).toBeLessThan(0);
         expect(v).toBeGreaterThanOrEqual(-100);
       },
@@ -73,9 +46,9 @@ describe("integers()", () => {
 
   test(
     "generates without bounds when no args given",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(integers());
+        const v = tc.draw(gs.integers());
         // Large integers may come back as bigint from CBOR
         expect(typeof v === "number" || typeof v === "bigint").toBe(true);
       },
@@ -84,33 +57,37 @@ describe("integers()", () => {
   );
 
   test("exposes a schema via asBasic", () => {
-    expect(integers().asBasic()).not.toBeNull();
+    expect(gs.integers().asBasic()).not.toBeNull();
   });
 
   test("throws if bounds exceed safe integer range", () => {
-    expect(() => integers({ minValue: Number.MIN_SAFE_INTEGER - 1 })).toThrow("Use bigIntegers()");
-    expect(() => integers({ maxValue: Number.MAX_SAFE_INTEGER + 1 })).toThrow("Use bigIntegers()");
+    expect(() => gs.integers({ minValue: Number.MIN_SAFE_INTEGER - 1 })).toThrow(
+      "Use bigIntegers()",
+    );
+    expect(() => gs.integers({ maxValue: Number.MAX_SAFE_INTEGER + 1 })).toThrow(
+      "Use bigIntegers()",
+    );
   });
 
   test("exposes a schema with minValue only", () => {
-    expect(integers({ minValue: 5 }).asBasic()).not.toBeNull();
+    expect(gs.integers({ minValue: 5 }).asBasic()).not.toBeNull();
   });
 
   test("exposes a schema with maxValue only", () => {
-    expect(integers({ maxValue: 100 }).asBasic()).not.toBeNull();
+    expect(gs.integers({ maxValue: 100 }).asBasic()).not.toBeNull();
   });
 });
 
 // ---------------------------------------------------------------------------
-// bigIntegers()
+// gs.bigIntegers()
 // ---------------------------------------------------------------------------
 
-describe("bigIntegers()", () => {
+describe("gs.bigIntegers()", () => {
   test(
     "generates bigint values",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(bigIntegers());
+        const v = tc.draw(gs.bigIntegers());
         expect(typeof v).toBe("bigint");
       },
       { testCases: 20 },
@@ -119,9 +96,9 @@ describe("bigIntegers()", () => {
 
   test(
     "respects bounds",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(bigIntegers({ minValue: 0n, maxValue: 1000n }));
+        const v = tc.draw(gs.bigIntegers({ minValue: 0n, maxValue: 1000n }));
         expect(v).toBeGreaterThanOrEqual(0n);
         expect(v).toBeLessThanOrEqual(1000n);
       },
@@ -131,10 +108,10 @@ describe("bigIntegers()", () => {
 
   test(
     "can generate values outside safe integer range",
-    hegel(
+    hegel.test(
       (tc) => {
         const big = BigInt(Number.MAX_SAFE_INTEGER) + 1000n;
-        const v = tc.draw(bigIntegers({ minValue: big, maxValue: big + 1000n }));
+        const v = tc.draw(gs.bigIntegers({ minValue: big, maxValue: big + 1000n }));
         expect(v).toBeGreaterThanOrEqual(big);
       },
       { testCases: 10 },
@@ -142,26 +119,26 @@ describe("bigIntegers()", () => {
   );
 
   test("throws when minValue > maxValue", () => {
-    expect(() => bigIntegers({ minValue: 10n, maxValue: 5n })).toThrow(
+    expect(() => gs.bigIntegers({ minValue: 10n, maxValue: 5n })).toThrow(
       "Cannot have maxValue < minValue",
     );
   });
 });
 
 // ---------------------------------------------------------------------------
-// floats()
+// gs.floats()
 // ---------------------------------------------------------------------------
 
-describe("floats()", () => {
+describe("gs.floats()", () => {
   test("exposes a schema via asBasic", () => {
-    expect(floats().asBasic()).not.toBeNull();
+    expect(gs.floats().asBasic()).not.toBeNull();
   });
 
   test(
     "generates numbers in range",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(floats({ minValue: 0, maxValue: 1 }));
+        const v = tc.draw(gs.floats({ minValue: 0, maxValue: 1 }));
         expect(typeof v).toBe("number");
         expect(v).toBeGreaterThanOrEqual(0);
         expect(v).toBeLessThanOrEqual(1);
@@ -172,9 +149,9 @@ describe("floats()", () => {
 
   test(
     "generates floats without bounds",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(floats());
+        const v = tc.draw(gs.floats());
         expect(typeof v).toBe("number");
       },
       { testCases: 10 },
@@ -183,9 +160,9 @@ describe("floats()", () => {
 
   test(
     "generates floats with only minValue",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(floats({ minValue: 0 }));
+        const v = tc.draw(gs.floats({ minValue: 0 }));
         expect(typeof v).toBe("number");
       },
       { testCases: 10 },
@@ -194,19 +171,19 @@ describe("floats()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// booleans()
+// gs.booleans()
 // ---------------------------------------------------------------------------
 
-describe("booleans()", () => {
+describe("gs.booleans()", () => {
   test("exposes a schema via asBasic", () => {
-    expect(booleans().asBasic()).not.toBeNull();
+    expect(gs.booleans().asBasic()).not.toBeNull();
   });
 
   test(
     "generates booleans",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(booleans());
+        const v = tc.draw(gs.booleans());
         expect(typeof v).toBe("boolean");
       },
       { testCases: 20 },
@@ -215,19 +192,19 @@ describe("booleans()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// text()
+// gs.text()
 // ---------------------------------------------------------------------------
 
-describe("text()", () => {
+describe("gs.text()", () => {
   test("exposes a schema via asBasic", () => {
-    expect(text().asBasic()).not.toBeNull();
+    expect(gs.text().asBasic()).not.toBeNull();
   });
 
   test(
     "generates strings within size bounds",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(text({ minSize: 0, maxSize: 20 }));
+        const v = tc.draw(gs.text({ minSize: 0, maxSize: 20 }));
         expect(typeof v).toBe("string");
         expect([...v].length).toBeLessThanOrEqual(20);
       },
@@ -237,9 +214,9 @@ describe("text()", () => {
 
   test(
     "generates strings with minSize",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(text({ minSize: 5, maxSize: 20 }));
+        const v = tc.draw(gs.text({ minSize: 5, maxSize: 20 }));
         expect([...v].length).toBeGreaterThanOrEqual(5);
       },
       { testCases: 20 },
@@ -248,9 +225,9 @@ describe("text()", () => {
 
   test(
     "generates strings without maxSize",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(text());
+        const v = tc.draw(gs.text());
         expect(typeof v).toBe("string");
       },
       { testCases: 10 },
@@ -259,19 +236,19 @@ describe("text()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// characters()
+// gs.characters()
 // ---------------------------------------------------------------------------
 
-describe("characters()", () => {
+describe("gs.characters()", () => {
   test("exposes a schema via asBasic", () => {
-    expect(characters().asBasic()).not.toBeNull();
+    expect(gs.characters().asBasic()).not.toBeNull();
   });
 
   test(
     "generates single characters",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(characters());
+        const v = tc.draw(gs.characters());
         expect([...v].length).toBe(1);
       },
       { testCases: 20 },
@@ -280,9 +257,9 @@ describe("characters()", () => {
 
   test(
     "generates characters without options",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(characters());
+        const v = tc.draw(gs.characters());
         expect([...v].length).toBe(1);
         expect(typeof v).toBe("string");
       },
@@ -292,19 +269,19 @@ describe("characters()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// binary()
+// gs.binary()
 // ---------------------------------------------------------------------------
 
-describe("binary()", () => {
+describe("gs.binary()", () => {
   test("exposes a schema via asBasic", () => {
-    expect(binary().asBasic()).not.toBeNull();
+    expect(gs.binary().asBasic()).not.toBeNull();
   });
 
   test(
     "generates Uint8Array within size bounds",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(binary({ minSize: 0, maxSize: 10 }));
+        const v = tc.draw(gs.binary({ minSize: 0, maxSize: 10 }));
         expect(v).toBeInstanceOf(Uint8Array);
         expect(v.length).toBeLessThanOrEqual(10);
       },
@@ -314,9 +291,9 @@ describe("binary()", () => {
 
   test(
     "generates Uint8Array with minSize",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(binary({ minSize: 2, maxSize: 8 }));
+        const v = tc.draw(gs.binary({ minSize: 2, maxSize: 8 }));
         expect(v).toBeInstanceOf(Uint8Array);
         expect(v.length).toBeGreaterThanOrEqual(2);
         expect(v.length).toBeLessThanOrEqual(8);
@@ -327,15 +304,15 @@ describe("binary()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// just()
+// gs.just()
 // ---------------------------------------------------------------------------
 
-describe("just()", () => {
+describe("gs.just()", () => {
   test(
     "returns constant value",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(just(42));
+        const v = tc.draw(gs.just(42));
         expect(v).toBe(42);
       },
       { testCases: 10 },
@@ -344,10 +321,10 @@ describe("just()", () => {
 
   test(
     "returns constant object (same reference)",
-    hegel(
+    hegel.test(
       (tc) => {
         const obj = { x: 1, y: 2 };
-        const v = tc.draw(just(obj));
+        const v = tc.draw(gs.just(obj));
         expect(v).toBe(obj);
       },
       { testCases: 5 },
@@ -355,30 +332,30 @@ describe("just()", () => {
   );
 
   test("returns a Generator", () => {
-    const gen = just(42);
-    expect(gen).toBeInstanceOf(Generator);
+    const gen = gs.just(42);
+    expect(gen).toBeInstanceOf(gs.Generator);
   });
 });
 
 // ---------------------------------------------------------------------------
-// sampledFrom()
+// gs.sampledFrom()
 // ---------------------------------------------------------------------------
 
-describe("sampledFrom()", () => {
+describe("gs.sampledFrom()", () => {
   test("exposes a schema via asBasic", () => {
-    expect(sampledFrom([1, 2, 3]).asBasic()).not.toBeNull();
+    expect(gs.sampledFrom([1, 2, 3]).asBasic()).not.toBeNull();
   });
 
   test("throws on empty list", () => {
-    expect(() => sampledFrom([])).toThrow("sampledFrom requires at least one element");
+    expect(() => gs.sampledFrom([])).toThrow("sampledFrom requires at least one element");
   });
 
   test(
     "returns a value from the list",
-    hegel(
+    hegel.test(
       (tc) => {
         const items = [10, 20, 30];
-        const v = tc.draw(sampledFrom(items));
+        const v = tc.draw(gs.sampledFrom(items));
         expect(items).toContain(v);
       },
       { testCases: 50 },
@@ -387,13 +364,13 @@ describe("sampledFrom()", () => {
 
   test(
     "returns non-primitive objects from the list",
-    hegel(
+    hegel.test(
       (tc) => {
         class Custom {
           constructor(public readonly x: number) {}
         }
         const items = [new Custom(1), new Custom(2), new Custom(3)];
-        const v = tc.draw(sampledFrom(items));
+        const v = tc.draw(gs.sampledFrom(items));
         expect(v).toBeInstanceOf(Custom);
         expect(items).toContain(v);
       },
@@ -404,9 +381,9 @@ describe("sampledFrom()", () => {
   test("covers all values across many runs", () => {
     const items = ["red", "green", "blue"];
     const seen = new Set<string>();
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(sampledFrom(items));
+        const v = tc.draw(gs.sampledFrom(items));
         seen.add(v);
       },
       { testCases: 100 },
@@ -418,19 +395,19 @@ describe("sampledFrom()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// fromRegex()
+// gs.fromRegex()
 // ---------------------------------------------------------------------------
 
-describe("fromRegex()", () => {
+describe("gs.fromRegex()", () => {
   test("exposes a schema via asBasic", () => {
-    expect(fromRegex("[0-9]+").asBasic()).not.toBeNull();
+    expect(gs.fromRegex("[0-9]+").asBasic()).not.toBeNull();
   });
 
   test(
     "generates strings matching the pattern",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(fromRegex("[0-9]{3}", { fullmatch: true }));
+        const v = tc.draw(gs.fromRegex("[0-9]{3}", { fullmatch: true }));
         expect(v).toMatch(/^[0-9]{3}$/);
       },
       { testCases: 50 },
@@ -439,9 +416,9 @@ describe("fromRegex()", () => {
 
   test(
     "fullmatch=false allows partial matches",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(fromRegex("[a-z]+", { fullmatch: false }));
+        const v = tc.draw(gs.fromRegex("[a-z]+", { fullmatch: false }));
         expect(typeof v).toBe("string");
         expect(v).toMatch(/[a-z]+/);
       },
@@ -451,19 +428,19 @@ describe("fromRegex()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// emails()
+// gs.emails()
 // ---------------------------------------------------------------------------
 
-describe("emails()", () => {
+describe("gs.emails()", () => {
   test("exposes a schema via asBasic", () => {
-    expect(emails().asBasic()).not.toBeNull();
+    expect(gs.emails().asBasic()).not.toBeNull();
   });
 
   test(
     "generates strings containing '@'",
-    hegel(
+    hegel.test(
       (tc) => {
-        const email = tc.draw(emails());
+        const email = tc.draw(gs.emails());
         expect(typeof email).toBe("string");
         expect(email).toContain("@");
       },
@@ -473,19 +450,19 @@ describe("emails()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// urls()
+// gs.urls()
 // ---------------------------------------------------------------------------
 
-describe("urls()", () => {
+describe("gs.urls()", () => {
   test("exposes a schema via asBasic", () => {
-    expect(urls().asBasic()).not.toBeNull();
+    expect(gs.urls().asBasic()).not.toBeNull();
   });
 
   test(
     "generates strings starting with http:// or https://",
-    hegel(
+    hegel.test(
       (tc) => {
-        const url = tc.draw(urls());
+        const url = tc.draw(gs.urls());
         expect(typeof url).toBe("string");
         expect(url.startsWith("http://") || url.startsWith("https://")).toBe(true);
       },
@@ -495,19 +472,19 @@ describe("urls()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// domains()
+// gs.domains()
 // ---------------------------------------------------------------------------
 
-describe("domains()", () => {
+describe("gs.domains()", () => {
   test("exposes a schema via asBasic", () => {
-    expect(domains().asBasic()).not.toBeNull();
+    expect(gs.domains().asBasic()).not.toBeNull();
   });
 
   test(
     "generates valid domain strings",
-    hegel(
+    hegel.test(
       (tc) => {
-        const domain = tc.draw(domains());
+        const domain = tc.draw(gs.domains());
         expect(typeof domain).toBe("string");
         expect(domain).toMatch(/^[a-zA-Z0-9.-]+$/);
       },
@@ -517,22 +494,22 @@ describe("domains()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// ipAddresses() removed — not supported by current hegel server
+// gs.ipAddresses() removed — not supported by current hegel server
 
 // ---------------------------------------------------------------------------
-// dates()
+// gs.dates()
 // ---------------------------------------------------------------------------
 
-describe("dates()", () => {
+describe("gs.dates()", () => {
   test("exposes a schema via asBasic", () => {
-    expect(dates().asBasic()).not.toBeNull();
+    expect(gs.dates().asBasic()).not.toBeNull();
   });
 
   test(
     "generates ISO 8601 date strings (YYYY-MM-DD)",
-    hegel(
+    hegel.test(
       (tc) => {
-        const dateStr = tc.draw(dates());
+        const dateStr = tc.draw(gs.dates());
         expect(typeof dateStr).toBe("string");
         expect(dateStr).toMatch(/^\d{4}-\d{2}-\d{2}$/);
         // Must be a valid calendar date
@@ -545,19 +522,19 @@ describe("dates()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// times()
+// gs.times()
 // ---------------------------------------------------------------------------
 
-describe("times()", () => {
+describe("gs.times()", () => {
   test("exposes a schema via asBasic", () => {
-    expect(times().asBasic()).not.toBeNull();
+    expect(gs.times().asBasic()).not.toBeNull();
   });
 
   test(
     "generates time strings containing ':'",
-    hegel(
+    hegel.test(
       (tc) => {
-        const timeStr = tc.draw(times());
+        const timeStr = tc.draw(gs.times());
         expect(typeof timeStr).toBe("string");
         expect(timeStr).toContain(":");
       },
@@ -567,19 +544,19 @@ describe("times()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// datetimes()
+// gs.datetimes()
 // ---------------------------------------------------------------------------
 
-describe("datetimes()", () => {
+describe("gs.datetimes()", () => {
   test("exposes a schema via asBasic", () => {
-    expect(datetimes().asBasic()).not.toBeNull();
+    expect(gs.datetimes().asBasic()).not.toBeNull();
   });
 
   test(
     "generates datetime strings containing 'T'",
-    hegel(
+    hegel.test(
       (tc) => {
-        const dtStr = tc.draw(datetimes());
+        const dtStr = tc.draw(gs.datetimes());
         expect(typeof dtStr).toBe("string");
         expect(dtStr).toContain("T");
       },
@@ -589,15 +566,15 @@ describe("datetimes()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// arrays()
+// gs.arrays()
 // ---------------------------------------------------------------------------
 
-describe("arrays()", () => {
+describe("gs.arrays()", () => {
   test(
     "all elements in range",
-    hegel(
+    hegel.test(
       (tc) => {
-        const xs = tc.draw(arrays(integers({ minValue: 0, maxValue: 100 })));
+        const xs = tc.draw(gs.arrays(gs.integers({ minValue: 0, maxValue: 100 })));
         expect(Array.isArray(xs)).toBe(true);
         for (const x of xs) {
           expect(x).toBeGreaterThanOrEqual(0);
@@ -610,9 +587,9 @@ describe("arrays()", () => {
 
   test(
     "respects minSize and maxSize",
-    hegel(
+    hegel.test(
       (tc) => {
-        const xs = tc.draw(arrays(booleans(), { minSize: 3, maxSize: 5 }));
+        const xs = tc.draw(gs.arrays(gs.booleans(), { minSize: 3, maxSize: 5 }));
         expect(xs.length).toBeGreaterThanOrEqual(3);
         expect(xs.length).toBeLessThanOrEqual(5);
         for (const x of xs) {
@@ -625,11 +602,11 @@ describe("arrays()", () => {
 
   test(
     "basic element with transform: transform applied per item",
-    hegel(
+    hegel.test(
       (tc) => {
         const xs = tc.draw(
-          arrays(
-            integers({ minValue: 0, maxValue: 5 }).map((x) => x * 2),
+          gs.arrays(
+            gs.integers({ minValue: 0, maxValue: 5 }).map((x) => x * 2),
             { maxSize: 5 },
           ),
         );
@@ -645,11 +622,11 @@ describe("arrays()", () => {
 
   test(
     "non-basic elements: filtered values",
-    hegel(
+    hegel.test(
       (tc) => {
         const xs = tc.draw(
-          arrays(
-            integers({ minValue: 0, maxValue: 10 }).filter((x) => x > 5),
+          gs.arrays(
+            gs.integers({ minValue: 0, maxValue: 10 }).filter((x) => x > 5),
             { minSize: 1, maxSize: 5 },
           ),
         );
@@ -665,9 +642,9 @@ describe("arrays()", () => {
 
   test(
     "nested arrays",
-    hegel(
+    hegel.test(
       (tc) => {
-        const xss = tc.draw(arrays(arrays(booleans(), { maxSize: 3 }), { maxSize: 3 }));
+        const xss = tc.draw(gs.arrays(gs.arrays(gs.booleans(), { maxSize: 3 }), { maxSize: 3 }));
         expect(Array.isArray(xss)).toBe(true);
         for (const xs of xss) {
           expect(Array.isArray(xs)).toBe(true);
@@ -682,10 +659,10 @@ describe("arrays()", () => {
 
   test(
     "unique option",
-    hegel(
+    hegel.test(
       (tc) => {
         const xs = tc.draw(
-          arrays(integers({ minValue: 0, maxValue: 100 }), {
+          gs.arrays(gs.integers({ minValue: 0, maxValue: 100 }), {
             minSize: 1,
             maxSize: 10,
             unique: true,
@@ -700,15 +677,15 @@ describe("arrays()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// sets()
+// gs.sets()
 // ---------------------------------------------------------------------------
 
-describe("sets()", () => {
+describe("gs.sets()", () => {
   test(
     "generates Set instances",
-    hegel(
+    hegel.test(
       (tc) => {
-        const s = tc.draw(sets(integers({ minValue: 0, maxValue: 100 }), { maxSize: 5 }));
+        const s = tc.draw(gs.sets(gs.integers({ minValue: 0, maxValue: 100 }), { maxSize: 5 }));
         expect(s).toBeInstanceOf(Set);
         expect(s.size).toBeLessThanOrEqual(5);
         for (const x of s) {
@@ -722,10 +699,10 @@ describe("sets()", () => {
 
   test(
     "respects minSize",
-    hegel(
+    hegel.test(
       (tc) => {
         const s = tc.draw(
-          sets(integers({ minValue: 0, maxValue: 1000 }), { minSize: 2, maxSize: 5 }),
+          gs.sets(gs.integers({ minValue: 0, maxValue: 1000 }), { minSize: 2, maxSize: 5 }),
         );
         expect(s.size).toBeGreaterThanOrEqual(2);
         expect(s.size).toBeLessThanOrEqual(5);
@@ -736,18 +713,22 @@ describe("sets()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// maps()
+// gs.maps()
 // ---------------------------------------------------------------------------
 
-describe("maps()", () => {
+describe("gs.maps()", () => {
   test(
     "generates Map instances with basic generators",
-    hegel(
+    hegel.test(
       (tc) => {
         const m = tc.draw(
-          maps(text({ minSize: 1, maxSize: 5 }), integers({ minValue: 0, maxValue: 100 }), {
-            maxSize: 3,
-          }),
+          gs.maps(
+            gs.text({ minSize: 1, maxSize: 5 }),
+            gs.integers({ minValue: 0, maxValue: 100 }),
+            {
+              maxSize: 3,
+            },
+          ),
         );
         expect(m).toBeInstanceOf(Map);
         expect(m.size).toBeLessThanOrEqual(3);
@@ -762,13 +743,17 @@ describe("maps()", () => {
 
   test(
     "generates Map with minSize constraint",
-    hegel(
+    hegel.test(
       (tc) => {
         const m = tc.draw(
-          maps(text({ minSize: 1, maxSize: 5 }), integers({ minValue: 0, maxValue: 100 }), {
-            minSize: 1,
-            maxSize: 5,
-          }),
+          gs.maps(
+            gs.text({ minSize: 1, maxSize: 5 }),
+            gs.integers({ minValue: 0, maxValue: 100 }),
+            {
+              minSize: 1,
+              maxSize: 5,
+            },
+          ),
         );
         expect(m.size).toBeGreaterThanOrEqual(1);
       },
@@ -778,11 +763,11 @@ describe("maps()", () => {
 
   test(
     "applies key and value transforms",
-    hegel(
+    hegel.test(
       (tc) => {
-        const uppercaseKeys = text({ minSize: 1, maxSize: 5 }).map((s) => s.toUpperCase());
-        const negatedInts = integers({ minValue: 1, maxValue: 100 }).map((n) => -n);
-        const m = tc.draw(maps(uppercaseKeys, negatedInts, { maxSize: 3 }));
+        const uppercaseKeys = gs.text({ minSize: 1, maxSize: 5 }).map((s) => s.toUpperCase());
+        const negatedInts = gs.integers({ minValue: 1, maxValue: 100 }).map((n) => -n);
+        const m = tc.draw(gs.maps(uppercaseKeys, negatedInts, { maxSize: 3 }));
         for (const [k, v] of m.entries()) {
           expect(k).toBe(k.toUpperCase());
           expect(v).toBeLessThan(0);
@@ -794,11 +779,11 @@ describe("maps()", () => {
 
   test(
     "non-basic path (filtered keys) generates Map via collection protocol",
-    hegel(
+    hegel.test(
       (tc) => {
-        const filteredKeys = text({ minSize: 1, maxSize: 3 }).filter((s) => s.length > 0);
+        const filteredKeys = gs.text({ minSize: 1, maxSize: 3 }).filter((s) => s.length > 0);
         const m = tc.draw(
-          maps(filteredKeys, integers({ minValue: 0, maxValue: 100 }), { maxSize: 3 }),
+          gs.maps(filteredKeys, gs.integers({ minValue: 0, maxValue: 100 }), { maxSize: 3 }),
         );
         expect(m).toBeInstanceOf(Map);
         for (const [k, v] of m.entries()) {
@@ -818,15 +803,15 @@ describe("maps()", () => {
 
 describe("map combinator", () => {
   test("map on a basic source preserves the schema", () => {
-    const gen = integers({ minValue: 0, maxValue: 10 }).map((x) => x * 2);
+    const gen = gs.integers({ minValue: 0, maxValue: 10 }).map((x) => x * 2);
     expect(gen.asBasic()).not.toBeNull();
   });
 
   test(
     "map transforms values",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(integers({ minValue: 0, maxValue: 50 }).map((x) => x * 2));
+        const v = tc.draw(gs.integers({ minValue: 0, maxValue: 50 }).map((x) => x * 2));
         expect(v % 2).toBe(0);
         expect(v).toBeGreaterThanOrEqual(0);
         expect(v).toBeLessThanOrEqual(100);
@@ -837,9 +822,10 @@ describe("map combinator", () => {
 
   test(
     "double map composes transforms",
-    hegel(
+    hegel.test(
       (tc) => {
-        const gen = integers({ minValue: 1, maxValue: 5 })
+        const gen = gs
+          .integers({ minValue: 1, maxValue: 5 })
           .map((x) => x * 2)
           .map((x) => x + 1);
         const v = tc.draw(gen);
@@ -854,9 +840,9 @@ describe("map combinator", () => {
 
   test(
     "map on non-basic generator (filtered)",
-    hegel(
+    hegel.test(
       (tc) => {
-        const gen = integers({ minValue: 0, maxValue: 10 }).filter((x) => x % 2 === 0);
+        const gen = gs.integers({ minValue: 0, maxValue: 10 }).filter((x) => x % 2 === 0);
         const v = tc.draw(gen.map((x) => x * 3));
         expect(v % 6).toBe(0);
       },
@@ -872,9 +858,9 @@ describe("map combinator", () => {
 describe("filter combinator", () => {
   test(
     "filters values correctly",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(integers({ minValue: 0, maxValue: 100 }).filter((x) => x % 2 === 0));
+        const v = tc.draw(gs.integers({ minValue: 0, maxValue: 100 }).filter((x) => x % 2 === 0));
         expect(v % 2).toBe(0);
       },
       { testCases: 20 },
@@ -883,11 +869,11 @@ describe("filter combinator", () => {
 
   test(
     "filter that always fails causes assumption rejection",
-    hegel(
+    hegel.test(
       (tc) => {
         // This filter always fails, so all test cases become invalid
         // The test runner treats all-invalid as passing
-        tc.draw(integers({ minValue: 0, maxValue: 10 }).filter(() => false));
+        tc.draw(gs.integers({ minValue: 0, maxValue: 10 }).filter(() => false));
       },
       { testCases: 5 },
     ),
@@ -901,11 +887,13 @@ describe("filter combinator", () => {
 describe("flatMap combinator", () => {
   test(
     "generates dependent values",
-    hegel(
+    hegel.test(
       (tc) => {
-        const gen = integers({ minValue: 1, maxValue: 10 }).flatMap((n) =>
-          arrays(integers({ minValue: 0, maxValue: 100 }), { minSize: n, maxSize: n }),
-        );
+        const gen = gs
+          .integers({ minValue: 1, maxValue: 10 })
+          .flatMap((n) =>
+            gs.arrays(gs.integers({ minValue: 0, maxValue: 100 }), { minSize: n, maxSize: n }),
+          );
         const arr = tc.draw(gen);
         expect(arr.length).toBeGreaterThanOrEqual(1);
         expect(arr.length).toBeLessThanOrEqual(10);
@@ -915,13 +903,13 @@ describe("flatMap combinator", () => {
   );
 
   test(
-    "second value depends on first: text(n,n) length equals n",
-    hegel(
+    "second value depends on first: gs.text(n,n) length equals n",
+    hegel.test(
       (tc) => {
         let capturedN = 0;
-        const gen = integers({ minValue: 1, maxValue: 5 }).flatMap((n) => {
+        const gen = gs.integers({ minValue: 1, maxValue: 5 }).flatMap((n) => {
           capturedN = n;
-          return text({ minSize: n, maxSize: n });
+          return gs.text({ minSize: n, maxSize: n });
         });
         const s = tc.draw(gen);
         // The text length (in codepoints) must equal the captured integer
@@ -933,26 +921,26 @@ describe("flatMap combinator", () => {
 });
 
 // ---------------------------------------------------------------------------
-// oneOf()
+// gs.oneOf()
 // ---------------------------------------------------------------------------
 
-describe("oneOf()", () => {
+describe("gs.oneOf()", () => {
   test("throws if 0 generators provided", () => {
-    expect(() => oneOf()).toThrow("oneOf requires at least one generator");
+    expect(() => gs.oneOf()).toThrow("oneOf requires at least one generator");
   });
 
   test("accepts 1 generator", () => {
-    expect(() => oneOf(integers())).not.toThrow();
+    expect(() => gs.oneOf(gs.integers())).not.toThrow();
   });
 
   test(
     "generates values from one of the branches",
-    hegel(
+    hegel.test(
       (tc) => {
         const v = tc.draw(
-          oneOf(
-            integers({ minValue: 0, maxValue: 10 }),
-            integers({ minValue: 100, maxValue: 200 }),
+          gs.oneOf(
+            gs.integers({ minValue: 0, maxValue: 10 }),
+            gs.integers({ minValue: 100, maxValue: 200 }),
           ),
         );
         expect((v >= 0 && v <= 10) || (v >= 100 && v <= 200)).toBe(true);
@@ -964,12 +952,12 @@ describe("oneOf()", () => {
   test("generates values from both branches across many runs", () => {
     const low: number[] = [];
     const high: number[] = [];
-    hegel(
+    hegel.test(
       (tc) => {
         const v = tc.draw(
-          oneOf(
-            integers({ minValue: 0, maxValue: 10 }),
-            integers({ minValue: 100, maxValue: 200 }),
+          gs.oneOf(
+            gs.integers({ minValue: 0, maxValue: 10 }),
+            gs.integers({ minValue: 100, maxValue: 200 }),
           ),
         );
         if (v <= 10) low.push(v);
@@ -983,11 +971,11 @@ describe("oneOf()", () => {
 
   test(
     "with transforms: dispatches tagged transforms correctly",
-    hegel(
+    hegel.test(
       (tc) => {
-        const gen1 = integers({ minValue: 0, maxValue: 5 }).map((x) => x * 2);
-        const gen2 = integers({ minValue: 100, maxValue: 105 }).map((x) => x + 1);
-        const v = tc.draw(oneOf(gen1, gen2));
+        const gen1 = gs.integers({ minValue: 0, maxValue: 5 }).map((x) => x * 2);
+        const gen2 = gs.integers({ minValue: 100, maxValue: 105 }).map((x) => x + 1);
+        const v = tc.draw(gs.oneOf(gen1, gen2));
         // gen1 produces 0,2,4,6,8,10; gen2 produces 101,102,103,104,105,106
         const isFromGen1 = v >= 0 && v <= 10 && v % 2 === 0;
         const isFromGen2 = v >= 101 && v <= 106;
@@ -999,10 +987,10 @@ describe("oneOf()", () => {
 
   test(
     "composite path: non-basic generators",
-    hegel(
+    hegel.test(
       (tc) => {
-        const filtered = integers({ minValue: 0, maxValue: 10 }).filter(() => true);
-        const v = tc.draw(oneOf(filtered, text({ minSize: 0, maxSize: 5 })));
+        const filtered = gs.integers({ minValue: 0, maxValue: 10 }).filter(() => true);
+        const v = tc.draw(gs.oneOf(filtered, gs.text({ minSize: 0, maxSize: 5 })));
         expect(typeof v === "number" || typeof v === "string").toBe(true);
       },
       { testCases: 50 },
@@ -1011,10 +999,10 @@ describe("oneOf()", () => {
 
   test(
     "composite path generates values from either branch",
-    hegel(
+    hegel.test(
       (tc) => {
-        const filtered = integers({ minValue: 0, maxValue: 100 }).filter(() => true);
-        const v = tc.draw(oneOf(filtered, text({ minSize: 0, maxSize: 5 })));
+        const filtered = gs.integers({ minValue: 0, maxValue: 100 }).filter(() => true);
+        const v = tc.draw(gs.oneOf(filtered, gs.text({ minSize: 0, maxSize: 5 })));
         // Must be a number or string -- validates generator produces valid output
         expect(typeof v === "number" || typeof v === "string").toBe(true);
       },
@@ -1024,15 +1012,15 @@ describe("oneOf()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// optional()
+// gs.optional()
 // ---------------------------------------------------------------------------
 
-describe("optional()", () => {
+describe("gs.optional()", () => {
   test(
     "generates null or a value",
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(optional(integers({ minValue: 0, maxValue: 100 })));
+        const v = tc.draw(gs.optional(gs.integers({ minValue: 0, maxValue: 100 })));
         if (v !== null) {
           expect(typeof v).toBe("number");
           expect(v).toBeGreaterThanOrEqual(0);
@@ -1046,9 +1034,9 @@ describe("optional()", () => {
   test("both null and non-null values appear", () => {
     let seenNull = false;
     let seenValue = false;
-    hegel(
+    hegel.test(
       (tc) => {
-        const v = tc.draw(optional(integers({ minValue: 0, maxValue: 10 })));
+        const v = tc.draw(gs.optional(gs.integers({ minValue: 0, maxValue: 10 })));
         if (v === null) seenNull = true;
         else seenValue = true;
       },
@@ -1060,10 +1048,10 @@ describe("optional()", () => {
 
   test(
     "optional with non-basic inner: generates null or value",
-    hegel(
+    hegel.test(
       (tc) => {
-        const filtered = integers({ minValue: 0, maxValue: 10 }).filter(() => true);
-        const v = tc.draw(optional(filtered));
+        const filtered = gs.integers({ minValue: 0, maxValue: 10 }).filter(() => true);
+        const v = tc.draw(gs.optional(filtered));
         if (v !== null) {
           expect(typeof v).toBe("number");
           expect(v).toBeGreaterThanOrEqual(0);
@@ -1076,15 +1064,17 @@ describe("optional()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// tuples()
+// gs.tuples()
 // ---------------------------------------------------------------------------
 
-describe("tuples()", () => {
+describe("gs.tuples()", () => {
   test(
     "generates 2-tuples with correct types",
-    hegel(
+    hegel.test(
       (tc) => {
-        const [n, b] = tc.draw(tuples(integers({ minValue: 0, maxValue: 10 }), booleans()));
+        const [n, b] = tc.draw(
+          gs.tuples(gs.integers({ minValue: 0, maxValue: 10 }), gs.booleans()),
+        );
         expect(typeof n).toBe("number");
         expect(n).toBeGreaterThanOrEqual(0);
         expect(n).toBeLessThanOrEqual(10);
@@ -1096,11 +1086,11 @@ describe("tuples()", () => {
 
   test(
     "all basic with transforms: transforms applied per-position",
-    hegel(
+    hegel.test(
       (tc) => {
-        const g1 = integers({ minValue: 0, maxValue: 10 }).map((x) => x * 2);
-        const g2 = integers({ minValue: 0, maxValue: 5 });
-        const [a, b] = tc.draw(tuples(g1, g2));
+        const g1 = gs.integers({ minValue: 0, maxValue: 10 }).map((x) => x * 2);
+        const g2 = gs.integers({ minValue: 0, maxValue: 5 });
+        const [a, b] = tc.draw(gs.tuples(g1, g2));
         expect(a % 2).toBe(0);
         expect(a).toBeGreaterThanOrEqual(0);
         expect(a).toBeLessThanOrEqual(20);
@@ -1113,10 +1103,10 @@ describe("tuples()", () => {
 
   test(
     "non-basic: filtered elements use composite tuple path",
-    hegel(
+    hegel.test(
       (tc) => {
-        const filtered = integers({ minValue: 0, maxValue: 10 }).filter((x) => x > 5);
-        const [n, b] = tc.draw(tuples(filtered, booleans()));
+        const filtered = gs.integers({ minValue: 0, maxValue: 10 }).filter((x) => x > 5);
+        const [n, b] = tc.draw(gs.tuples(filtered, gs.booleans()));
         expect(n).toBeGreaterThan(5);
         expect(n).toBeLessThanOrEqual(10);
         expect(typeof b).toBe("boolean");
@@ -1126,16 +1116,16 @@ describe("tuples()", () => {
   );
 });
 
-describe("tuples() 3-tuples", () => {
+describe("gs.tuples() 3-tuples", () => {
   test(
     "generates 3-tuples with correct types",
-    hegel(
+    hegel.test(
       (tc) => {
         const [s, n, f] = tc.draw(
-          tuples(
-            text({ maxSize: 5 }),
-            integers({ minValue: 0, maxValue: 5 }),
-            floats({ minValue: 0, maxValue: 1 }),
+          gs.tuples(
+            gs.text({ maxSize: 5 }),
+            gs.integers({ minValue: 0, maxValue: 5 }),
+            gs.floats({ minValue: 0, maxValue: 1 }),
           ),
         );
         expect(typeof s).toBe("string");
@@ -1152,17 +1142,17 @@ describe("tuples() 3-tuples", () => {
   );
 });
 
-describe("tuples() 4-tuples", () => {
+describe("gs.tuples() 4-tuples", () => {
   test(
     "generates 4-tuples",
-    hegel(
+    hegel.test(
       (tc) => {
         const [n, b, s, f] = tc.draw(
-          tuples(
-            integers({ minValue: 0, maxValue: 10 }),
-            booleans(),
-            text({ maxSize: 5 }),
-            floats({ minValue: 0, maxValue: 1 }),
+          gs.tuples(
+            gs.integers({ minValue: 0, maxValue: 10 }),
+            gs.booleans(),
+            gs.text({ maxSize: 5 }),
+            gs.floats({ minValue: 0, maxValue: 1 }),
           ),
         );
         expect(typeof n).toBe("number");
@@ -1175,65 +1165,65 @@ describe("tuples() 4-tuples", () => {
   );
 });
 
-describe("tuples() inferred types", () => {
+describe("gs.tuples() inferred types", () => {
   test("empty tuple", () => {
-    const g = tuples();
-    expectTypeOf(g).toEqualTypeOf<Generator<[]>>();
+    const g = gs.tuples();
+    expectTypeOf(g).toEqualTypeOf<gs.Generator<[]>>();
   });
 
   test("1-tuple", () => {
-    const g = tuples(integers());
-    expectTypeOf(g).toEqualTypeOf<Generator<[number]>>();
+    const g = gs.tuples(gs.integers());
+    expectTypeOf(g).toEqualTypeOf<gs.Generator<[number]>>();
   });
 
   test("2-tuple with mixed element types", () => {
-    const g = tuples(integers(), booleans());
-    expectTypeOf(g).toEqualTypeOf<Generator<[number, boolean]>>();
+    const g = gs.tuples(gs.integers(), gs.booleans());
+    expectTypeOf(g).toEqualTypeOf<gs.Generator<[number, boolean]>>();
   });
 
   test("3-tuple preserves per-position types", () => {
-    const g = tuples(text(), integers(), floats());
-    expectTypeOf(g).toEqualTypeOf<Generator<[string, number, number]>>();
-    // Not Generator<(string | number)[]>
-    expectTypeOf(g).not.toEqualTypeOf<Generator<(string | number)[]>>();
+    const g = gs.tuples(gs.text(), gs.integers(), gs.floats());
+    expectTypeOf(g).toEqualTypeOf<gs.Generator<[string, number, number]>>();
+    // Not gs.Generator<(string | number)[]>
+    expectTypeOf(g).not.toEqualTypeOf<gs.Generator<(string | number)[]>>();
   });
 
   test("tuple type survives map()", () => {
-    const g = tuples(integers(), booleans()).map(([n, b]) => ({ n, b }));
-    expectTypeOf(g).toEqualTypeOf<Generator<{ n: number; b: boolean }>>();
+    const g = gs.tuples(gs.integers(), gs.booleans()).map(([n, b]) => ({ n, b }));
+    expectTypeOf(g).toEqualTypeOf<gs.Generator<{ n: number; b: boolean }>>();
   });
 
   test("nested tuples infer nested tuple types", () => {
-    const g = tuples(tuples(integers(), booleans()), text());
-    expectTypeOf(g).toEqualTypeOf<Generator<[[number, boolean], string]>>();
+    const g = gs.tuples(gs.tuples(gs.integers(), gs.booleans()), gs.text());
+    expectTypeOf(g).toEqualTypeOf<gs.Generator<[[number, boolean], string]>>();
   });
 
   test("map callback parameter is a tuple, not an array", () => {
-    tuples(integers(), booleans()).map((pair) => {
+    gs.tuples(gs.integers(), gs.booleans()).map((pair) => {
       expectTypeOf(pair).toEqualTypeOf<[number, boolean]>();
       return pair;
     });
   });
 
   test("high-arity tuple (5 elements)", () => {
-    const g = tuples(integers(), booleans(), text(), floats(), integers());
-    expectTypeOf(g).toEqualTypeOf<Generator<[number, boolean, string, number, number]>>();
+    const g = gs.tuples(gs.integers(), gs.booleans(), gs.text(), gs.floats(), gs.integers());
+    expectTypeOf(g).toEqualTypeOf<gs.Generator<[number, boolean, string, number, number]>>();
   });
 });
 
 // ---------------------------------------------------------------------------
-// record()
+// gs.record()
 // ---------------------------------------------------------------------------
 
-describe("record()", () => {
+describe("gs.record()", () => {
   test(
     "generates plain objects with correct field types",
-    hegel(
+    hegel.test(
       (tc) => {
-        const gen = record({
-          name: text({ minSize: 1, maxSize: 10 }),
-          age: integers({ minValue: 0, maxValue: 120 }),
-          active: booleans(),
+        const gen = gs.record({
+          name: gs.text({ minSize: 1, maxSize: 10 }),
+          age: gs.integers({ minValue: 0, maxValue: 120 }),
+          active: gs.booleans(),
         });
         const obj = tc.draw(gen);
         expect(typeof obj.name).toBe("string");
@@ -1246,10 +1236,10 @@ describe("record()", () => {
 
   test(
     "works with non-basic field generators (composite path)",
-    hegel(
+    hegel.test(
       (tc) => {
-        const gen = record({
-          value: integers({ minValue: 0, maxValue: 100 }).filter((x) => x > 10),
+        const gen = gs.record({
+          value: gs.integers({ minValue: 0, maxValue: 100 }).filter((x) => x > 10),
         });
         const obj = tc.draw(gen);
         expect(obj.value).toBeGreaterThan(10);
@@ -1259,12 +1249,12 @@ describe("record()", () => {
   );
 
   test(
-    "works with just() for constant fields",
-    hegel(
+    "works with gs.just() for constant fields",
+    hegel.test(
       (tc) => {
-        const gen = record({
-          type: just("user" as const),
-          id: integers({ minValue: 1, maxValue: 1000 }),
+        const gen = gs.record({
+          type: gs.just("user" as const),
+          id: gs.integers({ minValue: 1, maxValue: 1000 }),
         });
         const obj = tc.draw(gen);
         expect(obj.type).toBe("user");
@@ -1276,17 +1266,17 @@ describe("record()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// composite()
+// gs.composite()
 // ---------------------------------------------------------------------------
 
-describe("composite()", () => {
+describe("gs.composite()", () => {
   test(
     "imperative generator works",
-    hegel(
+    hegel.test(
       (tc) => {
-        const pairGen = composite((inner) => {
-          const x = inner.draw(integers({ minValue: 0, maxValue: 100 }));
-          const y = inner.draw(integers({ minValue: x, maxValue: 100 }));
+        const pairGen = gs.composite((inner) => {
+          const x = inner.draw(gs.integers({ minValue: 0, maxValue: 100 }));
+          const y = inner.draw(gs.integers({ minValue: x, maxValue: 100 }));
           return [x, y] as [number, number];
         });
 
@@ -1303,43 +1293,43 @@ describe("composite()", () => {
 // ---------------------------------------------------------------------------
 
 describe("argument validation", () => {
-  describe("integers()", () => {
+  describe("gs.integers()", () => {
     test("throws when minValue > maxValue", () => {
-      expect(() => integers({ minValue: 10, maxValue: 5 })).toThrow();
+      expect(() => gs.integers({ minValue: 10, maxValue: 5 })).toThrow();
     });
 
     test("accepts equal bounds", () => {
-      expect(() => integers({ minValue: 5, maxValue: 5 })).not.toThrow();
+      expect(() => gs.integers({ minValue: 5, maxValue: 5 })).not.toThrow();
     });
   });
 
-  describe("arrays()", () => {
+  describe("gs.arrays()", () => {
     test("throws when minSize > maxSize", () => {
-      expect(() => arrays(integers(), { minSize: 5, maxSize: 3 })).toThrow();
+      expect(() => gs.arrays(gs.integers(), { minSize: 5, maxSize: 3 })).toThrow();
     });
 
     test("accepts equal bounds", () => {
-      expect(() => arrays(integers(), { minSize: 3, maxSize: 3 })).not.toThrow();
+      expect(() => gs.arrays(gs.integers(), { minSize: 3, maxSize: 3 })).not.toThrow();
     });
   });
 
-  describe("oneOf()", () => {
+  describe("gs.oneOf()", () => {
     test("throws when 0 generators provided", () => {
-      expect(() => oneOf()).toThrow("oneOf requires at least one generator");
+      expect(() => gs.oneOf()).toThrow("oneOf requires at least one generator");
     });
 
     test("accepts 1 generator", () => {
-      expect(() => oneOf(integers())).not.toThrow();
+      expect(() => gs.oneOf(gs.integers())).not.toThrow();
     });
 
     test("accepts 2 generators", () => {
-      expect(() => oneOf(integers(), booleans())).not.toThrow();
+      expect(() => gs.oneOf(gs.integers(), gs.booleans())).not.toThrow();
     });
   });
 
-  describe("sampledFrom()", () => {
+  describe("gs.sampledFrom()", () => {
     test("throws on empty array", () => {
-      expect(() => sampledFrom([])).toThrow("sampledFrom requires at least one element");
+      expect(() => gs.sampledFrom([])).toThrow("sampledFrom requires at least one element");
     });
   });
 });
@@ -1347,9 +1337,9 @@ describe("argument validation", () => {
 describe("generators branch coverage", () => {
   test(
     "binary with minSize exercises minSize branch",
-    hegel(
+    hegel.test(
       (tc) => {
-        const b = tc.draw(binary({ minSize: 5, maxSize: 10 }));
+        const b = tc.draw(gs.binary({ minSize: 5, maxSize: 10 }));
         expect(b.length).toBeGreaterThanOrEqual(5);
       },
       { testCases: 10 },
@@ -1358,10 +1348,10 @@ describe("generators branch coverage", () => {
 
   test(
     "sets with minSize exercises minSize branch",
-    hegel(
+    hegel.test(
       (tc) => {
         const s = tc.draw(
-          sets(integers({ minValue: 0, maxValue: 100 }), { minSize: 1, maxSize: 5 }),
+          gs.sets(gs.integers({ minValue: 0, maxValue: 100 }), { minSize: 1, maxSize: 5 }),
         );
         expect(s.size).toBeGreaterThanOrEqual(1);
       },
@@ -1371,10 +1361,13 @@ describe("generators branch coverage", () => {
 
   test(
     "maps with minSize exercises minSize branch",
-    hegel(
+    hegel.test(
       (tc) => {
         const m = tc.draw(
-          maps(integers({ minValue: 0, maxValue: 100 }), booleans(), { minSize: 1, maxSize: 3 }),
+          gs.maps(gs.integers({ minValue: 0, maxValue: 100 }), gs.booleans(), {
+            minSize: 1,
+            maxSize: 3,
+          }),
         );
         expect(m.size).toBeGreaterThanOrEqual(1);
       },
@@ -1386,9 +1379,9 @@ describe("generators branch coverage", () => {
 describe("collection composite path without maxSize", () => {
   test(
     "sets with non-basic elements and no maxSize",
-    hegel(
+    hegel.test(
       (tc) => {
-        const s = tc.draw(sets(integers({ minValue: 0, maxValue: 100 }).filter(() => true)));
+        const s = tc.draw(gs.sets(gs.integers({ minValue: 0, maxValue: 100 }).filter(() => true)));
         expect(s).toBeInstanceOf(Set);
       },
       { testCases: 10 },
@@ -1397,12 +1390,12 @@ describe("collection composite path without maxSize", () => {
 
   test(
     "maps with non-basic elements and no maxSize",
-    hegel(
+    hegel.test(
       (tc) => {
         const m = tc.draw(
-          maps(
-            integers({ minValue: 0, maxValue: 100 }).filter(() => true),
-            booleans(),
+          gs.maps(
+            gs.integers({ minValue: 0, maxValue: 100 }).filter(() => true),
+            gs.booleans(),
           ),
         );
         expect(m).toBeInstanceOf(Map);
@@ -1412,12 +1405,12 @@ describe("collection composite path without maxSize", () => {
   );
 });
 
-describe("ipAddresses()", () => {
+describe("gs.ipAddresses()", () => {
   test(
-    "ipAddresses({ version: 4 }) generates valid IPv4",
-    hegel(
+    "gs.ipAddresses({ version: 4 }) generates valid IPv4",
+    hegel.test(
       (tc) => {
-        const ip = tc.draw(ipAddresses({ version: 4 }));
+        const ip = tc.draw(gs.ipAddresses({ version: 4 }));
         expect(ip).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
       },
       { testCases: 10 },
@@ -1425,10 +1418,10 @@ describe("ipAddresses()", () => {
   );
 
   test(
-    "ipAddresses({ version: 6 }) generates valid IPv6",
-    hegel(
+    "gs.ipAddresses({ version: 6 }) generates valid IPv6",
+    hegel.test(
       (tc) => {
-        const ip = tc.draw(ipAddresses({ version: 6 }));
+        const ip = tc.draw(gs.ipAddresses({ version: 6 }));
         expect(typeof ip).toBe("string");
         expect(ip).toContain(":");
       },
@@ -1438,9 +1431,9 @@ describe("ipAddresses()", () => {
 
   test(
     "ipAddresses generates either IPv4 or IPv6",
-    hegel(
+    hegel.test(
       (tc) => {
-        const ip = tc.draw(ipAddresses());
+        const ip = tc.draw(gs.ipAddresses());
         expect(typeof ip).toBe("string");
       },
       { testCases: 10 },

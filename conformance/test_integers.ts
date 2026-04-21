@@ -6,8 +6,8 @@
  */
 
 import { getTestCases, writeMetrics } from "./helpers.js";
-import { integers } from "../src/generators/index.js";
-import { hegel } from "../src/runner.js";
+import * as gs from "../src/generators/index.js";
+import * as hegel from "../src/runner.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
 
@@ -15,9 +15,9 @@ const minValue = params["min_value"] != null ? Number(params["min_value"]) : und
 const maxValue = params["max_value"] != null ? Number(params["max_value"]) : undefined;
 
 const testCases = getTestCases();
-const gen = integers({ minValue, maxValue });
+const gen = gs.integers({ minValue, maxValue });
 
-hegel(
+hegel.test(
   function conformance_integers(tc) {
     const value = tc.draw(gen);
     writeMetrics({ value });

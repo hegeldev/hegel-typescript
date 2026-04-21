@@ -1,34 +1,23 @@
 /**
  * Tests targeting uncovered lines in runner.ts, specifically:
  * - Hegel.run() settings branches (database, suppressHealthCheck)
- * - ServerDataSource error handling paths
+ * - hegel.ServerDataSource error handling paths
  * - Health check failure detection
  * - Flaky test detection
  * - Server error (invalid schema) detection
  */
 
 import { describe, test, expect } from "vitest";
-import {
-  Hegel,
-  HealthCheck,
-  Database,
-  integers,
-  booleans,
-  BasicGenerator,
-  runTestCase,
-  defaultSettings,
-  type DataSource,
-  StopTestError,
-  AssumeError,
-} from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 describe("defaultSettings CI detection", () => {
   test("defaultSettings returns database='disabled' when CI env var is set", () => {
     const original = process.env["CI"];
     try {
       process.env["CI"] = "true";
-      const settings = defaultSettings();
-      expect(settings.database).toEqual(Database.disabled);
+      const settings = hegel.defaultSettings();
+      expect(settings.database).toEqual(hegel.Database.disabled);
       expect(settings.derandomize).toBe(true);
     } finally {
       if (original === undefined) {
@@ -62,8 +51,8 @@ describe("defaultSettings CI detection", () => {
     try {
       // Set GITHUB_ACTIONS which expects value "true"
       process.env["GITHUB_ACTIONS"] = "true";
-      const settings = defaultSettings();
-      expect(settings.database).toEqual(Database.disabled);
+      const settings = hegel.defaultSettings();
+      expect(settings.database).toEqual(hegel.Database.disabled);
       expect(settings.derandomize).toBe(true);
     } finally {
       for (const key of allVars) {
@@ -100,8 +89,8 @@ describe("defaultSettings CI detection", () => {
       delete process.env[key];
     }
     try {
-      const settings = defaultSettings();
-      expect(settings.database).toEqual(Database.unset);
+      const settings = hegel.defaultSettings();
+      expect(settings.database).toEqual(hegel.Database.unset);
       expect(settings.derandomize).toBe(false);
     } finally {
       for (const key of allVars) {
@@ -117,44 +106,46 @@ describe("defaultSettings CI detection", () => {
 
 describe("Hegel.run() settings branches", () => {
   test("database: 'disabled' sets database to null", () => {
-    new Hegel((tc) => {
-      tc.draw(booleans());
+    new hegel.Hegel((tc) => {
+      tc.draw(gs.booleans());
     })
-      .settings({ testCases: 5, database: Database.disabled })
+      .settings({ testCases: 5, database: hegel.Database.disabled })
       .run();
   });
 
   test("database: 'unset' omits database from run_test message", () => {
-    new Hegel((tc) => {
-      tc.draw(booleans());
+    new hegel.Hegel((tc) => {
+      tc.draw(gs.booleans());
     })
-      .settings({ testCases: 5, database: Database.unset })
+      .settings({ testCases: 5, database: hegel.Database.unset })
       .run();
   });
 
   test("database: custom path sets database to string", () => {
-    new Hegel((tc) => {
-      tc.draw(booleans());
+    new hegel.Hegel((tc) => {
+      tc.draw(gs.booleans());
     })
-      .settings({ testCases: 5, database: Database.fromPath(".hegel/test-db") })
+      .settings({ testCases: 5, database: hegel.Database.fromPath(".hegel/test-db") })
       .run();
   });
 
   test("suppressHealthCheck passes through to server", () => {
-    new Hegel((tc) => {
-      tc.draw(booleans());
+    new hegel.Hegel((tc) => {
+      tc.draw(gs.booleans());
     })
       .settings({
         testCases: 5,
-        suppressHealthCheck: [HealthCheck.FilterTooMuch, HealthCheck.TooSlow],
+        suppressHealthCheck: [hegel.HealthCheck.FilterTooMuch, hegel.HealthCheck.TooSlow],
       })
       .run();
   });
 });
 
 describe("runTestCase with fake DataSource", () => {
-  function makeDs(overrides: Partial<DataSource> = {}): DataSource & { completed: string | null } {
-    const ds: DataSource & { completed: string | null } = {
+  function makeDs(
+    overrides: Partial<hegel.DataSource> = {},
+  ): hegel.DataSource & { completed: string | null } {
+    const ds: hegel.DataSource & { completed: string | null } = {
       completed: null,
       generate: () => 42,
       startSpan: () => {},
@@ -173,7 +164,7 @@ describe("runTestCase with fake DataSource", () => {
 
   test("extractOrigin returns null for non-Error values", () => {
     const ds = makeDs();
-    const result = runTestCase(
+    const result = hegel.runTestCase(
       ds,
       () => {
         throw "string error";
@@ -186,7 +177,7 @@ describe("runTestCase with fake DataSource", () => {
 
   test("isFinal with non-Error interesting result writes to stderr", () => {
     const ds = makeDs();
-    const result = runTestCase(
+    const result = hegel.runTestCase(
       ds,
       () => {
         throw "string error";
@@ -198,10 +189,10 @@ describe("runTestCase with fake DataSource", () => {
 
   test("testAborted skips markComplete", () => {
     const ds = makeDs({ testAborted: () => true });
-    const result = runTestCase(
+    const result = hegel.runTestCase(
       ds,
       () => {
-        throw new StopTestError();
+        throw new hegel.StopTestError();
       },
       false,
     );
@@ -211,10 +202,10 @@ describe("runTestCase with fake DataSource", () => {
 
   test("AssumeError returns invalid", () => {
     const ds = makeDs();
-    const result = runTestCase(
+    const result = hegel.runTestCase(
       ds,
       () => {
-        throw new AssumeError();
+        throw new hegel.AssumeError();
       },
       false,
     );
@@ -226,10 +217,10 @@ describe("runTestCase with fake DataSource", () => {
 describe("server error detection", () => {
   test("invalid schema triggers server error", () => {
     // Send a schema the server rejects (integer with min > max).
-    // This exercises the generic server error path in ServerDataSource.sendRequest.
-    const badGen = new BasicGenerator({ type: "integer", min_value: 100, max_value: 0 });
+    // This exercises the generic server error path in hegel.ServerDataSource.sendRequest.
+    const badGen = new gs.BasicGenerator({ type: "integer", min_value: 100, max_value: 0 });
     expect(() => {
-      new Hegel((tc) => {
+      new hegel.Hegel((tc) => {
         tc.draw(badGen);
       })
         .settings({ testCases: 1 })
@@ -241,8 +232,8 @@ describe("server error detection", () => {
     // Filter that rejects >99% of values triggers FilterTooMuch health check.
     // This exercises line 380-381 in Hegel.run() (result data check).
     expect(() => {
-      new Hegel((tc) => {
-        const x = tc.draw(integers({ minValue: 0, maxValue: 1000 }));
+      new hegel.Hegel((tc) => {
+        const x = tc.draw(gs.integers({ minValue: 0, maxValue: 1000 }));
         tc.assume(x === 500);
       })
         .settings({ testCases: 100 })
@@ -255,8 +246,8 @@ describe("server error detection", () => {
     // Use a mutable counter: fail on the first non-zero example, then pass on retry.
     let seen = false;
     expect(() => {
-      new Hegel((tc) => {
-        const x = tc.draw(integers({ minValue: 0, maxValue: 100 }));
+      new hegel.Hegel((tc) => {
+        const x = tc.draw(gs.integers({ minValue: 0, maxValue: 100 }));
         if (x > 0 && !seen) {
           seen = true;
           throw new Error("flaky failure");
@@ -285,8 +276,8 @@ describe("ServerDataSource error paths via HEGEL_PROTOCOL_TEST_MODE", () => {
 
   test("error_response exercises server error path", () => {
     withTestMode("error_response", () => {
-      new Hegel((tc) => {
-        tc.draw(integers({ minValue: 0, maxValue: 100 }));
+      new hegel.Hegel((tc) => {
+        tc.draw(gs.integers({ minValue: 0, maxValue: 100 }));
       })
         .settings({ testCases: 10 })
         .run();
@@ -295,8 +286,8 @@ describe("ServerDataSource error paths via HEGEL_PROTOCOL_TEST_MODE", () => {
 
   test("stop_test_on_generate exercises StopTest path", () => {
     withTestMode("stop_test_on_generate", () => {
-      new Hegel((tc) => {
-        tc.draw(integers({ minValue: 0, maxValue: 100 }));
+      new hegel.Hegel((tc) => {
+        tc.draw(gs.integers({ minValue: 0, maxValue: 100 }));
       })
         .settings({ testCases: 10 })
         .run();

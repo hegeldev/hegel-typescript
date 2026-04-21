@@ -8,15 +8,15 @@
  */
 
 import { getTestCases, writeMetrics } from "./helpers.js";
-import { text, type CharacterOptions } from "../src/generators/index.js";
-import { hegel } from "../src/runner.js";
+import * as gs from "../src/generators/index.js";
+import * as hegel from "../src/runner.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
 
 const minSize = params["min_size"] != null ? Number(params["min_size"]) : 0;
 const maxSize = params["max_size"] != null ? Number(params["max_size"]) : undefined;
 
-const charOpts: CharacterOptions = {};
+const charOpts: gs.CharacterOptions = {};
 if (params["codec"] != null) charOpts.codec = String(params["codec"]);
 if (params["min_codepoint"] != null) charOpts.minCodepoint = Number(params["min_codepoint"]);
 if (params["max_codepoint"] != null) charOpts.maxCodepoint = Number(params["max_codepoint"]);
@@ -29,9 +29,9 @@ if (params["exclude_characters"] != null)
   charOpts.excludeCharacters = String(params["exclude_characters"]);
 
 const testCases = getTestCases();
-const gen = text({ minSize, maxSize, ...charOpts });
+const gen = gs.text({ minSize, maxSize, ...charOpts });
 
-hegel(
+hegel.test(
   function conformance_text(tc) {
     const value = tc.draw(gen);
     // Extract Unicode codepoints (not UTF-16 code units)

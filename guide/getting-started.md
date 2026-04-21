@@ -6,20 +6,20 @@
 npm install "git+ssh://git@github.com/antithesishq/hegel-typescript.git"
 ```
 
-The library requires the `hegel` CLI on your PATH:
-
-```bash
-pip install hegel-core
-```
-
-If you are working inside this repository, `just setup` handles both steps.
+The `hegel` server is auto-installed on first use via
+[`uv`](https://docs.astral.sh/uv/). If `uv` is not already on your PATH the
+library installs it into `~/.cache/hegel/` automatically — pre-installing `uv`
+is faster but not required. To point at a pre-built `hegel` binary instead
+(e.g. from a local checkout of hegel-core), set `HEGEL_SERVER_COMMAND` to its
+path.
 
 ## Write your first test
 
 Create `example.test.ts`:
 
 ```typescript
-import { runHegelTest, integers } from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 it("integers are integers", async () => {
   await runHegelTest(async () => {
@@ -45,7 +45,8 @@ await runHegelTest(async () => { ... }, { testCases: 500 });
 Hegel tests integrate with any test runner (Vitest, Jest, etc.):
 
 ```typescript
-import { runHegelTest, integers } from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 it("bounded integers", async () => {
   await runHegelTest(async () => {
@@ -63,7 +64,8 @@ still triggers the failure — in this case, `n = 50`.
 Call `.generate()` multiple times to produce multiple values in a single test:
 
 ```typescript
-import { runHegelTest, integers, text } from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 it("multiple generators", async () => {
   await runHegelTest(async () => {
@@ -83,7 +85,8 @@ including conditionally or in loops.
 Use `.filter()` for simple conditions on generators:
 
 ```typescript
-import { runHegelTest, integers } from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 it("even integers", async () => {
   await runHegelTest(async () => {
@@ -99,7 +102,8 @@ For conditions that depend on multiple generated values, use `assume()` inside
 the test body:
 
 ```typescript
-import { runHegelTest, integers, assume } from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 it("Euclidean division identity", async () => {
   await runHegelTest(async () => {
@@ -122,7 +126,8 @@ they avoid generating values that will be rejected.
 Use `.map()` to transform values after generation:
 
 ```typescript
-import { runHegelTest, integers } from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 it("stringified integers", async () => {
   await runHegelTest(async () => {
@@ -138,7 +143,8 @@ Because generation is imperative in Hegel, you can use earlier results to config
 later generators directly:
 
 ```typescript
-import { runHegelTest, integers, arrays } from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 it("list with valid index", async () => {
   await runHegelTest(async () => {
@@ -155,7 +161,8 @@ You can also use `.flatMap()` for dependent generation within a single generator
 expression:
 
 ```typescript
-import { runHegelTest, integers, arrays } from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 it("flatMap dependent generation", async () => {
   await runHegelTest(async () => {
@@ -228,7 +235,8 @@ For complex domain types, Hegel supports automatic generator derivation.
 Requires `"experimentalDecorators": true` in `tsconfig.json`.
 
 ```typescript
-import { field, deriveGenerator, integers, text, booleans } from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 class User {
   @field(text({ minSize: 1, maxSize: 50 }))
@@ -250,7 +258,8 @@ const userGen = deriveGenerator(User);
 No class or decorators needed:
 
 ```typescript
-import { recordGenerator, floats } from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 const pointGen = recordGenerator({
   x: floats({ minValue: -100, maxValue: 100 }),
@@ -262,7 +271,8 @@ const pointGen = recordGenerator({
 ### Discriminated unions with `variantGenerator`
 
 ```typescript
-import { variantGenerator, recordGenerator, floats } from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 type Shape =
   | { type: "circle"; radius: number }
@@ -286,7 +296,8 @@ Use `note()` to print debug information. Messages only appear when Hegel replays
 the minimal failing example:
 
 ```typescript
-import { runHegelTest, integers, note } from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 it("debugging example", async () => {
   await runHegelTest(async () => {
@@ -304,7 +315,8 @@ Use `target()` to guide Hegel toward interesting values, making it more likely t
 find boundary failures:
 
 ```typescript
-import { runHegelTest, integers, target } from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 it("seek large values", async () => {
   await runHegelTest(

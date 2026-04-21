@@ -10,7 +10,8 @@
  */
 
 import { describe, test, expect } from "vitest";
-import { hegel, integers, floats, text, booleans, arrays, oneOf, composite } from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 // =========================================================================
 // Array properties
@@ -19,8 +20,8 @@ import { hegel, integers, floats, text, booleans, arrays, oneOf, composite } fro
 describe("Array properties", () => {
   test(
     "sort is idempotent",
-    hegel((tc) => {
-      const arr = tc.draw(arrays(integers()));
+    hegel.test((tc) => {
+      const arr = tc.draw(gs.arrays(gs.integers()));
       const sorted = [...arr].sort((a, b) => a - b);
       const sortedTwice = [...sorted].sort((a, b) => a - b);
       expect(sorted).toEqual(sortedTwice);
@@ -29,16 +30,16 @@ describe("Array properties", () => {
 
   test(
     "sort preserves length",
-    hegel((tc) => {
-      const arr = tc.draw(arrays(integers()));
+    hegel.test((tc) => {
+      const arr = tc.draw(gs.arrays(gs.integers()));
       expect([...arr].sort((a, b) => a - b).length).toBe(arr.length);
     }),
   );
 
   test(
     "sort produces ordered output",
-    hegel((tc) => {
-      const arr = tc.draw(arrays(integers()));
+    hegel.test((tc) => {
+      const arr = tc.draw(gs.arrays(gs.integers()));
       const sorted = [...arr].sort((a, b) => a - b);
       for (let i = 1; i < sorted.length; i++) {
         expect(sorted[i]).toBeGreaterThanOrEqual(sorted[i - 1]);
@@ -48,8 +49,8 @@ describe("Array properties", () => {
 
   test(
     "sort preserves elements (is a permutation)",
-    hegel((tc) => {
-      const arr = tc.draw(arrays(integers({ minValue: 0, maxValue: 100 })));
+    hegel.test((tc) => {
+      const arr = tc.draw(gs.arrays(gs.integers({ minValue: 0, maxValue: 100 })));
       const sorted = [...arr].sort((a, b) => a - b);
       expect([...sorted].sort()).toEqual([...arr].sort());
     }),
@@ -57,36 +58,36 @@ describe("Array properties", () => {
 
   test(
     "reverse is an involution",
-    hegel((tc) => {
-      const arr = tc.draw(arrays(integers()));
+    hegel.test((tc) => {
+      const arr = tc.draw(gs.arrays(gs.integers()));
       expect([...arr].reverse().reverse()).toEqual(arr);
     }),
   );
 
   test(
     "concat length is sum of lengths",
-    hegel((tc) => {
-      const a = tc.draw(arrays(integers()));
-      const b = tc.draw(arrays(integers()));
+    hegel.test((tc) => {
+      const a = tc.draw(gs.arrays(gs.integers()));
+      const b = tc.draw(gs.arrays(gs.integers()));
       expect(a.concat(b).length).toBe(a.length + b.length);
     }),
   );
 
   test(
     "concat associativity",
-    hegel((tc) => {
-      const a = tc.draw(arrays(integers(), { maxSize: 10 }));
-      const b = tc.draw(arrays(integers(), { maxSize: 10 }));
-      const c = tc.draw(arrays(integers(), { maxSize: 10 }));
+    hegel.test((tc) => {
+      const a = tc.draw(gs.arrays(gs.integers(), { maxSize: 10 }));
+      const b = tc.draw(gs.arrays(gs.integers(), { maxSize: 10 }));
+      const c = tc.draw(gs.arrays(gs.integers(), { maxSize: 10 }));
       expect(a.concat(b).concat(c)).toEqual(a.concat(b.concat(c)));
     }),
   );
 
   test(
     "filter preserves order and reduces length",
-    hegel((tc) => {
-      const arr = tc.draw(arrays(integers()));
-      const threshold = tc.draw(integers());
+    hegel.test((tc) => {
+      const arr = tc.draw(gs.arrays(gs.integers()));
+      const threshold = tc.draw(gs.integers());
       const filtered = arr.filter((x) => x > threshold);
       expect(filtered.length).toBeLessThanOrEqual(arr.length);
       // Check order is preserved
@@ -100,8 +101,8 @@ describe("Array properties", () => {
 
   test(
     "map preserves length",
-    hegel((tc) => {
-      const arr = tc.draw(arrays(integers()));
+    hegel.test((tc) => {
+      const arr = tc.draw(gs.arrays(gs.integers()));
       const mapped = arr.map((x) => x * 2);
       expect(mapped.length).toBe(arr.length);
     }),
@@ -109,8 +110,8 @@ describe("Array properties", () => {
 
   test(
     "flatMap length equals sum of inner lengths",
-    hegel((tc) => {
-      const arr = tc.draw(arrays(integers({ minValue: 0, maxValue: 5 }), { maxSize: 10 }));
+    hegel.test((tc) => {
+      const arr = tc.draw(gs.arrays(gs.integers({ minValue: 0, maxValue: 5 }), { maxSize: 10 }));
       const result = arr.flatMap((x) => Array.from({ length: x }, (_, i) => i));
       const expectedLength = arr.reduce((sum, x) => sum + x, 0);
       expect(result.length).toBe(expectedLength);
@@ -119,9 +120,9 @@ describe("Array properties", () => {
 
   test(
     "indexOf finds the element or returns -1",
-    hegel((tc) => {
-      const arr = tc.draw(arrays(integers({ minValue: 0, maxValue: 20 })));
-      const needle = tc.draw(integers({ minValue: 0, maxValue: 20 }));
+    hegel.test((tc) => {
+      const arr = tc.draw(gs.arrays(gs.integers({ minValue: 0, maxValue: 20 })));
+      const needle = tc.draw(gs.integers({ minValue: 0, maxValue: 20 }));
       const idx = arr.indexOf(needle);
       if (idx >= 0) {
         expect(arr[idx]).toBe(needle);
@@ -134,9 +135,9 @@ describe("Array properties", () => {
   // Inspired by effect-ts Chunk.test.ts: chunksOf law
   test(
     "chunksOf(n) then flatten equals original (for even-length arrays)",
-    hegel((tc) => {
-      const arr = tc.draw(arrays(integers(), { maxSize: 20 }));
-      const n = tc.draw(integers({ minValue: 1, maxValue: 5 }));
+    hegel.test((tc) => {
+      const arr = tc.draw(gs.arrays(gs.integers(), { maxSize: 20 }));
+      const n = tc.draw(gs.integers({ minValue: 1, maxValue: 5 }));
 
       const chunks: number[][] = [];
       for (let i = 0; i < arr.length; i += n) {
@@ -155,63 +156,63 @@ describe("Array properties", () => {
 describe("Number properties", () => {
   test(
     "addition is commutative",
-    hegel((tc) => {
-      const a = tc.draw(integers());
-      const b = tc.draw(integers());
+    hegel.test((tc) => {
+      const a = tc.draw(gs.integers());
+      const b = tc.draw(gs.integers());
       expect(a + b).toBe(b + a);
     }),
   );
 
   test(
     "addition is associative (for safe integers)",
-    hegel((tc) => {
-      const a = tc.draw(integers({ minValue: -1000, maxValue: 1000 }));
-      const b = tc.draw(integers({ minValue: -1000, maxValue: 1000 }));
-      const c = tc.draw(integers({ minValue: -1000, maxValue: 1000 }));
+    hegel.test((tc) => {
+      const a = tc.draw(gs.integers({ minValue: -1000, maxValue: 1000 }));
+      const b = tc.draw(gs.integers({ minValue: -1000, maxValue: 1000 }));
+      const c = tc.draw(gs.integers({ minValue: -1000, maxValue: 1000 }));
       expect(a + (b + c)).toBe(a + b + c);
     }),
   );
 
   test(
     "multiplication is commutative",
-    hegel((tc) => {
-      const a = tc.draw(integers());
-      const b = tc.draw(integers());
+    hegel.test((tc) => {
+      const a = tc.draw(gs.integers());
+      const b = tc.draw(gs.integers());
       expect(a * b).toBe(b * a);
     }),
   );
 
   test(
     "abs is non-negative",
-    hegel((tc) => {
-      const n = tc.draw(integers());
+    hegel.test((tc) => {
+      const n = tc.draw(gs.integers());
       expect(Math.abs(n)).toBeGreaterThanOrEqual(0);
     }),
   );
 
   test(
     "min/max identity: min(a,b) <= max(a,b)",
-    hegel((tc) => {
-      const a = tc.draw(integers());
-      const b = tc.draw(integers());
+    hegel.test((tc) => {
+      const a = tc.draw(gs.integers());
+      const b = tc.draw(gs.integers());
       expect(Math.min(a, b)).toBeLessThanOrEqual(Math.max(a, b));
     }),
   );
 
   test(
     "min/max coverage: {min(a,b), max(a,b)} == {a, b}",
-    hegel((tc) => {
-      const a = tc.draw(integers());
-      const b = tc.draw(integers());
+    hegel.test((tc) => {
+      const a = tc.draw(gs.integers());
+      const b = tc.draw(gs.integers());
       expect(new Set([Math.min(a, b), Math.max(a, b)])).toEqual(new Set([a, b]));
     }),
   );
 
   test(
     "finite floats: addition is commutative",
-    hegel((tc) => {
-      const a = tc.draw(floats({ allowNan: false, allowInfinity: false }));
-      const b = tc.draw(floats({ allowNan: false, allowInfinity: false }));
+    hegel.test((tc) => {
+      const a = tc.draw(gs.floats({ allowNan: false, allowInfinity: false }));
+      const b = tc.draw(gs.floats({ allowNan: false, allowInfinity: false }));
       // Float addition is commutative (unlike some operations)
       expect(a + b).toBe(b + a);
     }),
@@ -219,9 +220,9 @@ describe("Number properties", () => {
 
   test(
     "floor/ceil bracket the value",
-    hegel((tc) => {
+    hegel.test((tc) => {
       const x = tc.draw(
-        floats({ minValue: -1e6, maxValue: 1e6, allowNan: false, allowInfinity: false }),
+        gs.floats({ minValue: -1e6, maxValue: 1e6, allowNan: false, allowInfinity: false }),
       );
       expect(Math.floor(x)).toBeLessThanOrEqual(x);
       expect(Math.ceil(x)).toBeGreaterThanOrEqual(x);
@@ -236,8 +237,8 @@ describe("Number properties", () => {
 describe("String properties", () => {
   test(
     "split then join is identity",
-    hegel((tc) => {
-      const s = tc.draw(text({ maxSize: 50 }));
+    hegel.test((tc) => {
+      const s = tc.draw(gs.text({ maxSize: 50 }));
       // For a separator not in the string, split+join is identity
       const sep = "\x00"; // unlikely to appear in generated text
       expect(s.split(sep).join(sep)).toBe(s);
@@ -246,18 +247,18 @@ describe("String properties", () => {
 
   test(
     "repeat length is n * original length",
-    hegel((tc) => {
-      const s = tc.draw(text({ maxSize: 10 }));
-      const n = tc.draw(integers({ minValue: 0, maxValue: 5 }));
+    hegel.test((tc) => {
+      const s = tc.draw(gs.text({ maxSize: 10 }));
+      const n = tc.draw(gs.integers({ minValue: 0, maxValue: 5 }));
       expect(s.repeat(n).length).toBe(s.length * n);
     }),
   );
 
   test(
     "toUpperCase is idempotent",
-    hegel(
+    hegel.test(
       (tc) => {
-        const s = tc.draw(text({ maxSize: 20, codec: "ascii" }));
+        const s = tc.draw(gs.text({ maxSize: 20, codec: "ascii" }));
         expect(s.toUpperCase().toUpperCase()).toBe(s.toUpperCase());
       },
       { testCases: 50 },
@@ -266,9 +267,9 @@ describe("String properties", () => {
 
   test(
     "trim removes only whitespace",
-    hegel(
+    hegel.test(
       (tc) => {
-        const s = tc.draw(text({ maxSize: 20, codec: "ascii" }));
+        const s = tc.draw(gs.text({ maxSize: 20, codec: "ascii" }));
         const trimmed = s.trim();
         // trimmed is a substring of s
         expect(s).toContain(trimmed);
@@ -281,18 +282,18 @@ describe("String properties", () => {
 
   test(
     "string concatenation length",
-    hegel((tc) => {
-      const a = tc.draw(text({ maxSize: 50 }));
-      const b = tc.draw(text({ maxSize: 50 }));
+    hegel.test((tc) => {
+      const a = tc.draw(gs.text({ maxSize: 50 }));
+      const b = tc.draw(gs.text({ maxSize: 50 }));
       expect((a + b).length).toBe(a.length + b.length);
     }),
   );
 
   test(
     "includes is consistent with indexOf",
-    hegel((tc) => {
-      const haystack = tc.draw(text({ maxSize: 20, codec: "ascii" }));
-      const needle = tc.draw(text({ maxSize: 5, codec: "ascii" }));
+    hegel.test((tc) => {
+      const haystack = tc.draw(gs.text({ maxSize: 20, codec: "ascii" }));
+      const needle = tc.draw(gs.text({ maxSize: 5, codec: "ascii" }));
       expect(haystack.includes(needle)).toBe(haystack.indexOf(needle) !== -1);
     }),
   );
@@ -305,9 +306,13 @@ describe("String properties", () => {
 describe("Set properties", () => {
   test(
     "union is commutative",
-    hegel((tc) => {
-      const a = new Set(tc.draw(arrays(integers({ minValue: 0, maxValue: 20 }), { maxSize: 10 })));
-      const b = new Set(tc.draw(arrays(integers({ minValue: 0, maxValue: 20 }), { maxSize: 10 })));
+    hegel.test((tc) => {
+      const a = new Set(
+        tc.draw(gs.arrays(gs.integers({ minValue: 0, maxValue: 20 }), { maxSize: 10 })),
+      );
+      const b = new Set(
+        tc.draw(gs.arrays(gs.integers({ minValue: 0, maxValue: 20 }), { maxSize: 10 })),
+      );
       const unionAB = new Set([...a, ...b]);
       const unionBA = new Set([...b, ...a]);
       expect(unionAB).toEqual(unionBA);
@@ -316,9 +321,13 @@ describe("Set properties", () => {
 
   test(
     "intersection is a subset of both inputs",
-    hegel((tc) => {
-      const a = new Set(tc.draw(arrays(integers({ minValue: 0, maxValue: 20 }), { maxSize: 10 })));
-      const b = new Set(tc.draw(arrays(integers({ minValue: 0, maxValue: 20 }), { maxSize: 10 })));
+    hegel.test((tc) => {
+      const a = new Set(
+        tc.draw(gs.arrays(gs.integers({ minValue: 0, maxValue: 20 }), { maxSize: 10 })),
+      );
+      const b = new Set(
+        tc.draw(gs.arrays(gs.integers({ minValue: 0, maxValue: 20 }), { maxSize: 10 })),
+      );
       const intersection = new Set([...a].filter((x) => b.has(x)));
       for (const x of intersection) {
         expect(a.has(x)).toBe(true);
@@ -329,9 +338,13 @@ describe("Set properties", () => {
 
   test(
     "|A ∪ B| + |A ∩ B| = |A| + |B|",
-    hegel((tc) => {
-      const a = new Set(tc.draw(arrays(integers({ minValue: 0, maxValue: 20 }), { maxSize: 10 })));
-      const b = new Set(tc.draw(arrays(integers({ minValue: 0, maxValue: 20 }), { maxSize: 10 })));
+    hegel.test((tc) => {
+      const a = new Set(
+        tc.draw(gs.arrays(gs.integers({ minValue: 0, maxValue: 20 }), { maxSize: 10 })),
+      );
+      const b = new Set(
+        tc.draw(gs.arrays(gs.integers({ minValue: 0, maxValue: 20 }), { maxSize: 10 })),
+      );
       const union = new Set([...a, ...b]);
       const intersection = new Set([...a].filter((x) => b.has(x)));
       expect(union.size + intersection.size).toBe(a.size + b.size);
@@ -346,9 +359,9 @@ describe("Set properties", () => {
 describe("Map properties", () => {
   test(
     "set then get returns the value",
-    hegel((tc) => {
-      const key = tc.draw(text({ minSize: 1, maxSize: 10, codec: "ascii" }));
-      const value = tc.draw(integers());
+    hegel.test((tc) => {
+      const key = tc.draw(gs.text({ minSize: 1, maxSize: 10, codec: "ascii" }));
+      const value = tc.draw(gs.integers());
       const map = new Map<string, number>();
       map.set(key, value);
       expect(map.get(key)).toBe(value);
@@ -357,12 +370,12 @@ describe("Map properties", () => {
 
   test(
     "delete removes the key",
-    hegel((tc) => {
+    hegel.test((tc) => {
       const entries = tc.draw(
-        arrays(
-          composite((inner) => ({
-            key: inner.draw(text({ minSize: 1, maxSize: 5, codec: "ascii" })),
-            value: inner.draw(integers()),
+        gs.arrays(
+          gs.composite((inner) => ({
+            key: inner.draw(gs.text({ minSize: 1, maxSize: 5, codec: "ascii" })),
+            value: inner.draw(gs.integers()),
           })),
           { maxSize: 5 },
         ),
@@ -382,15 +395,15 @@ describe("Map properties", () => {
 // =========================================================================
 
 describe("JSON round-trip properties", () => {
-  const jsonValue = oneOf(
-    integers({ minValue: -1000, maxValue: 1000 }).map((n) => n as unknown),
-    text({ maxSize: 20, codec: "ascii" }).map((s) => s as unknown),
-    booleans().map((b) => b as unknown),
+  const jsonValue = gs.oneOf(
+    gs.integers({ minValue: -1000, maxValue: 1000 }).map((n) => n as unknown),
+    gs.text({ maxSize: 20, codec: "ascii" }).map((s) => s as unknown),
+    gs.booleans().map((b) => b as unknown),
   );
 
   test(
     "JSON.parse(JSON.stringify(x)) preserves value",
-    hegel((tc) => {
+    hegel.test((tc) => {
       const value = tc.draw(jsonValue);
       expect(JSON.parse(JSON.stringify(value))).toEqual(value);
     }),
@@ -398,7 +411,7 @@ describe("JSON round-trip properties", () => {
 
   test(
     "JSON.stringify produces a string",
-    hegel((tc) => {
+    hegel.test((tc) => {
       const value = tc.draw(jsonValue);
       expect(typeof JSON.stringify(value)).toBe("string");
     }),
@@ -410,12 +423,12 @@ describe("JSON round-trip properties", () => {
 // =========================================================================
 
 describe("Bitwise operation properties", () => {
-  const flags = integers({ minValue: 0, maxValue: 0xffff });
-  const flag = integers({ minValue: 0, maxValue: 15 }).map((n) => 1 << n);
+  const flags = gs.integers({ minValue: 0, maxValue: 0xffff });
+  const flag = gs.integers({ minValue: 0, maxValue: 15 }).map((n) => 1 << n);
 
   test(
     "OR with a flag enables it",
-    hegel((tc) => {
+    hegel.test((tc) => {
       const f = tc.draw(flags);
       const bit = tc.draw(flag);
       expect((f | bit) & bit).toBe(bit);
@@ -424,7 +437,7 @@ describe("Bitwise operation properties", () => {
 
   test(
     "AND NOT with a flag disables it",
-    hegel((tc) => {
+    hegel.test((tc) => {
       const f = tc.draw(flags);
       const bit = tc.draw(flag);
       expect(f & ~bit & bit).toBe(0);
@@ -433,7 +446,7 @@ describe("Bitwise operation properties", () => {
 
   test(
     "XOR is self-inverse",
-    hegel((tc) => {
+    hegel.test((tc) => {
       const a = tc.draw(flags);
       const b = tc.draw(flags);
       expect(a ^ b ^ b).toBe(a);
@@ -442,7 +455,7 @@ describe("Bitwise operation properties", () => {
 
   test(
     "OR is idempotent",
-    hegel((tc) => {
+    hegel.test((tc) => {
       const a = tc.draw(flags);
       expect(a | a).toBe(a);
     }),
@@ -450,7 +463,7 @@ describe("Bitwise operation properties", () => {
 
   test(
     "AND is idempotent",
-    hegel((tc) => {
+    hegel.test((tc) => {
       const a = tc.draw(flags);
       expect(a & a).toBe(a);
     }),
@@ -458,7 +471,7 @@ describe("Bitwise operation properties", () => {
 
   test(
     "De Morgan's law: ~(a & b) == ~a | ~b (mod 16 bits)",
-    hegel((tc) => {
+    hegel.test((tc) => {
       const a = tc.draw(flags);
       const b = tc.draw(flags);
       const mask = 0xffff;
@@ -468,7 +481,7 @@ describe("Bitwise operation properties", () => {
 
   test(
     "diff and patch: (a ^ (a ^ b)) == b",
-    hegel((tc) => {
+    hegel.test((tc) => {
       const a = tc.draw(flags);
       const b = tc.draw(flags);
       const diff = a ^ b;

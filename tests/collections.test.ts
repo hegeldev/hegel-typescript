@@ -11,23 +11,26 @@
  */
 
 import { describe, test, expect } from "vitest";
-import { hegel, integers, booleans, text, arrays, sets, maps } from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
-// Collection protocol tests use fewer test cases because each test case
+// hegel.Collection protocol tests use fewer test cases because each test case
 // involves many server round-trips (one per collection element).
 const FEW = { testCases: 20 };
 
 // .filter(() => true) is a no-op filter that strips asBasic(),
 // forcing the collection protocol path.
-function nonBasic(gen: ReturnType<typeof integers>) {
+function nonBasic(gen: ReturnType<typeof gs.integers>) {
   return gen.filter(() => true);
 }
 
 describe("arrays with non-basic elements (collection protocol)", () => {
   test(
     "generates arrays of filtered integers",
-    hegel((tc) => {
-      const arr = tc.draw(arrays(integers({ minValue: 0, maxValue: 100 }).filter((x) => x > 5)));
+    hegel.test((tc) => {
+      const arr = tc.draw(
+        gs.arrays(gs.integers({ minValue: 0, maxValue: 100 }).filter((x) => x > 5)),
+      );
       for (const x of arr) {
         expect(x).toBeGreaterThan(5);
       }
@@ -36,9 +39,9 @@ describe("arrays with non-basic elements (collection protocol)", () => {
 
   test(
     "respects maxSize",
-    hegel((tc) => {
+    hegel.test((tc) => {
       const arr = tc.draw(
-        arrays(nonBasic(integers({ minValue: 0, maxValue: 100 })), { maxSize: 5 }),
+        gs.arrays(nonBasic(gs.integers({ minValue: 0, maxValue: 100 })), { maxSize: 5 }),
       );
       expect(arr.length).toBeLessThanOrEqual(5);
     }, FEW),
@@ -46,9 +49,12 @@ describe("arrays with non-basic elements (collection protocol)", () => {
 
   test(
     "respects minSize",
-    hegel((tc) => {
+    hegel.test((tc) => {
       const arr = tc.draw(
-        arrays(nonBasic(integers({ minValue: 0, maxValue: 100 })), { minSize: 1, maxSize: 10 }),
+        gs.arrays(nonBasic(gs.integers({ minValue: 0, maxValue: 100 })), {
+          minSize: 1,
+          maxSize: 10,
+        }),
       );
       expect(arr.length).toBeGreaterThanOrEqual(1);
     }, FEW),
@@ -56,8 +62,8 @@ describe("arrays with non-basic elements (collection protocol)", () => {
 
   test(
     "with no max: generates a list",
-    hegel((tc) => {
-      const arr = tc.draw(arrays(nonBasic(integers({ minValue: 0, maxValue: 10 }))));
+    hegel.test((tc) => {
+      const arr = tc.draw(gs.arrays(nonBasic(gs.integers({ minValue: 0, maxValue: 10 }))));
       expect(Array.isArray(arr)).toBe(true);
       for (const x of arr) {
         expect(x).toBeGreaterThanOrEqual(0);
@@ -68,9 +74,12 @@ describe("arrays with non-basic elements (collection protocol)", () => {
 
   test(
     "unique arrays with non-basic elements reject duplicates",
-    hegel((tc) => {
+    hegel.test((tc) => {
       const arr = tc.draw(
-        arrays(nonBasic(integers({ minValue: 0, maxValue: 20 })), { maxSize: 5, unique: true }),
+        gs.arrays(nonBasic(gs.integers({ minValue: 0, maxValue: 20 })), {
+          maxSize: 5,
+          unique: true,
+        }),
       );
       const uniqueCount = new Set(arr).size;
       expect(uniqueCount).toBe(arr.length);
@@ -81,8 +90,10 @@ describe("arrays with non-basic elements (collection protocol)", () => {
 describe("sets with non-basic elements (collection protocol)", () => {
   test(
     "generates sets of filtered integers",
-    hegel((tc) => {
-      const s = tc.draw(sets(nonBasic(integers({ minValue: 0, maxValue: 100 })), { maxSize: 5 }));
+    hegel.test((tc) => {
+      const s = tc.draw(
+        gs.sets(nonBasic(gs.integers({ minValue: 0, maxValue: 100 })), { maxSize: 5 }),
+      );
       expect(s).toBeInstanceOf(Set);
       expect(s.size).toBeLessThanOrEqual(5);
     }, FEW),
@@ -90,9 +101,9 @@ describe("sets with non-basic elements (collection protocol)", () => {
 
   test(
     "respects minSize",
-    hegel((tc) => {
+    hegel.test((tc) => {
       const s = tc.draw(
-        sets(nonBasic(integers({ minValue: 0, maxValue: 100 })), { minSize: 1, maxSize: 10 }),
+        gs.sets(nonBasic(gs.integers({ minValue: 0, maxValue: 100 })), { minSize: 1, maxSize: 10 }),
       );
       expect(s.size).toBeGreaterThanOrEqual(1);
     }, FEW),
@@ -102,11 +113,11 @@ describe("sets with non-basic elements (collection protocol)", () => {
 describe("maps with non-basic elements (collection protocol)", () => {
   test(
     "generates maps with filtered keys",
-    hegel((tc) => {
+    hegel.test((tc) => {
       const m = tc.draw(
-        maps(
-          integers({ minValue: 0, maxValue: 100 }).filter((x) => x > 5),
-          booleans(),
+        gs.maps(
+          gs.integers({ minValue: 0, maxValue: 100 }).filter((x) => x > 5),
+          gs.booleans(),
           {
             maxSize: 3,
           },
@@ -122,11 +133,15 @@ describe("maps with non-basic elements (collection protocol)", () => {
 
   test(
     "generates maps with filtered values",
-    hegel((tc) => {
+    hegel.test((tc) => {
       const m = tc.draw(
-        maps(text({ minSize: 1, maxSize: 3 }), nonBasic(integers({ minValue: 0, maxValue: 100 })), {
-          maxSize: 3,
-        }),
+        gs.maps(
+          gs.text({ minSize: 1, maxSize: 3 }),
+          nonBasic(gs.integers({ minValue: 0, maxValue: 100 })),
+          {
+            maxSize: 3,
+          },
+        ),
       );
       expect(m).toBeInstanceOf(Map);
     }, FEW),
@@ -134,9 +149,9 @@ describe("maps with non-basic elements (collection protocol)", () => {
 
   test(
     "respects minSize",
-    hegel((tc) => {
+    hegel.test((tc) => {
       const m = tc.draw(
-        maps(nonBasic(integers({ minValue: 0, maxValue: 100 })), booleans(), {
+        gs.maps(nonBasic(gs.integers({ minValue: 0, maxValue: 100 })), gs.booleans(), {
           minSize: 1,
           maxSize: 5,
         }),

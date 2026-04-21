@@ -7,27 +7,8 @@
  */
 
 import { describe, test } from "vitest";
-import {
-  hegel,
-  integers,
-  floats,
-  booleans,
-  text,
-  binary,
-  just,
-  sampledFrom,
-  fromRegex,
-  emails,
-  urls,
-  dates,
-  datetimes,
-  tuples,
-  oneOf,
-  optional,
-  maps,
-  arrays,
-  composite,
-} from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 // ---------------------------------------------------------------------------
 // Showcase 1: boolean double-negation
@@ -39,9 +20,9 @@ import {
  */
 test(
   "boolean double negation is identity",
-  hegel(
+  hegel.test(
     (tc) => {
-      const b = tc.draw(booleans());
+      const b = tc.draw(gs.booleans());
       if (!!b !== b) {
         throw new Error(`!!b !== b for b=${String(b)}`);
       }
@@ -60,10 +41,10 @@ test(
  */
 test(
   "boolean OR is commutative",
-  hegel(
+  hegel.test(
     (tc) => {
-      const a = tc.draw(booleans());
-      const b = tc.draw(booleans());
+      const a = tc.draw(gs.booleans());
+      const b = tc.draw(gs.booleans());
       if ((a || b) !== (b || a)) {
         throw new Error(`OR not commutative: a=${String(a)}, b=${String(b)}`);
       }
@@ -73,7 +54,7 @@ test(
 );
 
 // ---------------------------------------------------------------------------
-// Showcase 3: integers using the integers() generator
+// Showcase 3: integers using the gs.integers() generator
 // ---------------------------------------------------------------------------
 
 /**
@@ -82,10 +63,10 @@ test(
  */
 test(
   "integer addition is commutative",
-  hegel(
+  hegel.test(
     (tc) => {
-      const x = tc.draw(integers({ minValue: -100, maxValue: 100 }));
-      const y = tc.draw(integers({ minValue: -100, maxValue: 100 }));
+      const x = tc.draw(gs.integers({ minValue: -100, maxValue: 100 }));
+      const y = tc.draw(gs.integers({ minValue: -100, maxValue: 100 }));
       if (x + y !== y + x) {
         throw new Error(`x + y !== y + x for x=${x}, y=${y}`);
       }
@@ -105,9 +86,9 @@ describe("property: filtered assume", () => {
    */
   test(
     "assume() filters to only true booleans",
-    hegel(
+    hegel.test(
       (tc) => {
-        const b = tc.draw(booleans());
+        const b = tc.draw(gs.booleans());
         tc.assume(b); // Only continue when b is true
         // b must be true here -- if it were false, assume() would have thrown
         if (!b) {
@@ -120,18 +101,18 @@ describe("property: filtered assume", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Showcase 5: just() -- constants are always equal to themselves
+// Showcase 5: gs.just() -- constants are always equal to themselves
 // ---------------------------------------------------------------------------
 
 /**
- * just(x) always returns x regardless of server suggestions.
- * For every run: just(42).generate() === 42
+ * gs.just(x) always returns x regardless of server suggestions.
+ * For every run: gs.just(42).generate() === 42
  */
 test(
-  "just() always returns the constant value",
-  hegel(
+  "gs.just() always returns the constant value",
+  hegel.test(
     (tc) => {
-      const v = tc.draw(just(42));
+      const v = tc.draw(gs.just(42));
       if (v !== 42) {
         throw new Error(`Expected 42, got ${v}`);
       }
@@ -141,20 +122,20 @@ test(
 );
 
 // ---------------------------------------------------------------------------
-// Showcase 6: sampledFrom() -- values come from the list
+// Showcase 6: gs.sampledFrom() -- values come from the list
 // ---------------------------------------------------------------------------
 
 /**
- * sampledFrom(xs) always returns an element of xs.
+ * gs.sampledFrom(xs) always returns an element of xs.
  * Demonstrates that sampling preserves membership.
  */
 test(
-  "sampledFrom() only returns elements from the input list",
-  hegel(
+  "gs.sampledFrom() only returns elements from the input list",
+  hegel.test(
     (tc) => {
       const colors = ["red", "green", "blue"] as const;
       const colorSet = new Set<string>(colors);
-      const v = tc.draw(sampledFrom([...colors]));
+      const v = tc.draw(gs.sampledFrom([...colors]));
       if (!colorSet.has(v)) {
         throw new Error(`Unexpected value: ${v}`);
       }
@@ -164,20 +145,20 @@ test(
 );
 
 // ---------------------------------------------------------------------------
-// Showcase 7: fromRegex() -- generated strings match the pattern
+// Showcase 7: gs.fromRegex() -- generated strings match the pattern
 // ---------------------------------------------------------------------------
 
 /**
- * fromRegex(pattern) generates strings that fully match the pattern.
+ * gs.fromRegex(pattern) generates strings that fully match the pattern.
  * Demonstrates regex-constrained generation.
  */
 test(
-  "fromRegex() generates strings matching the pattern",
-  hegel(
+  "gs.fromRegex() generates strings matching the pattern",
+  hegel.test(
     (tc) => {
       const pattern = "[A-Z]{2}[0-9]{4}";
       const re = new RegExp(`^${pattern}$`);
-      const v = tc.draw(fromRegex(pattern, { fullmatch: true }));
+      const v = tc.draw(gs.fromRegex(pattern, { fullmatch: true }));
       if (!re.test(v)) {
         throw new Error(`"${v}" does not match pattern /${pattern}/`);
       }
@@ -195,9 +176,9 @@ test(
  */
 test(
   "email addresses contain exactly one '@' with non-empty parts",
-  hegel(
+  hegel.test(
     (tc) => {
-      const email = tc.draw(emails());
+      const email = tc.draw(gs.emails());
       const atIndex = email.indexOf("@");
       if (atIndex <= 0) {
         throw new Error(`Email has no local part before '@': ${email}`);
@@ -220,9 +201,9 @@ test(
  */
 test(
   "URLs have a valid http/https scheme and a host",
-  hegel(
+  hegel.test(
     (tc) => {
-      const rawUrl = tc.draw(urls());
+      const rawUrl = tc.draw(gs.urls());
       let parsed: URL;
       try {
         parsed = new URL(rawUrl);
@@ -250,9 +231,9 @@ test(
  */
 test(
   "generated dates round-trip through Date parsing",
-  hegel(
+  hegel.test(
     (tc) => {
-      const dateStr = tc.draw(dates());
+      const dateStr = tc.draw(gs.dates());
       // Parse as midnight UTC to avoid timezone shifts
       const parsed = new Date(dateStr + "T00:00:00Z");
       if (isNaN(parsed.getTime())) {
@@ -276,9 +257,9 @@ test(
  */
 test(
   "datetimes contain both date part and time part separated by T",
-  hegel(
+  hegel.test(
     (tc) => {
-      const dtStr = tc.draw(datetimes());
+      const dtStr = tc.draw(gs.datetimes());
       const tIndex = dtStr.indexOf("T");
       if (tIndex <= 0) {
         throw new Error(`Datetime has no date part before 'T': ${dtStr}`);
@@ -306,10 +287,10 @@ test(
  */
 test(
   "triangle inequality holds for finite floats",
-  hegel(
+  hegel.test(
     (tc) => {
-      const x = tc.draw(floats({ minValue: -1e6, maxValue: 1e6 }));
-      const y = tc.draw(floats({ minValue: -1e6, maxValue: 1e6 }));
+      const x = tc.draw(gs.floats({ minValue: -1e6, maxValue: 1e6 }));
+      const y = tc.draw(gs.floats({ minValue: -1e6, maxValue: 1e6 }));
       // Both are finite (no NaN/Inf due to bounded range)
       const lhs = Math.abs(x + y);
       const rhs = Math.abs(x) + Math.abs(y);
@@ -332,10 +313,10 @@ test(
  */
 test(
   "De Morgan's law: !(a && b) === !a || !b",
-  hegel(
+  hegel.test(
     (tc) => {
-      const a = tc.draw(booleans());
-      const b = tc.draw(booleans());
+      const a = tc.draw(gs.booleans());
+      const b = tc.draw(gs.booleans());
       const lhs = !(a && b);
       const rhs = !a || !b;
       if (lhs !== rhs) {
@@ -358,9 +339,9 @@ test(
  */
 test(
   "reversing a string twice is the identity",
-  hegel(
+  hegel.test(
     (tc) => {
-      const s = tc.draw(text({ minSize: 0, maxSize: 20 }));
+      const s = tc.draw(gs.text({ minSize: 0, maxSize: 20 }));
       const reversed = [...s].reverse().join("");
       const doubleReversed = [...reversed].reverse().join("");
       if (doubleReversed !== s) {
@@ -381,10 +362,10 @@ test(
  */
 test(
   "byte array concatenation length is additive",
-  hegel(
+  hegel.test(
     (tc) => {
-      const a = tc.draw(binary({ minSize: 0, maxSize: 10 }));
-      const b = tc.draw(binary({ minSize: 0, maxSize: 10 }));
+      const a = tc.draw(gs.binary({ minSize: 0, maxSize: 10 }));
+      const b = tc.draw(gs.binary({ minSize: 0, maxSize: 10 }));
       const combined = new Uint8Array(a.byteLength + b.byteLength);
       combined.set(a, 0);
       combined.set(b, a.byteLength);
@@ -403,19 +384,19 @@ test(
 // ---------------------------------------------------------------------------
 
 /**
- * `integers(1, 5).flatMap(n => text(n, n))` always produces a string whose
+ * `gs.integers(1, 5).flatMap(n => gs.text(n, n))` always produces a string whose
  * Unicode codepoint count equals n. This demonstrates dependent generation:
  * the second generator is chosen based on the first generated value.
  */
 test(
   "flatMap: text length equals the controlling integer",
-  hegel(
+  hegel.test(
     (tc) => {
       let capturedN = 0;
       const s = tc.draw(
-        integers({ minValue: 1, maxValue: 5 }).flatMap((n) => {
+        gs.integers({ minValue: 1, maxValue: 5 }).flatMap((n) => {
           capturedN = n;
-          return text({ minSize: n, maxSize: n });
+          return gs.text({ minSize: n, maxSize: n });
         }),
       );
       const codepoints = Array.from(s).length;
@@ -440,12 +421,14 @@ test(
  */
 test(
   "flatMap: array length matches the generated width",
-  hegel(
+  hegel.test(
     (tc) => {
       // Generate width n, then produce a list of exactly n integers
-      const gen = integers({ minValue: 2, maxValue: 4 }).flatMap((n) =>
-        arrays(integers({ minValue: 0, maxValue: 99 }), { minSize: n, maxSize: n }),
-      );
+      const gen = gs
+        .integers({ minValue: 2, maxValue: 4 })
+        .flatMap((n) =>
+          gs.arrays(gs.integers({ minValue: 0, maxValue: 99 }), { minSize: n, maxSize: n }),
+        );
       const row = tc.draw(gen);
       // The row contains only integers in [0, 99]
       for (const elem of row) {
@@ -467,16 +450,16 @@ test(
 // ---------------------------------------------------------------------------
 
 /**
- * tuples(integers(0, 10), booleans()) generates pairs where the integer is in [0,10]
+ * gs.tuples(gs.integers(0, 10), gs.booleans()) generates pairs where the integer is in [0,10]
  * and the boolean is a boolean. The two components are independent.
  *
  * Interesting property: negating the boolean does not affect the integer.
  */
 test(
   "tuples: integer and boolean components are independent",
-  hegel(
+  hegel.test(
     (tc) => {
-      const [n, b] = tc.draw(tuples(integers({ minValue: 0, maxValue: 10 }), booleans()));
+      const [n, b] = tc.draw(gs.tuples(gs.integers({ minValue: 0, maxValue: 10 }), gs.booleans()));
       // Integer constraint
       if (n < 0 || n > 10 || !Number.isInteger(n)) {
         throw new Error(`Integer component out of range [0,10]: ${n}`);
@@ -500,7 +483,7 @@ test(
 // ---------------------------------------------------------------------------
 
 /**
- * tuples(text(1, 5), integers(0, 100), floats(0, 1)) generates 3-tuples where
+ * gs.tuples(gs.text(1, 5), gs.integers(0, 100), gs.floats(0, 1)) generates 3-tuples where
  * - the string has 1-5 codepoints
  * - the integer is in [0, 100]
  * - the float is in [0.0, 1.0]
@@ -509,13 +492,13 @@ test(
  */
 test(
   "tuples 3-arity: per-component constraints hold independently",
-  hegel(
+  hegel.test(
     (tc) => {
       const [s, n, f] = tc.draw(
-        tuples(
-          text({ minSize: 1, maxSize: 5 }),
-          integers({ minValue: 0, maxValue: 100 }),
-          floats({ minValue: 0, maxValue: 1 }),
+        gs.tuples(
+          gs.text({ minSize: 1, maxSize: 5 }),
+          gs.integers({ minValue: 0, maxValue: 100 }),
+          gs.floats({ minValue: 0, maxValue: 1 }),
         ),
       );
       const codepoints = Array.from(s).length;
@@ -543,16 +526,16 @@ test(
 // ---------------------------------------------------------------------------
 
 /**
- * maps(text({maxSize: 5}), integers(0, 100)) generates a Map where every key
+ * gs.maps(gs.text({maxSize: 5}), gs.integers(0, 100)) generates a Map where every key
  * is a short string and every value is in [0, 100]. Demonstrates the basic
  * (server-managed) dict generator.
  */
 test(
   "maps: all keys and values satisfy their generator constraints",
-  hegel(
+  hegel.test(
     (tc) => {
       const result = tc.draw(
-        maps(text({ minSize: 0, maxSize: 5 }), integers({ minValue: 0, maxValue: 100 }), {
+        gs.maps(gs.text({ minSize: 0, maxSize: 5 }), gs.integers({ minValue: 0, maxValue: 100 }), {
           minSize: 0,
           maxSize: 5,
         }),
@@ -578,15 +561,18 @@ test(
 // ---------------------------------------------------------------------------
 
 /**
- * maps(integers(0,10), booleans(), {minSize: 1, maxSize: 3}) generates Maps
+ * gs.maps(gs.integers(0,10), gs.booleans(), {minSize: 1, maxSize: 3}) generates Maps
  * with exactly 1-3 entries. Demonstrates size constraints on map generation.
  */
 test(
   "maps: size bounds [minSize=1, maxSize=3] are respected",
-  hegel(
+  hegel.test(
     (tc) => {
       const result = tc.draw(
-        maps(integers({ minValue: 0, maxValue: 10 }), booleans(), { minSize: 1, maxSize: 3 }),
+        gs.maps(gs.integers({ minValue: 0, maxValue: 10 }), gs.booleans(), {
+          minSize: 1,
+          maxSize: 3,
+        }),
       );
       const size = result.size;
       if (size < 1 || size > 3) {
@@ -602,16 +588,16 @@ test(
 // ---------------------------------------------------------------------------
 
 /**
- * oneOf(integers(0, 100), text(1, 10)) produces values that are either
+ * gs.oneOf(gs.integers(0, 100), gs.text(1, 10)) produces values that are either
  * a non-negative integer <= 100 or a non-empty string with at most 10 codepoints.
  * Every value satisfies the constraints of its branch.
  */
 test(
   "oneOf: every value satisfies the constraints of its branch",
-  hegel(
+  hegel.test(
     (tc) => {
       const v = tc.draw(
-        oneOf(integers({ minValue: 0, maxValue: 100 }), text({ minSize: 1, maxSize: 10 })),
+        gs.oneOf(gs.integers({ minValue: 0, maxValue: 100 }), gs.text({ minSize: 1, maxSize: 10 })),
       );
       if (typeof v === "number") {
         if (!Number.isInteger(v) || v < 0 || v > 100) {
@@ -635,18 +621,18 @@ test(
 // ---------------------------------------------------------------------------
 
 /**
- * oneOf(integers(0, 10).map(x => x * 2), booleans()) produces values that are
+ * gs.oneOf(gs.integers(0, 10).map(x => x * 2), gs.booleans()) produces values that are
  * either an even integer in [0, 20] or a boolean. When the integer branch is
  * chosen, the map transform must have been applied (value is always even).
  */
 test(
   "oneOf with map: integer branch always produces even values",
-  hegel(
+  hegel.test(
     (tc) => {
       const v = tc.draw(
-        oneOf(
-          integers({ minValue: 0, maxValue: 10 }).map((x) => x * 2),
-          booleans(),
+        gs.oneOf(
+          gs.integers({ minValue: 0, maxValue: 10 }).map((x) => x * 2),
+          gs.booleans(),
         ),
       );
       if (typeof v === "number") {
@@ -666,15 +652,15 @@ test(
 // ---------------------------------------------------------------------------
 
 /**
- * optional(integers(1, 100)) produces null or a positive integer.
+ * gs.optional(gs.integers(1, 100)) produces null or a positive integer.
  * When a value is produced, it must be in [1, 100].
  * This demonstrates optional as a null-safe generator pattern.
  */
 test(
   "optional: null or value within bounds",
-  hegel(
+  hegel.test(
     (tc) => {
-      const v = tc.draw(optional(integers({ minValue: 1, maxValue: 100 })));
+      const v = tc.draw(gs.optional(gs.integers({ minValue: 1, maxValue: 100 })));
       if (v === null) {
         // null is valid -- the optional case
         return;
@@ -693,15 +679,15 @@ test(
 
 /**
  * Every element in a filtered list satisfies the predicate.
- * Demonstrates that arrays() correctly composes with filter().
+ * Demonstrates that gs.arrays() correctly composes with filter().
  */
 test(
   "filtered list: every element satisfies the filter predicate",
-  hegel(
+  hegel.test(
     (tc) => {
       const xs = tc.draw(
-        arrays(
-          integers({ minValue: 0, maxValue: 100 }).filter((x) => x % 2 === 0),
+        gs.arrays(
+          gs.integers({ minValue: 0, maxValue: 100 }).filter((x) => x % 2 === 0),
           { minSize: 1, maxSize: 5 },
         ),
       );
@@ -728,10 +714,10 @@ test(
  */
 test(
   "reversing a list twice is the identity",
-  hegel(
+  hegel.test(
     (tc) => {
       const xs = tc.draw(
-        arrays(integers({ minValue: 0, maxValue: 100 }), { minSize: 0, maxSize: 10 }),
+        gs.arrays(gs.integers({ minValue: 0, maxValue: 100 }), { minSize: 0, maxSize: 10 }),
       );
       const once = [...xs].reverse();
       const twice = [...once].reverse();
@@ -759,11 +745,11 @@ test(
  */
 test(
   "composite record: distance between two points is non-negative",
-  hegel(
+  hegel.test(
     (tc) => {
-      const pointGen = composite((inner) => ({
-        x: inner.draw(floats({ minValue: -100, maxValue: 100 })),
-        y: inner.draw(floats({ minValue: -100, maxValue: 100 })),
+      const pointGen = gs.composite((inner) => ({
+        x: inner.draw(gs.floats({ minValue: -100, maxValue: 100 })),
+        y: inner.draw(gs.floats({ minValue: -100, maxValue: 100 })),
       }));
 
       const p1 = tc.draw(pointGen);
@@ -796,11 +782,11 @@ test(
  */
 test(
   "composite record: Vector2D magnitude is bounded by sqrt(2)*1000",
-  hegel(
+  hegel.test(
     (tc) => {
-      const vecGen = composite((inner) => ({
-        x: inner.draw(floats({ minValue: -1000, maxValue: 1000 })),
-        y: inner.draw(floats({ minValue: -1000, maxValue: 1000 })),
+      const vecGen = gs.composite((inner) => ({
+        x: inner.draw(gs.floats({ minValue: -1000, maxValue: 1000 })),
+        y: inner.draw(gs.floats({ minValue: -1000, maxValue: 1000 })),
       }));
 
       const v = tc.draw(vecGen);
@@ -826,30 +812,30 @@ test(
  */
 test(
   "oneOf: every Shape has non-negative area",
-  hegel(
+  hegel.test(
     (tc) => {
       type Shape =
         | { type: "circle"; radius: number }
         | { type: "rectangle"; width: number; height: number }
         | { type: "point" };
 
-      const shapeGen = oneOf<Shape>(
-        composite((inner) => ({
+      const shapeGen = gs.oneOf<Shape>(
+        gs.composite((inner) => ({
           type: "circle" as const,
           radius: inner.draw(
-            floats({ minValue: 0, maxValue: 100, allowNan: false, allowInfinity: false }),
+            gs.floats({ minValue: 0, maxValue: 100, allowNan: false, allowInfinity: false }),
           ),
         })),
-        composite((inner) => ({
+        gs.composite((inner) => ({
           type: "rectangle" as const,
           width: inner.draw(
-            floats({ minValue: 0, maxValue: 100, allowNan: false, allowInfinity: false }),
+            gs.floats({ minValue: 0, maxValue: 100, allowNan: false, allowInfinity: false }),
           ),
           height: inner.draw(
-            floats({ minValue: 0, maxValue: 100, allowNan: false, allowInfinity: false }),
+            gs.floats({ minValue: 0, maxValue: 100, allowNan: false, allowInfinity: false }),
           ),
         })),
-        composite(() => ({ type: "point" as const })),
+        gs.composite(() => ({ type: "point" as const })),
       );
 
       const shape = tc.draw(shapeGen);
@@ -882,23 +868,23 @@ test(
  */
 test(
   "oneOf: nested records in message protocol",
-  hegel(
+  hegel.test(
     (tc) => {
       type Message =
         | { kind: "text"; body: string; sender: string }
         | { kind: "image"; url: string; width: number; height: number };
 
-      const msgGen = oneOf<Message>(
-        composite((inner) => ({
+      const msgGen = gs.oneOf<Message>(
+        gs.composite((inner) => ({
           kind: "text" as const,
-          body: inner.draw(text({ minSize: 1, maxSize: 50 })),
-          sender: inner.draw(text({ minSize: 1, maxSize: 10 })),
+          body: inner.draw(gs.text({ minSize: 1, maxSize: 50 })),
+          sender: inner.draw(gs.text({ minSize: 1, maxSize: 10 })),
         })),
-        composite((inner) => ({
+        gs.composite((inner) => ({
           kind: "image" as const,
-          url: inner.draw(text({ minSize: 5, maxSize: 30 })),
-          width: inner.draw(integers({ minValue: 1, maxValue: 4096 })),
-          height: inner.draw(integers({ minValue: 1, maxValue: 4096 })),
+          url: inner.draw(gs.text({ minSize: 5, maxSize: 30 })),
+          width: inner.draw(gs.integers({ minValue: 1, maxValue: 4096 })),
+          height: inner.draw(gs.integers({ minValue: 1, maxValue: 4096 })),
         })),
       );
 

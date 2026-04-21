@@ -1,4 +1,4 @@
-import { encode, decode, addExtension } from "cbor-x";
+import { addExtension } from "cbor-x";
 import { crc32 } from "./crc32.js";
 import { wtf8ToString } from "./wtf8.js";
 
@@ -53,10 +53,6 @@ export function encodePacket(packet: Packet): Buffer {
   return Buffer.concat([header, packet.payload, Buffer.from([TERMINATOR])]);
 }
 
-// ---------------------------------------------------------------------------
-// Packet decoding
-// ---------------------------------------------------------------------------
-
 /**
  * Decode a packet from raw bytes.
  *
@@ -99,16 +95,4 @@ export function readPacketFrom(readExact: (n: number) => Buffer): Packet {
   }
 
   return { streamId, messageId, isReply, payload };
-}
-
-// ---------------------------------------------------------------------------
-// CBOR encode / decode
-// ---------------------------------------------------------------------------
-
-export function encodeValue(value: unknown): Buffer {
-  return encode(value);
-}
-
-export function decodeValue(data: Buffer): unknown {
-  return decode(data);
 }

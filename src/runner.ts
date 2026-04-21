@@ -8,7 +8,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { HegelSession } from "./session.js";
 import { TestCase, StopTestError, AssumeError, type DataSource } from "./testCase.js";
-import { encodeValue, decodeValue } from "./protocol.js";
+import { encode, decode } from "cbor-x";
 import type { Connection, Stream } from "./connection.js";
 
 export enum Verbosity {
@@ -107,10 +107,10 @@ export class ServerDataSource implements DataSource {
     /* v8 ignore stop */
 
     const message: Record<string, unknown> = { command, ...payload };
-    const encoded = encodeValue(message);
+    const encoded = encode(message);
     const id = this.stream.sendRequest(encoded);
     const responseBytes = this.stream.receiveReply(id);
-    const response = decodeValue(responseBytes);
+    const response = decode(responseBytes);
 
     /* v8 ignore start: server always returns CBOR maps */
     if (!isRecord(response)) return response;
@@ -211,7 +211,7 @@ export class ServerDataSource implements DataSource {
         status,
         origin: origin ?? null,
       };
-      const encoded = encodeValue(message);
+      const encoded = encode(message);
       const id = this.stream.sendRequest(encoded);
       this.stream.receiveReply(id);
     } catch {
@@ -268,9 +268,9 @@ export function runTestCase(
 
       if (isFinal) {
         const msg = e instanceof Error ? e.message : String(e);
-        process.stderr.write(`\n${msg}\n`);
+        console.error(`\n${msg}`);
         if (e instanceof Error && e.stack) {
-          process.stderr.write(e.stack + "\n");
+          console.error(e.stack);
         }
       }
     }
@@ -418,17 +418,17 @@ export class Hegel {
     }
 
     // Send run_test on control stream
-    const controlPayload = encodeValue(runTestMsg);
+    const controlPayload = encode(runTestMsg);
     const reqId = session.controlStream.sendRequest(controlPayload);
     session.controlStream.receiveReply(reqId);
 
     // Event loop
     let resultData: Record<string, unknown>;
-    const ackNull = encodeValue({ result: null });
+    const ackNull = encode({ result: null });
 
     while (true) {
       const [eventId, eventPayload] = testStream.receiveRequest();
-      const event = decodeValue(eventPayload) as Record<string, unknown>;
+      const event = decode(eventPayload) as Record<string, unknown>;
       const eventType = event["event"] as string;
 
       if (eventType === "test_case") {
@@ -448,7 +448,7 @@ export class Hegel {
           throw new Error(`Unknown event: ${eventType}`);
         }
         /* v8 ignore stop */
-        const ackTrue = encodeValue({ result: true });
+        const ackTrue = encode({ result: true });
         testStream.writeReply(eventId, ackTrue);
         /* v8 ignore start: server always sends results object */
         resultData = (event["results"] as Record<string, unknown>) ?? {};
@@ -479,7 +479,7 @@ export class Hegel {
 
     for (let i = 0; i < nInteresting; i++) {
       const [eventId, eventPayload] = testStream.receiveRequest();
-      const event = decodeValue(eventPayload) as Record<string, unknown>;
+      const event = decode(eventPayload) as Record<string, unknown>;
       const streamId = event["stream_id"] as number;
       const testCaseStream = connection.connectStream(streamId);
 
@@ -527,16 +527,17 @@ export class Hegel {
  * @example
  * ```ts
  * import { test } from 'vitest';
- * import { hegel, integers } from 'hegel';
+ * import * as hegel from 'hegel';
+ * import * as gs from 'hegel/generators';
  *
- * test('addition is commutative', hegel((tc) => {
- *   const x = tc.draw(integers());
- *   const y = tc.draw(integers());
+ * test('addition is commutative', hegel.test((tc) => {
+ *   const x = tc.draw(gs.integers());
+ *   const y = tc.draw(gs.integers());
  *   expect(x + y).toBe(y + x);
  * }));
  * ```
  */
-export function hegel(testFn: (tc: TestCase) => void, settings?: Partial<Settings>): () => void {
+export function test(testFn: (tc: TestCase) => void, settings?: Partial<Settings>): () => void {
   return () => {
     const h = new Hegel(testFn);
     if (settings) h.settings(settings);

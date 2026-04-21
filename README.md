@@ -1,48 +1,59 @@
-# hegel-typescript
+> [!IMPORTANT]
+> We're excited you're checking out Hegel! Hegel is in beta, and we'd love for you to try it and [report any feedback](https://github.com/hegeldev/hegel-typescript/issues/new).
+>
+> As part of our beta, we may make breaking changes if it makes Hegel a better property-based testing library. If that instability bothers you, please check back in a few months for a stable release!
+>
+> See https://hegel.dev/compatibility for more details.
 
-A TypeScript library for [Hegel](https://github.com/hegeldev/hegel-core) —
-universal property-based testing powered by
-[Hypothesis](https://hypothesis.works/).
+# Hegel for TypeScript
 
-Hegel generates random inputs for your tests, finds failures, and automatically
-shrinks them to minimal counterexamples.
+- [Documentation](https://hegel.dev/typescript)
+- [Website](https://hegel.dev)
+
+Hegel is a property-based testing library for TypeScript. Hegel is based on [Hypothesis](https://github.com/hypothesisworks/hypothesis), using the [Hegel protocol](https://hegel.dev/).
 
 ## Installation
 
-```bash
-npm install "git+ssh://git@github.com/antithesishq/hegel-typescript.git"
-```
+To install: `npm install --save-dev hegel`.
 
-The library requires the `hegel` CLI on your PATH:
+Hegel will use [uv](https://docs.astral.sh/uv/) to install the required [hegel-core](https://github.com/hegeldev/hegel-core) server component.
+If `uv` is already on your path, it will use that, otherwise it will download a private copy of it to ~/.cache/hegel and not put it on your path.
+See https://hegel.dev/reference/installation for details.
 
-```bash
-pip install hegel-core
-```
+If you are on windows (which is only supported on a somewhat experimental basis right now), the automatic uv installation doesn't work yet, and you will need to [install uv yourself](https://docs.astral.sh/uv/getting-started/installation/#__tabbed_1_2) and make sure it is on your path.
 
-## Quick Start
+## Quickstart
+
+Here's a quick example of how to write a Hegel test:
 
 ```typescript
-import { runHegelTest, integers } from "hegel";
+import { test } from "vitest";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
-it("addition is commutative", async () => {
-  await runHegelTest(async () => {
-    const a = await integers().generate();
-    const b = await integers().generate();
-    expect(a + b).toBe(b + a);
-  });
-});
+function mySort(ls: number[]): number[] {
+  const result = [...ls].sort((a, b) => a - b);
+  return [...new Set(result)];
+}
+
+test(
+  "my_sort matches builtin",
+  hegel.test((tc) => {
+    const vec1 = tc.draw(gs.arrays(gs.integers()));
+    const vec2 = mySort(vec1);
+    const sorted = [...vec1].sort((a, b) => a - b);
+    if (JSON.stringify(sorted) !== JSON.stringify(vec2)) {
+      throw new Error(`sort mismatch: ${JSON.stringify(sorted)} != ${JSON.stringify(vec2)}`);
+    }
+  }),
+);
 ```
 
-Run with your test runner (Vitest, Jest, etc.) as normal. Hegel generates 100
-random input pairs and reports the minimal counterexample if it finds one.
+This test will fail when run with `vitest`! Hegel will produce a minimal failing test case for us:
 
-For a full walkthrough, see [guide/getting-started.md](guide/getting-started.md).
-
-## Development
-
-```bash
-just setup   # Install dependencies + hegel binary
-just check   # Full CI: lint + docs + tests with 100% coverage
-just test    # Run tests only
-just format  # Auto-format code
 ```
+Draw 1: [0, 0]
+Error: sort mismatch: [0,0] != [0]
+```
+
+Hegel reports the minimal example showing that our sort is incorrectly dropping duplicates. If we remove the `new Set(...)` deduplication from `mySort()`, this test will then pass (because it's just comparing the standard sort against itself).
