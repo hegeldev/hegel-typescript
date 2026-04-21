@@ -268,9 +268,9 @@ export function runTestCase(
 
       if (isFinal) {
         const msg = e instanceof Error ? e.message : String(e);
-        process.stderr.write(`\n${msg}\n`);
+        console.error(`\n${msg}`);
         if (e instanceof Error && e.stack) {
-          process.stderr.write(e.stack + "\n");
+          console.error(e.stack);
         }
       }
     }

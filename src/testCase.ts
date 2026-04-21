@@ -100,7 +100,7 @@ export class TestCase {
     if (this.spanDepth === 0) {
       this.drawCount++;
       if (this._isLastRun) {
-        process.stderr.write(`var draw_${this.drawCount} = ${inspect(value, { depth: null })};\n`);
+        console.error(`var draw_${this.drawCount} = ${inspect(value, { depth: null })};`);
       }
     }
     return value;
@@ -128,7 +128,7 @@ export class TestCase {
    */
   note(message: string): void {
     if (this._isLastRun) {
-      process.stderr.write(message + "\n");
+      console.error(message);
     }
   }
 
