@@ -6,10 +6,6 @@ import { describe, test, it, expect } from "vitest";
 import * as hegel from "hegel";
 import * as gs from "hegel/generators";
 
-// ---------------------------------------------------------------------------
-// Error classes
-// ---------------------------------------------------------------------------
-
 describe("StopTestError", () => {
   it("has correct name and message", () => {
     const e = new hegel.StopTestError();
