@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0 - 2026-04-21
+
+* Move generators under the `generators` namespace
+* Rename `hegel.hegel` to `hegel.test`
+* Automatically install uv at runtime, matching other hegel libraries
+
 ## 0.4.1 - 2026-04-20
 
 Drop node requirement to node 16.
