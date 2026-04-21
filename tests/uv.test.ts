@@ -3,11 +3,17 @@
  * `tests/embedded/uv_tests.rs` and hegel-cpp's `tests/test_uv.cpp`.
  */
 
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { cacheDirFrom, findInPath, findUvImpl, installUvWithSh } from "../src/uv.js";
+
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  return { ...actual, homedir: vi.fn(actual.homedir) };
+});
+
+import { cacheDirFrom, findInPath, findUv, findUvImpl, installUvWithSh } from "../src/uv.js";
 
 function uniqueTmp(name: string): string {
   const base = path.join(
@@ -37,6 +43,20 @@ describe("cacheDirFrom", () => {
 });
 
 describe("findInPath", () => {
+  let origPath: string | undefined;
+
+  beforeEach(() => {
+    origPath = process.env.PATH;
+  });
+
+  afterEach(() => {
+    if (origPath === undefined) {
+      delete process.env.PATH;
+    } else {
+      process.env.PATH = origPath;
+    }
+  });
+
   test("finds a known binary", () => {
     const name = process.platform === "win32" ? "cmd.exe" : "sh";
     expect(findInPath(name)).not.toBe(null);
@@ -44,6 +64,24 @@ describe("findInPath", () => {
 
   test("returns null for a missing binary", () => {
     expect(findInPath("definitely_not_a_real_binary_xyz")).toBe(null);
+  });
+
+  test("returns null when PATH is unset", () => {
+    delete process.env.PATH;
+    expect(findInPath("anything")).toBe(null);
+  });
+
+  test("skips empty entries in PATH", () => {
+    const tmp = uniqueTmp("hegel-uv-empty-path");
+    try {
+      const binName = process.platform === "win32" ? "fake.exe" : "fake";
+      const fakeBin = path.join(tmp, binName);
+      fs.writeFileSync(fakeBin, "fake");
+      process.env.PATH = `${path.delimiter}${tmp}`;
+      expect(findInPath(binName)).toBe(fakeBin);
+    } finally {
+      rmrf(tmp);
+    }
   });
 });
 
@@ -88,6 +126,60 @@ describe("findUvImpl", () => {
     },
     120_000,
   );
+});
+
+describe("findUv", () => {
+  let origPath: string | undefined;
+  let origXdg: string | undefined;
+
+  beforeEach(() => {
+    origPath = process.env.PATH;
+    origXdg = process.env.XDG_CACHE_HOME;
+  });
+
+  afterEach(() => {
+    if (origPath === undefined) {
+      delete process.env.PATH;
+    } else {
+      process.env.PATH = origPath;
+    }
+    if (origXdg === undefined) {
+      delete process.env.XDG_CACHE_HOME;
+    } else {
+      process.env.XDG_CACHE_HOME = origXdg;
+    }
+    vi.mocked(os.homedir).mockReset();
+  });
+
+  test("uses XDG_CACHE_HOME when set", () => {
+    const tmp = uniqueTmp("hegel-uv-findUv-xdg");
+    try {
+      const binName = process.platform === "win32" ? "uv.exe" : "uv";
+      const fakeUv = path.join(tmp, binName);
+      fs.writeFileSync(fakeUv, "fake");
+      process.env.PATH = tmp;
+      process.env.XDG_CACHE_HOME = path.join(tmp, "xdg");
+      vi.mocked(os.homedir).mockReturnValue("/home/test");
+      expect(findUv()).toBe(fakeUv);
+    } finally {
+      rmrf(tmp);
+    }
+  });
+
+  test("handles empty homedir() by falling back to XDG", () => {
+    const tmp = uniqueTmp("hegel-uv-findUv-nohome");
+    try {
+      const binName = process.platform === "win32" ? "uv.exe" : "uv";
+      const fakeUv = path.join(tmp, binName);
+      fs.writeFileSync(fakeUv, "fake");
+      process.env.PATH = tmp;
+      process.env.XDG_CACHE_HOME = path.join(tmp, "xdg");
+      vi.mocked(os.homedir).mockReturnValue("");
+      expect(findUv()).toBe(fakeUv);
+    } finally {
+      rmrf(tmp);
+    }
+  });
 });
 
 describe("installUvWithSh", () => {

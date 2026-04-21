@@ -15,6 +15,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
+/* v8 ignore next */
 const UV_BINARY_NAME = process.platform === "win32" ? "uv.exe" : "uv";
 
 function installScriptPath(): string {
