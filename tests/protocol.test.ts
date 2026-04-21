@@ -1,6 +1,6 @@
 /**
  * Tests for the binary wire protocol: encodePacket/readPacketFrom round-trips,
- * encodeValue/decodeValue round-trips, and protocol constants.
+ * CBOR encode/decode round-trips, and protocol constants.
  *
  * Ported from the old protocol tests. Skips socket-based readPacket/writePacket
  * and recvExact tests since the new protocol uses synchronous readPacketFrom
@@ -8,6 +8,7 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { encode, decode } from "cbor-x";
 import {
   MAGIC,
   REPLY_BIT,
@@ -19,8 +20,6 @@ import {
   type Packet,
   encodePacket,
   readPacketFrom,
-  encodeValue,
-  decodeValue,
 } from "../src/protocol.js";
 import { crc32 } from "../src/crc32.js";
 
@@ -221,8 +220,8 @@ describe("CBOR encode/decode", () => {
 
   for (const [name, value] of cases) {
     it(`round-trips ${name}`, () => {
-      const encoded = encodeValue(value);
-      const decoded = decodeValue(encoded);
+      const encoded = encode(value);
+      const decoded = decode(encoded);
       expect(decoded).toEqual(value);
     });
   }

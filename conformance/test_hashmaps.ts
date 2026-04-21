@@ -13,8 +13,8 @@
  */
 
 import { getTestCases, makeNonBasic, writeMetrics } from "./helpers.js";
-import { maps, integers, text } from "../src/generators/index.js";
-import { hegel } from "../src/runner.js";
+import * as gs from "../src/generators/index.js";
+import * as hegel from "../src/runner.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
 const mode = (params["mode"] as string | undefined) ?? "basic";
@@ -30,13 +30,13 @@ const maxVal = params["max_value"] != null ? Number(params["max_value"]) : 1000;
 const testCases = getTestCases();
 
 const baseKeysGen =
-  keyType === "string" ? text() : integers({ minValue: minKey, maxValue: maxKey });
-const baseValsGen = integers({ minValue: minVal, maxValue: maxVal });
+  keyType === "string" ? gs.text() : gs.integers({ minValue: minKey, maxValue: maxKey });
+const baseValsGen = gs.integers({ minValue: minVal, maxValue: maxVal });
 const keysGen = mode === "non_basic" ? makeNonBasic(baseKeysGen) : baseKeysGen;
 const valsGen = mode === "non_basic" ? makeNonBasic(baseValsGen) : baseValsGen;
-const gen = maps(keysGen, valsGen, { minSize, maxSize });
+const gen = gs.maps(keysGen, valsGen, { minSize, maxSize });
 
-hegel(
+hegel.test(
   function conformance_hashmaps(tc) {
     const dict = tc.draw(gen);
     const entries = [...dict.entries()];

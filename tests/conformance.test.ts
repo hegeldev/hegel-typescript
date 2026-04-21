@@ -6,7 +6,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { hegel, integers } from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 import { getTestCases, makeNonBasic, writeMetrics } from "../conformance/helpers.js";
 
 // ---------------------------------------------------------------------------
@@ -185,7 +186,7 @@ describe("writeMetrics", () => {
 
 describe("makeNonBasic", () => {
   it("returns a non-basic generator", () => {
-    const gen = integers({ minValue: 0, maxValue: 100 });
+    const gen = gs.integers({ minValue: 0, maxValue: 100 });
     expect(gen.asBasic()).not.toBeNull();
     const nonBasic = makeNonBasic(gen);
     expect(nonBasic.asBasic()).toBeNull();
@@ -193,8 +194,8 @@ describe("makeNonBasic", () => {
 
   it(
     "generates values via the compositional path",
-    hegel((tc) => {
-      const gen = makeNonBasic(integers({ minValue: 0, maxValue: 1000 }));
+    hegel.test((tc) => {
+      const gen = makeNonBasic(gs.integers({ minValue: 0, maxValue: 1000 }));
       const value = tc.draw(gen);
       expect(typeof value).toBe("number");
       expect(value).toBeGreaterThanOrEqual(0);

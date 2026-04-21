@@ -9,8 +9,8 @@
  */
 
 import { getTestCases, writeMetrics } from "./helpers.js";
-import { floats } from "../src/generators/index.js";
-import { hegel } from "../src/runner.js";
+import * as gs from "../src/generators/index.js";
+import * as hegel from "../src/runner.js";
 
 const params: Record<string, unknown> = process.argv[2] ? JSON.parse(process.argv[2]) : {};
 
@@ -25,9 +25,9 @@ const excludeMin = minValue !== undefined ? Boolean(params["exclude_min"]) : und
 const excludeMax = maxValue !== undefined ? Boolean(params["exclude_max"]) : undefined;
 
 const testCases = getTestCases();
-const gen = floats({ minValue, maxValue, allowNan, allowInfinity, excludeMin, excludeMax });
+const gen = gs.floats({ minValue, maxValue, allowNan, allowInfinity, excludeMin, excludeMax });
 
-hegel(
+hegel.test(
   function conformance_floats(tc) {
     const value = tc.draw(gen);
     const isNan = Number.isNaN(value);

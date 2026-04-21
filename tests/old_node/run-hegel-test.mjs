@@ -2,15 +2,16 @@
 // support older node versions.
 
 import assert from "node:assert/strict";
-import { Hegel, integers, arrays, booleans, text } from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 // 1. A passing property exercises draw + mark_complete on the happy path.
-new Hegel((tc) => {
-  const x = tc.draw(integers({ minValue: 0, maxValue: 100 }));
+new hegel.Hegel((tc) => {
+  const x = tc.draw(gs.integers({ minValue: 0, maxValue: 100 }));
   assert.ok(x >= 0 && x <= 100, `expected 0..100, got ${x}`);
-  const b = tc.draw(booleans());
+  const b = tc.draw(gs.booleans());
   assert.equal(typeof b, "boolean");
-  const s = tc.draw(text({ maxSize: 10 }));
+  const s = tc.draw(gs.text({ maxSize: 10 }));
   assert.equal(typeof s, "string");
 })
   .settings({ testCases: 25 })
@@ -19,8 +20,8 @@ new Hegel((tc) => {
 // 2. A failing property exercises shrinking + final-replay reporting.
 let caught = null;
 try {
-  new Hegel((tc) => {
-    const arr = tc.draw(arrays(integers({ minValue: 0, maxValue: 100 }), { maxSize: 10 }));
+  new hegel.Hegel((tc) => {
+    const arr = tc.draw(gs.arrays(gs.integers({ minValue: 0, maxValue: 100 }), { maxSize: 10 }));
     if (arr.some((x) => x > 50)) {
       throw new Error("found big number");
     }
@@ -38,8 +39,8 @@ assert.match(
 );
 
 // 3. assume() exercises the INVALID mark_complete path.
-new Hegel((tc) => {
-  const x = tc.draw(integers({ minValue: 0, maxValue: 100 }));
+new hegel.Hegel((tc) => {
+  const x = tc.draw(gs.integers({ minValue: 0, maxValue: 100 }));
   tc.assume(x > 50);
   assert.ok(x > 50);
 })

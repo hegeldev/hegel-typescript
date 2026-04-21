@@ -4,12 +4,14 @@ import { fileURLToPath } from "url";
 export default defineConfig({
   resolve: {
     alias: {
+      "hegel/generators": fileURLToPath(new URL("./src/generators/index.ts", import.meta.url)),
       hegel: fileURLToPath(new URL("./src/index.ts", import.meta.url)),
     },
   },
   test: {
     include: ["tests/**/*.test.ts"],
     testTimeout: 30000,
+    silent: "passed-only",
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],

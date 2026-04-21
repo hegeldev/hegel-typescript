@@ -3,7 +3,8 @@
  */
 
 import { describe, test, it, expect } from "vitest";
-import { StopTestError, AssumeError, Labels, hegel, Hegel, integers, booleans } from "hegel";
+import * as hegel from "hegel";
+import * as gs from "hegel/generators";
 
 // ---------------------------------------------------------------------------
 // Error classes
@@ -11,7 +12,7 @@ import { StopTestError, AssumeError, Labels, hegel, Hegel, integers, booleans } 
 
 describe("StopTestError", () => {
   it("has correct name and message", () => {
-    const e = new StopTestError();
+    const e = new hegel.StopTestError();
     expect(e.name).toBe("StopTestError");
     expect(e).toBeInstanceOf(Error);
     expect(e.message).toBe("Server ran out of data (StopTest)");
@@ -20,7 +21,7 @@ describe("StopTestError", () => {
 
 describe("AssumeError", () => {
   it("has correct name and message", () => {
-    const e = new AssumeError();
+    const e = new hegel.AssumeError();
     expect(e.name).toBe("AssumeError");
     expect(e).toBeInstanceOf(Error);
     expect(e.message).toBe("Assumption rejected");
@@ -28,26 +29,26 @@ describe("AssumeError", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Labels constants
+// hegel.Labels constants
 // ---------------------------------------------------------------------------
 
 describe("Labels", () => {
   it("has correct values", () => {
-    expect(Labels.LIST).toBe(1);
-    expect(Labels.LIST_ELEMENT).toBe(2);
-    expect(Labels.SET).toBe(3);
-    expect(Labels.SET_ELEMENT).toBe(4);
-    expect(Labels.MAP).toBe(5);
-    expect(Labels.MAP_ENTRY).toBe(6);
-    expect(Labels.TUPLE).toBe(7);
-    expect(Labels.ONE_OF).toBe(8);
-    expect(Labels.OPTIONAL).toBe(9);
-    expect(Labels.FIXED_DICT).toBe(10);
-    expect(Labels.FLAT_MAP).toBe(11);
-    expect(Labels.FILTER).toBe(12);
-    expect(Labels.MAPPED).toBe(13);
-    expect(Labels.SAMPLED_FROM).toBe(14);
-    expect(Labels.ENUM_VARIANT).toBe(15);
+    expect(hegel.Labels.LIST).toBe(1);
+    expect(hegel.Labels.LIST_ELEMENT).toBe(2);
+    expect(hegel.Labels.SET).toBe(3);
+    expect(hegel.Labels.SET_ELEMENT).toBe(4);
+    expect(hegel.Labels.MAP).toBe(5);
+    expect(hegel.Labels.MAP_ENTRY).toBe(6);
+    expect(hegel.Labels.TUPLE).toBe(7);
+    expect(hegel.Labels.ONE_OF).toBe(8);
+    expect(hegel.Labels.OPTIONAL).toBe(9);
+    expect(hegel.Labels.FIXED_DICT).toBe(10);
+    expect(hegel.Labels.FLAT_MAP).toBe(11);
+    expect(hegel.Labels.FILTER).toBe(12);
+    expect(hegel.Labels.MAPPED).toBe(13);
+    expect(hegel.Labels.SAMPLED_FROM).toBe(14);
+    expect(hegel.Labels.ENUM_VARIANT).toBe(15);
   });
 });
 
@@ -58,15 +59,15 @@ describe("Labels", () => {
 describe("assume", () => {
   test(
     "assume(true) is a no-op",
-    hegel((tc) => {
+    hegel.test((tc) => {
       tc.assume(true);
     }),
   );
 
   test(
     "assume(false) rejects the test case",
-    hegel((tc) => {
-      const x = tc.draw(integers({ minValue: 0, maxValue: 100 }));
+    hegel.test((tc) => {
+      const x = tc.draw(gs.integers({ minValue: 0, maxValue: 100 }));
       tc.assume(x > 10);
       expect(x).toBeGreaterThan(10);
     }),
@@ -80,8 +81,8 @@ describe("assume", () => {
 describe("note", () => {
   test(
     "note does not throw during exploration",
-    hegel((tc) => {
-      tc.draw(booleans());
+    hegel.test((tc) => {
+      tc.draw(gs.booleans());
       tc.note("should not throw");
     }),
   );
@@ -92,10 +93,10 @@ describe("note", () => {
 // ---------------------------------------------------------------------------
 
 describe("failing test detection", () => {
-  test("hegel() detects a property failure", () => {
+  test("hegel.test() detects a property failure", () => {
     expect(
-      hegel((tc) => {
-        const x = tc.draw(integers({ minValue: 0, maxValue: 100 }));
+      hegel.test((tc) => {
+        const x = tc.draw(gs.integers({ minValue: 0, maxValue: 100 }));
         if (x > 0) {
           throw new Error("Found positive number");
         }
@@ -105,8 +106,8 @@ describe("failing test detection", () => {
 
   test("non-Error thrown value is reported", () => {
     expect(
-      hegel((tc) => {
-        tc.draw(booleans());
+      hegel.test((tc) => {
+        tc.draw(gs.booleans());
         throw new Error("custom failure");
       }),
     ).toThrow("Property test failed");
@@ -119,8 +120,8 @@ describe("failing test detection", () => {
 
 describe("settings", () => {
   test("Hegel builder with testCases setting", () => {
-    new Hegel((tc) => {
-      const x = tc.draw(integers({ minValue: 0, maxValue: 100 }));
+    new hegel.Hegel((tc) => {
+      const x = tc.draw(gs.integers({ minValue: 0, maxValue: 100 }));
       expect(x).toBeGreaterThanOrEqual(0);
     })
       .settings({ testCases: 10 })
@@ -128,10 +129,10 @@ describe("settings", () => {
   });
 
   test(
-    "hegel() with settings override",
-    hegel(
+    "hegel.test() with settings override",
+    hegel.test(
       (tc) => {
-        const x = tc.draw(integers({ minValue: 0, maxValue: 100 }));
+        const x = tc.draw(gs.integers({ minValue: 0, maxValue: 100 }));
         expect(x).toBeGreaterThanOrEqual(0);
       },
       { testCases: 10 },
@@ -145,12 +146,12 @@ describe("settings", () => {
 
 describe("Hegel builder", () => {
   test("passes a simple test with no assertions", () => {
-    new Hegel(() => {}).run();
+    new hegel.Hegel(() => {}).run();
   });
 
   test("settings() is chainable", () => {
-    const h = new Hegel((tc) => {
-      tc.draw(booleans());
+    const h = new hegel.Hegel((tc) => {
+      tc.draw(gs.booleans());
     });
     const result = h.settings({ testCases: 5 });
     expect(result).toBe(h);
@@ -158,8 +159,8 @@ describe("Hegel builder", () => {
   });
 
   test("databaseKey() is chainable", () => {
-    const h = new Hegel((tc) => {
-      tc.draw(booleans());
+    const h = new hegel.Hegel((tc) => {
+      tc.draw(gs.booleans());
     });
     const result = h.databaseKey("test-key");
     expect(result).toBe(h);
