@@ -2,8 +2,8 @@
 // support older node versions.
 
 import assert from "node:assert/strict";
-import * as hegel from "hegel";
-import * as gs from "hegel/generators";
+import * as hegel from "@hegeldev/hegel";
+import * as gs from "@hegeldev/hegel/generators";
 
 // 1. A passing property exercises draw + mark_complete on the happy path.
 new hegel.Hegel((tc) => {

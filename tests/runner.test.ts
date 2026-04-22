@@ -3,8 +3,8 @@
  */
 
 import { describe, test, it, expect } from "vitest";
-import * as hegel from "hegel";
-import * as gs from "hegel/generators";
+import * as hegel from "@hegeldev/hegel";
+import * as gs from "@hegeldev/hegel/generators";
 
 describe("StopTestError", () => {
   it("has correct name and message", () => {

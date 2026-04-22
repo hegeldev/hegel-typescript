@@ -4,8 +4,10 @@ import { fileURLToPath } from "url";
 export default defineConfig({
   resolve: {
     alias: {
-      "hegel/generators": fileURLToPath(new URL("./src/generators/index.ts", import.meta.url)),
-      hegel: fileURLToPath(new URL("./src/index.ts", import.meta.url)),
+      "@hegeldev/hegel/generators": fileURLToPath(
+        new URL("./src/generators/index.ts", import.meta.url),
+      ),
+      "@hegeldev/hegel": fileURLToPath(new URL("./src/index.ts", import.meta.url)),
     },
   },
   test: {

@@ -142,6 +142,9 @@ jobs:
     permissions:
       contents: write
       checks: read
+      # id-token: "enables the workflow to request and use an OIDC token from GitHub's OIDC provider".
+      # Used by our trusted publishing flow to npm.
+      id-token: write
     outputs:
       skip: ${{ steps.check.outputs.skip }}
       version: ${{ steps.version.outputs.version }}
@@ -174,6 +177,12 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           fetch-tags: true
 
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.check.outputs.skip != 'true'
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
       - name: Release
         if: steps.check.outputs.skip != 'true'
         env:
@@ -187,6 +196,18 @@ jobs:
         run: |
           VERSION=$(python -c "import json; print(json.load(open('package.json'))['version'])")
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        if: steps.check.outputs.skip != 'true'
+        run: npm ci
+
+      - name: Build package
+        if: steps.check.outputs.skip != 'true'
+        run: npm run build
+
+      - name: Publish to npm
+        if: steps.check.outputs.skip != 'true'
+        run: npm publish
 
       - name: Push to main or open PR
         if: steps.check.outputs.skip != 'true'

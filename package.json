@@ -1,8 +1,12 @@
 {
-  "name": "hegel",
+  "name": "@hegeldev/hegel",
   "version": "0.1.0",
   "description": "Property-based testing for TypeScript",
   "type": "module",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {

@@ -119,6 +119,8 @@ def release() -> None:
     new_version = bump_version(data["version"], release_type)
 
     set_version(package_json, new_version)
+    # regenerate lockfile after version bump
+    subprocess.run(["npm", "install", "--package-lock-only"], check=True, cwd=ROOT)
 
     add_changelog(ROOT / "CHANGELOG.md", version=new_version, content=content)
 
@@ -133,7 +135,7 @@ def release() -> None:
         f"{bot_user_id}+{app_slug}[bot]@users.noreply.github.com",
         cwd=ROOT,
     )
-    git("add", "package.json", "CHANGELOG.md", cwd=ROOT)
+    git("add", "package.json", "package-lock.json", "CHANGELOG.md", cwd=ROOT)
     git("rm", "RELEASE.md", cwd=ROOT)
     git(
         "commit",

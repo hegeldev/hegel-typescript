@@ -6,8 +6,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import * as hegel from "hegel";
-import * as gs from "hegel/generators";
+import * as hegel from "@hegeldev/hegel";
+import * as gs from "@hegeldev/hegel/generators";
 import { getTestCases, makeNonBasic, writeMetrics } from "../conformance/helpers.js";
 
 // ---------------------------------------------------------------------------
