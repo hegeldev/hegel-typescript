@@ -9,10 +9,12 @@ DOCS_SRC = ROOT / "docs"
 DOCS_DEST = WEBSITE / "public" / "typescript"
 BRANCH = "ci/update-typescript-docs"
 # The docs are served at hegel.dev/typescript. Vercel's `trailingSlash: false`
-# strips the trailing slash, so the browser's base URL at /typescript is / —
-# which breaks TypeDoc's relative asset hrefs (they resolve to /assets/...
-# instead of /typescript/assets/...). Inject <base href="/typescript/"> so
-# relative URLs resolve against the docs root regardless of trailing slash.
+# strips the trailing slash from the root page, so the browser resolves
+# relative hrefs on /typescript against / — which turns `assets/style.css`
+# into `/assets/style.css` (404). Inject <base href="/typescript/"> only on
+# the root index.html to fix that one page. Subpages served at e.g.
+# /typescript/classes/... already have a directory-like URL, so TypeDoc's
+# `../assets/...` hrefs resolve correctly without a <base> tag.
 BASE_HREF = "/typescript/"
 
 
@@ -21,11 +23,11 @@ def git(*args: str) -> None:
 
 
 def inject_base_href(root: Path, href: str) -> None:
+    index = root / "index.html"
     tag = f'<base href="{href}">'
-    for html_path in root.rglob("*.html"):
-        content = html_path.read_text(encoding="utf-8")
-        content = content.replace("<head>", f"<head>\n{tag}", 1)
-        html_path.write_text(content, encoding="utf-8")
+    content = index.read_text(encoding="utf-8")
+    content = content.replace("<head>", f"<head>\n{tag}", 1)
+    index.write_text(content, encoding="utf-8")
 
 
 def main() -> None:

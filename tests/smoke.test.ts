@@ -1,6 +1,6 @@
 import { describe, test, expect } from "vitest";
-import * as hegel from "hegel";
-import * as gs from "hegel/generators";
+import * as hegel from "@hegeldev/hegel";
+import * as gs from "@hegeldev/hegel/generators";
 
 describe("basic property tests", () => {
   test(

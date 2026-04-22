@@ -1,7 +1,7 @@
 // Verify that namespace imports from the built bundle resolve.
 import assert from "node:assert/strict";
-import * as hegel from "hegel";
-import * as gs from "hegel/generators";
+import * as hegel from "@hegeldev/hegel";
+import * as gs from "@hegeldev/hegel/generators";
 
 for (const [name, value] of [
   ["hegel.test", hegel.test],
