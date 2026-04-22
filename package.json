@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "Property-based testing for TypeScript",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hegeldev/hegel-typescript.git"
+  },
   "publishConfig": {
     "access": "public",
     "provenance": true
