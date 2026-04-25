@@ -31,7 +31,7 @@ class SampledFromGenerator<T> extends Generator<T> {
   private readonly elements: T[];
   private readonly schema: Record<string, unknown>;
 
-  constructor(elements: T[]) {
+  constructor(elements: readonly T[]) {
     super();
     if (elements.length === 0) {
       throw new Error("sampledFrom requires at least one element");
@@ -51,7 +51,7 @@ class SampledFromGenerator<T> extends Generator<T> {
 }
 
 /** Pick from a fixed list of values. Panics if empty. */
-export function sampledFrom<T>(elements: T[]): Generator<T> {
+export function sampledFrom<T>(elements: readonly T[]): Generator<T> {
   return new SampledFromGenerator(elements);
 }
 
