@@ -135,7 +135,7 @@ test(
     (tc) => {
       const colors = ["red", "green", "blue"] as const;
       const colorSet = new Set<string>(colors);
-      const v = tc.draw(gs.sampledFrom([...colors]));
+      const v = tc.draw(gs.sampledFrom(colors));
       if (!colorSet.has(v)) {
         throw new Error(`Unexpected value: ${v}`);
       }

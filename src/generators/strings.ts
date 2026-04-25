@@ -24,9 +24,9 @@ export interface CharacterFilterOptions {
   /** Maximum Unicode codepoint (inclusive). */
   maxCodepoint?: number;
   /** Include only characters from these Unicode general categories (e.g. ["L", "Nd"]). */
-  categories?: string[];
+  categories?: readonly string[];
   /** Exclude characters from these Unicode general categories. */
-  excludeCategories?: string[];
+  excludeCategories?: readonly string[];
   /** Always include these specific characters. */
   includeCharacters?: string;
   /** Always exclude these specific characters. */
