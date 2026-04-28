@@ -1,6 +1,8 @@
-.claude/plan.md
-.claude/settings.local.json
-.claude/local/
+# whitelist .claude files, rather than blacklist. Some local claude files
+# (skills, agents) have to live in .claude - as opposed to eg CLAUDE.local.md,
+# which we gitignore at the top level.
+.claude/*
+!.claude/CLAUDE.md
 CLAUDE.local.md
 
 .venv/
