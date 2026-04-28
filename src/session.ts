@@ -13,7 +13,7 @@ import { Connection, Stream } from "./connection.js";
 import { HANDSHAKE_STRING } from "./protocol.js";
 import { findUv } from "./uv.js";
 
-export const HEGEL_SERVER_VERSION = "0.4.0";
+export const HEGEL_SERVER_VERSION = "0.4.14";
 const SUPPORTED_PROTOCOL_MIN = "0.10";
 const SUPPORTED_PROTOCOL_MAX = "0.10";
 const HEGEL_SERVER_COMMAND_ENV = "HEGEL_SERVER_COMMAND";
@@ -87,7 +87,7 @@ export class HegelSession {
     const { command, args } = hegelCommand();
     const logFd = serverLogFile();
 
-    const child = spawn(command, [...args, "--stdio", "--verbosity", "normal"], {
+    const child = spawn(command, [...args, "--verbosity", "normal"], {
       stdio: ["pipe", "pipe", logFd],
       env: { ...process.env, PYTHONUNBUFFERED: "1" },
     });
