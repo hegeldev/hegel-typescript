@@ -490,14 +490,28 @@ describe("runTestCase with fake DataSource", () => {
 // ---------------------------------------------------------------------------
 
 describe("optional parse paths", () => {
-  it("optional returns null when tag is 0", () => {
+  it("optional emits an unwrapped one_of schema with null and inner branches", () => {
+    const innerGen = gs.integers({ minValue: 0, maxValue: 10 });
+    const basic = gs.optional(innerGen).asBasic();
+    expect(basic).not.toBeNull();
+    expect(basic!.schema).toEqual({
+      type: "one_of",
+      generators: [{ type: "null" }, innerGen.asBasic()!.schema],
+    });
+    // Guard against re-introducing the legacy tagged-tuple wrapping.
+    const generators = (basic!.schema as { generators: Record<string, unknown>[] }).generators;
+    expect(generators[0]["type"]).not.toBe("tuple");
+    expect(generators[1]["type"]).not.toBe("tuple");
+  });
+
+  it("optional returns null when index is 0", () => {
     const ds = new FakeDataSource({ generates: [[0, null]] });
     const tc = new hegel.TestCase(ds, false);
     const result = tc.draw(gs.optional(gs.integers()));
     expect(result).toBeNull();
   });
 
-  it("optional returns value when tag is 1", () => {
+  it("optional returns value when index is 1", () => {
     const ds = new FakeDataSource({ generates: [[1, 42]] });
     const tc = new hegel.TestCase(ds, false);
     const result = tc.draw(gs.optional(gs.integers()));
@@ -510,11 +524,49 @@ describe("optional parse paths", () => {
 // ---------------------------------------------------------------------------
 
 describe("oneOf parse paths", () => {
-  it("oneOf selects the correct generator by tag", () => {
+  it("oneOf basic emits children directly with no tagged-tuple wrapping", () => {
+    const basic = gs.oneOf(gs.integers({ minValue: 0, maxValue: 10 }), gs.booleans()).asBasic();
+    expect(basic).not.toBeNull();
+    expect(basic!.schema).toEqual({
+      type: "one_of",
+      generators: [{ type: "integer", min_value: 0, max_value: 10 }, { type: "boolean" }],
+    });
+    // Guard against accidental re-introduction of the legacy
+    // [constant(i), child] tuple wrapping.
+    for (const child of (basic!.schema as { generators: Record<string, unknown>[] }).generators) {
+      expect(child["type"]).not.toBe("tuple");
+    }
+  });
+
+  it("oneOf dispatches by index from [index, value] response", () => {
     const ds = new FakeDataSource({ generates: [[1, true]] });
     const tc = new hegel.TestCase(ds, false);
     const result = tc.draw(gs.oneOf(gs.integers(), gs.booleans()));
     expect(result).toBe(true);
+  });
+
+  it("oneOf routes the value to the matching branch's parseRaw", () => {
+    // Branches with different shapes: a string-typed branch and an integer-typed branch.
+    const ds0 = new FakeDataSource({ generates: [[0, "abc"]] });
+    const tc0 = new hegel.TestCase(ds0, false);
+    expect(tc0.draw(gs.oneOf<string | number>(gs.text(), gs.integers()))).toBe("abc");
+
+    const ds1 = new FakeDataSource({ generates: [[1, 42]] });
+    const tc1 = new hegel.TestCase(ds1, false);
+    expect(tc1.draw(gs.oneOf<string | number>(gs.text(), gs.integers()))).toBe(42);
+  });
+
+  it("oneOf applies the per-branch transform for the chosen index", () => {
+    // Branch 0 maps x -> x * 10; branch 1 maps x -> x + 100.
+    const branch0 = gs.integers({ minValue: 0, maxValue: 9 }).map((x) => x * 10);
+    const branch1 = gs.integers({ minValue: 0, maxValue: 9 }).map((x) => x + 100);
+    const ds = new FakeDataSource({ generates: [[0, 7]] });
+    const tc0 = new hegel.TestCase(ds, false);
+    expect(tc0.draw(gs.oneOf(branch0, branch1))).toBe(70);
+
+    const ds2 = new FakeDataSource({ generates: [[1, 7]] });
+    const tc1 = new hegel.TestCase(ds2, false);
+    expect(tc1.draw(gs.oneOf(branch0, branch1))).toBe(107);
   });
 });
 
