@@ -970,7 +970,7 @@ describe("gs.oneOf()", () => {
   });
 
   test(
-    "with transforms: dispatches tagged transforms correctly",
+    "with transforms: dispatches per-branch transform by index",
     hegel.test(
       (tc) => {
         const gen1 = gs.integers({ minValue: 0, maxValue: 5 }).map((x) => x * 2);

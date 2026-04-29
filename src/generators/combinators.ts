@@ -69,14 +69,11 @@ class OneOfGenerator<T> extends Generator<T> {
     const basics = sources.map((g) => g.asBasic());
     if (basics.every((b) => b !== null)) {
       const validBasics = basics as BasicGenerator<T>[];
-      const taggedSchemas = validBasics.map((b, i) => ({
-        type: "tuple",
-        elements: [{ type: "constant", value: i }, b.schema],
-      }));
-      this.basic = new BasicGenerator({ type: "one_of", generators: taggedSchemas }, (raw) => {
+      const childSchemas = validBasics.map((b) => b.schema);
+      this.basic = new BasicGenerator({ type: "one_of", generators: childSchemas }, (raw) => {
         if (!Array.isArray(raw)) throw new Error(`Expected array, got ${typeof raw}`);
-        const tag = raw[0] as number;
-        return validBasics[tag].parseRaw(raw[1]);
+        const index = raw[0] as number;
+        return validBasics[index].parseRaw(raw[1]);
       });
     } else {
       this.basic = null;
@@ -116,20 +113,12 @@ class OptionalGenerator<T> extends Generator<T | null> {
 
     const innerBasic = inner.asBasic();
     if (innerBasic) {
-      const nullSchema = {
-        type: "tuple",
-        elements: [{ type: "constant", value: 0 }, { type: "null" }],
-      };
-      const valueSchema = {
-        type: "tuple",
-        elements: [{ type: "constant", value: 1 }, innerBasic.schema],
-      };
       this.basic = new BasicGenerator(
-        { type: "one_of", generators: [nullSchema, valueSchema] },
+        { type: "one_of", generators: [{ type: "null" }, innerBasic.schema] },
         (raw) => {
           if (!Array.isArray(raw)) throw new Error(`Expected array, got ${typeof raw}`);
-          const tag = raw[0] as number;
-          if (tag === 0) return null;
+          const index = raw[0] as number;
+          if (index === 0) return null;
           return innerBasic.parseRaw(raw[1]);
         },
       );
