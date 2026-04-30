@@ -114,7 +114,10 @@ class OptionalGenerator<T> extends Generator<T | null> {
     const innerBasic = inner.asBasic();
     if (innerBasic) {
       this.basic = new BasicGenerator(
-        { type: "one_of", generators: [{ type: "null" }, innerBasic.schema] },
+        {
+          type: "one_of",
+          generators: [{ type: "constant", value: null }, innerBasic.schema],
+        },
         (raw) => {
           if (!Array.isArray(raw)) throw new Error(`Expected array, got ${typeof raw}`);
           const index = raw[0] as number;

@@ -496,7 +496,7 @@ describe("optional parse paths", () => {
     expect(basic).not.toBeNull();
     expect(basic!.schema).toEqual({
       type: "one_of",
-      generators: [{ type: "null" }, innerGen.asBasic()!.schema],
+      generators: [{ type: "constant", value: null }, innerGen.asBasic()!.schema],
     });
     // Guard against re-introducing the legacy tagged-tuple wrapping.
     const generators = (basic!.schema as { generators: Record<string, unknown>[] }).generators;

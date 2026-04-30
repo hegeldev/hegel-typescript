@@ -254,7 +254,7 @@ export interface IpAddressOptions {
 
 class IpAddressesGenerator extends SchemaStringGenerator {
   constructor(version: 4 | 6) {
-    super({ type: version === 4 ? "ipv4" : "ipv6" });
+    super({ type: "ip_address", version });
   }
 }
 
