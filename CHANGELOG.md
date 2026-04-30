@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5 - 2026-04-30
+
+Internal refactor.
+
 ## 0.1.4 - 2026-04-29
 
 Internal refactor of `oneOf`.
