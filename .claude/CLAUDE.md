@@ -76,67 +76,13 @@ trigger server-side error injection:
 | `error_response`               | RequestError on first generate            |
 | `empty_test`                   | test_done immediately, no test cases run  |
 
-## Type-Directed Generator Derivation
+## Composing generators
 
-The library supports automatic generator derivation for TypeScript classes and
-plain-object types. Three mechanisms are available:
-
-### 1. Class-based derivation with `@field` decorator
-
-```typescript
-import { field, deriveGenerator, integers, text, booleans } from "@hegeldev/hegel";
-
-class User {
-  @field(text({ minSize: 1, maxSize: 50 }))
-  name!: string;
-
-  @field(integers({ minValue: 18, maxValue: 120 }))
-  age!: number;
-
-  @field(booleans())
-  active!: boolean;
-}
-
-const userGen = deriveGenerator(User);
-// userGen.generate() returns a User instance with random fields
-```
-
-Requires `"experimentalDecorators": true` in `tsconfig.json`.
-
-### 2. Plain-object records with `recordGenerator`
-
-```typescript
-import { recordGenerator, floats } from "@hegeldev/hegel";
-
-const pointGen = recordGenerator({
-  x: floats({ minValue: -100, maxValue: 100 }),
-  y: floats({ minValue: -100, maxValue: 100 }),
-});
-// pointGen.generate() returns { x: number, y: number }
-```
-
-### 3. Discriminated unions with `variantGenerator`
-
-```typescript
-import { variantGenerator, recordGenerator, floats } from "@hegeldev/hegel";
-
-type Shape =
-  | { type: "circle"; radius: number }
-  | { type: "rectangle"; width: number; height: number }
-  | { type: "point" };
-
-const shapeGen = variantGenerator<Shape>({
-  circle: recordGenerator({ radius: floats({ minValue: 0.1, maxValue: 100 }) }),
-  rectangle: recordGenerator({
-    width: floats({ minValue: 0.1, maxValue: 100 }),
-    height: floats({ minValue: 0.1, maxValue: 100 }),
-  }),
-  point: null, // data-less variant
-});
-// shapeGen.generate() returns one of the Shape variants at random
-```
-
-All derived generators support `.map()`, `.filter()`, and `.flatMap()` combinators.
+For composite types, use `composite` (imperative — call `.draw()` on
+generators inside a builder function) or `record` (declarative — pass a schema
+mapping field names to generators). Both live in `src/generators/compose.ts`
+and are re-exported from `@hegeldev/hegel/generators`. They support `.map()`,
+`.filter()`, and `.flatMap()` like any other generator.
 
 ## Critical: StopTest Handling
 
@@ -186,10 +132,22 @@ src/                 — Library source code (all production code)
   index.ts           — Public API entry point
   protocol.ts        — Binary wire protocol (header, CBOR, CRC32)
   connection.ts      — Unix socket connection and stream multiplexing
-  runner.ts          — Test runner (Client, AsyncLocalStorage context, error classes)
-  session.ts         — Global lazy session (HegelSession, runHegelTest, hegel)
-  generators.ts      — Generator base class, combinators, all built-in generators
-  derive.ts          — Type-directed derivation (@field, deriveGenerator, recordGenerator, variantGenerator)
+  crc32.ts           — CRC32 helper
+  wtf8.ts            — WTF-8 string handling
+  runner.ts          — Test runner (`hegel.test`, Settings, AsyncLocalStorage context, error classes)
+  session.ts         — Global lazy session (HegelSession, server subprocess lifecycle)
+  testCase.ts        — TestCase, Collection, Labels, StopTestError, AssumeError
+  generators/        — Generator implementations
+    index.ts         — Re-exports the public generator surface
+    core.ts          — Generator/BasicGenerator base classes
+    numeric.ts       — integers, bigIntegers, floats, booleans
+    strings.ts       — text, binary, fromRegex, emails, urls, dates, ...
+    collections.ts   — arrays, sets, maps
+    combinators.ts   — just, sampledFrom, oneOf, optional
+    compose.ts       — composite, record
+    tuples.ts        — tuples
+  uv.ts              — Auto-install of uv + hegel-core server
+  uv-install.sh      — Bundled uv installer script
 tests/               — Test files (excluded from coverage)
   *.test.ts          — Vitest test files (one per module)
   showcase.test.ts   — Property tests demonstrating real library usage
@@ -201,7 +159,6 @@ scripts/             — Build/CI scripts
   check-coverage.py  — Secondary coverage validation script
 README.md            — Project overview and quick start
 dist/                — Compiled output (gitignored)
-guide/               — User-facing tutorials (getting-started.md)
 docs/                — Generated TypeDoc output (gitignored)
 coverage/            — Coverage reports (gitignored)
 ```
@@ -330,21 +287,6 @@ const check = expect(p).rejects.toThrow(...); await advanceTimers(); await check
   so concurrent callers await the same promise. Attach `.catch(() => {})` to `_startPromise` immediately
   after assignment to prevent Node's "unhandledRejection" warning if the promise rejects before
   the `await` catches it. The `.catch` creates a new handled promise without affecting the original.
-- **Type-directed derivation in TypeScript uses legacy decorators.** TypeScript erases interfaces
-  and type aliases at compile time, so there's no runtime reflection on type shapes. However,
-  classes persist at runtime, so the `@field(generator)` decorator (with `experimentalDecorators:
-true` in `tsconfig.json`) stores metadata in a `Map<Constructor, FieldMeta[]>`. The
-  `deriveGenerator(MyClass)` function reads this metadata and builds a composite generator.
-  For plain-object types (no class needed), `recordGenerator({...})` takes a schema mapping
-  field names to generators. For sum types, `variantGenerator({...})` takes a mapping from
-  tag names to field generators. All three use FIXED_DICT (label 10) or ENUM_VARIANT (label 15)
-  spans for proper shrinking.
-- **ESLint forbids the `Function` type.** The `@typescript-eslint/no-unsafe-function-type` rule
-  rejects `Map<Function, ...>`. Use a type alias like `type AnyConstructor = new (...args: any[]) => any`
-  with an eslint-disable comment for `@typescript-eslint/no-explicit-any` on that line.
-- **Legacy decorator `PropertyDecorator` signature.** The `target` parameter is the class
-  prototype (an `object`), and `propertyKey` is `string | symbol`. Access `target.constructor`
-  to get the class constructor for metadata storage.
 - **Conformance binaries use `tsx` for TypeScript-native execution.** Add `tsx` to devDependencies
   and use `node --import tsx/esm script.ts` in wrapper shell scripts. The `build-conformance`
   justfile recipe generates shell wrapper scripts in `bin/conformance/` that call tsx with the
@@ -377,9 +319,6 @@ true` in `tsconfig.json`) stores metadata in a `Map<Constructor, FieldMeta[]>`. 
 - **TypeDoc `readme` option renders README.md on the index page.** Add `"readme": "README.md"`
   to `typedoc.json` so the documentation index page shows the project README. This gives users
   a nice landing page with quick-start examples before diving into the API reference.
-- **Getting-started tutorial lives in `guide/getting-started.md`.** The `docs/` directory
-  is reserved for TypeDoc generated output (gitignored), so the tutorial goes in `guide/`
-  instead. Other libraries that don't have this constraint use `docs/getting-started.md`.
 - **Examples directory does NOT need to be compiled or tested.** The `examples/` directory
   contains runnable TypeScript programs that demonstrate library usage. They are excluded from
   coverage measurement and ESLint/TypeScript checking. Keep them correct and idiomatic but
