@@ -13,9 +13,9 @@ import { Connection, Stream } from "./connection.js";
 import { HANDSHAKE_STRING } from "./protocol.js";
 import { findUv } from "./uv.js";
 
-export const HEGEL_SERVER_VERSION = "0.6.0";
-const SUPPORTED_PROTOCOL_MIN = "0.12";
-const SUPPORTED_PROTOCOL_MAX = "0.12";
+export const HEGEL_SERVER_VERSION = "0.7.0";
+const SUPPORTED_PROTOCOL_MIN = "0.13";
+const SUPPORTED_PROTOCOL_MAX = "0.13";
 const HEGEL_SERVER_COMMAND_ENV = "HEGEL_SERVER_COMMAND";
 const HEGEL_SERVER_DIR = ".hegel";
 
