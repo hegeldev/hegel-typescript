@@ -89,10 +89,6 @@ class FakeDataSource implements DataSource {
     this._markCompleteCalls.push({ status, origin });
   }
 
-  closeTestCase(): void {
-    // no-op
-  }
-
   testAborted(): boolean {
     return this._aborted;
   }

@@ -70,7 +70,6 @@ export interface DataSource {
   collectionMore(collectionId: number): boolean;
   collectionReject(collectionId: number, why?: string): void;
   markComplete(status: string, origin: string | null): void;
-  closeTestCase(): void;
   testAborted(): boolean;
 }
 

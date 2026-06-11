@@ -192,8 +192,7 @@ export class ServerDataSource implements DataSource {
       // test_done on the main test stream. Blocking does deadlock when the
       // server reports flaky in test_done before answering this request
       // (issue #48). hegel-go can wait in doRequest because a background read
-      // loop keeps draining the pipe; our synchronous reader cannot. The stream
-      // is closed unconditionally in finalizeTestCase afterward.
+      // loop keeps draining the pipe; our synchronous reader cannot.
       const encoded = encode({
         command: "mark_complete",
         status,
@@ -203,9 +202,6 @@ export class ServerDataSource implements DataSource {
     } catch {
       // ignore errors during mark_complete
     }
-  }
-
-  closeTestCase(): void {
     this.stream.close();
   }
 
@@ -257,19 +253,10 @@ function finalizeTestCase(
   result: TestCaseResult,
   origin: string | null,
 ): void {
-  try {
-    if (!tc.testAborted) {
-      const status =
-        result.status === "valid"
-          ? "VALID"
-          : result.status === "invalid"
-            ? "INVALID"
-            : "INTERESTING";
-      dataSource.markComplete(status, origin);
-    }
-  } finally {
-    dataSource.closeTestCase();
-  }
+  if (tc.testAborted) return;
+  const status =
+    result.status === "valid" ? "VALID" : result.status === "invalid" ? "INVALID" : "INTERESTING";
+  dataSource.markComplete(status, origin);
 }
 
 export async function runTestCaseAsync(
