@@ -18,6 +18,14 @@ export class StopTestError extends Error {
   }
 }
 
+/** Raised when the server detects non-deterministic data generation. */
+export class FlakyAbortError extends Error {
+  constructor() {
+    super("Flaky test detected");
+    this.name = "FlakyAbortError";
+  }
+}
+
 export class AssumeError extends Error {
   constructor() {
     super("Assumption rejected");
@@ -62,6 +70,7 @@ export interface DataSource {
   collectionMore(collectionId: number): boolean;
   collectionReject(collectionId: number, why?: string): void;
   markComplete(status: string, origin: string | null): void;
+  closeTestCase(): void;
   testAborted(): boolean;
 }
 
