@@ -202,7 +202,7 @@ describe("server error detection", () => {
           tc.draw(gs.booleans());
           calls++;
         },
-        { testCases: 2 },
+        { testCases: 2, database: hegel.Database.disabled },
       ),
     ).toThrow("Flaky test detected");
   });

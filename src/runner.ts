@@ -469,16 +469,21 @@ export class Hegel {
       }
     }
 
-    // Check for server-side errors
+    // Check for server-side errors. Close the test stream before throwing so
+    // the server is not left waiting for acks on a follow-up test_case (which
+    // would wedge the shared session for the next hegel.test() call).
     /* v8 ignore start: requires server to report error in test_done results */
     if (resultData["error"]) {
+      testStream.close();
       throw new Error(`Server error: ${resultData["error"]}`);
     }
     /* v8 ignore stop */
     if (resultData["health_check_failure"]) {
+      testStream.close();
       throw new Error(`Health check failure:\n${resultData["health_check_failure"]}`);
     }
     if (resultData["flaky"]) {
+      testStream.close();
       throw new Error(`Flaky test detected: ${resultData["flaky"]}`);
     }
 
