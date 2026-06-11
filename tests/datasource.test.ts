@@ -350,9 +350,13 @@ describe("text and characters with alphabet", () => {
 describe("runTestCase with FlakyAbortError", () => {
   it("classifyResult treats FlakyAbortError as invalid", () => {
     const ds = new FakeDataSource();
-    const result = runTestCase(ds, () => {
-      throw new FlakyAbortError();
-    }, false);
+    const result = runTestCase(
+      ds,
+      () => {
+        throw new FlakyAbortError();
+      },
+      false,
+    );
     expect(result.status).toBe("invalid");
   });
 });
