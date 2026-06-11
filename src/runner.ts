@@ -7,7 +7,13 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { HegelSession } from "./session.js";
-import { TestCase, StopTestError, AssumeError, type DataSource } from "./testCase.js";
+import {
+  TestCase,
+  StopTestError,
+  FlakyAbortError,
+  AssumeError,
+  type DataSource,
+} from "./testCase.js";
 import { encode, decode } from "cbor-x";
 import type { Connection, Stream } from "./connection.js";
 
@@ -122,11 +128,11 @@ export class ServerDataSource implements DataSource {
         this._aborted = true;
         throw new StopTestError();
       }
-      /* v8 ignore start: FlakyStrategyDefinition is detected in test_done results, not here */
+      /* v8 ignore start: flaky during generate is rare; test_done path covered by integration tests */
       if (errorMsg.includes("FlakyStrategyDefinition") || errorMsg.includes("FlakyReplay")) {
         this.stream.markClosed();
         this._aborted = true;
-        throw new StopTestError();
+        throw new FlakyAbortError();
       }
       /* v8 ignore stop */
       /* v8 ignore start: requires server to crash mid-request */
@@ -180,14 +186,19 @@ export class ServerDataSource implements DataSource {
 
   markComplete(status: string, origin: string | null): void {
     try {
-      const message: Record<string, unknown> = {
+      // Send mark_complete without waiting for the reply. We never used the
+      // reply payload (the old code called receiveReply and discarded it), and
+      // the protocol does not require the client to block here before reading
+      // test_done on the main test stream. Blocking does deadlock when the
+      // server reports flaky in test_done before answering this request
+      // (issue #48). hegel-go can wait in doRequest because a background read
+      // loop keeps draining the pipe; our synchronous reader cannot.
+      const encoded = encode({
         command: "mark_complete",
         status,
         origin: origin ?? null,
-      };
-      const encoded = encode(message);
-      const id = this.stream.sendRequest(encoded);
-      this.stream.receiveReply(id);
+      });
+      this.stream.sendRequest(encoded);
     } catch {
       // ignore errors during mark_complete
     }
@@ -224,6 +235,7 @@ function classifyResult(
 ): { result: TestCaseResult; origin: string | null } {
   if (e instanceof AssumeError) return { result: { status: "invalid" }, origin: null };
   if (e instanceof StopTestError) return { result: { status: "invalid" }, origin: null };
+  if (e instanceof FlakyAbortError) return { result: { status: "invalid" }, origin: null };
 
   if (isFinal) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -444,16 +456,21 @@ export class Hegel {
       }
     }
 
-    // Check for server-side errors
+    // Check for server-side errors. Close the test stream before throwing so
+    // the server is not left waiting for acks on a follow-up test_case (which
+    // would wedge the shared session for the next hegel.test() call).
     /* v8 ignore start: requires server to report error in test_done results */
     if (resultData["error"]) {
+      testStream.close();
       throw new Error(`Server error: ${resultData["error"]}`);
     }
     /* v8 ignore stop */
     if (resultData["health_check_failure"]) {
+      testStream.close();
       throw new Error(`Health check failure:\n${resultData["health_check_failure"]}`);
     }
     if (resultData["flaky"]) {
+      testStream.close();
       throw new Error(`Flaky test detected: ${resultData["flaky"]}`);
     }
 

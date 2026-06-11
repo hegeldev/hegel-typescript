@@ -9,6 +9,7 @@ import * as gs from "@hegeldev/hegel/generators";
 import {
   AssumeError,
   Collection,
+  FlakyAbortError,
   Labels,
   StopTestError,
   TestCase,
@@ -171,6 +172,10 @@ describe("TestCase with fake DataSource", () => {
     const ds = new FakeDataSource();
     const tc = new TestCase(ds, false);
     expect(() => tc.assume(true)).not.toThrow();
+  });
+
+  it("FlakyAbortError carries the flaky sentinel message", () => {
+    expect(new FlakyAbortError().message).toBe("Flaky test detected");
   });
 });
 
@@ -337,6 +342,20 @@ describe("text and characters with alphabet", () => {
 // arbitrary thrown values. Direct calls with a fake DataSource are the only
 // way to cover the `String(e)` and `!(e instanceof Error)` branches.
 // ---------------------------------------------------------------------------
+
+describe("runTestCase with FlakyAbortError", () => {
+  it("classifyResult treats FlakyAbortError as invalid", () => {
+    const ds = new FakeDataSource();
+    const result = runTestCase(
+      ds,
+      () => {
+        throw new FlakyAbortError();
+      },
+      false,
+    );
+    expect(result.status).toBe("invalid");
+  });
+});
 
 describe("runTestCase with non-Error throws", () => {
   it("extractOrigin returns '<unknown>' when a non-Error is thrown", () => {

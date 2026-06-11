@@ -165,13 +165,15 @@ describe("server error detection", () => {
           const x = tc.draw(gs.integers({ minValue: 0, maxValue: 1000 }));
           tc.assume(x === 500);
         },
-        { testCases: 100 },
+        { testCases: 100, database: hegel.Database.disabled },
       ),
     ).toThrow("Health check failure");
   });
 
   test("flaky test detected", () => {
     // A test that fails on the first run but passes on replay is flaky.
+    // Disable the example database so prior tests in this file (which share
+    // the Hegel session) do not leave stale entries that mask flaky replay.
     let seen = false;
     expect(() =>
       hegel.test(
@@ -182,7 +184,25 @@ describe("server error detection", () => {
             throw new Error("flaky failure");
           }
         },
-        { testCases: 100 },
+        { testCases: 100, database: hegel.Database.disabled },
+      ),
+    ).toThrow("Flaky test detected");
+  });
+
+  test("flaky strategy definition from external state", () => {
+    // Conditional draws on external state make generation inconsistent across
+    // test cases. The server reports this as a flaky strategy definition.
+    let calls = 0;
+    expect(() =>
+      hegel.test(
+        (tc) => {
+          if (calls % 2 === 0) {
+            tc.draw(gs.integers());
+          }
+          tc.draw(gs.booleans());
+          calls++;
+        },
+        { testCases: 2, database: hegel.Database.disabled },
       ),
     ).toThrow("Flaky test detected");
   });
