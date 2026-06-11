@@ -7,6 +7,19 @@
 import { TestCase, Labels, generateRaw } from "../testCase.js";
 import { Generator, BasicGenerator } from "./core.js";
 
+/** Wire value for `just(null)` — distinct from optional's absent `{ value: null }`. */
+const JUST_NULL_WIRE = false;
+
+/** Wire value for `just(undefined)` — distinct from optional absent and `just(null)`. */
+const JUST_UNDEFINED_WIRE = true;
+
+function constantWireValue(value: unknown): unknown {
+  if (value === null) return JUST_NULL_WIRE;
+  if (value === undefined) return JUST_UNDEFINED_WIRE;
+  if (typeof value === "object") return null;
+  return value;
+}
+
 class JustGenerator<T> extends Generator<T> {
   constructor(private readonly value: T) {
     super();
@@ -18,7 +31,7 @@ class JustGenerator<T> extends Generator<T> {
 
   override asBasic(): BasicGenerator<T> {
     const value = this.value;
-    return new BasicGenerator({ type: "constant", value: null }, () => value);
+    return new BasicGenerator({ type: "constant", value: constantWireValue(value) }, () => value);
   }
 }
 
