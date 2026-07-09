@@ -72,7 +72,7 @@ function isInCI(): boolean {
     ["HEROKU_TEST_RUN_ID", null],
     ["TEAMCITY_VERSION", null],
     ["TF_BUILD", "true"],
-    ["bamboo.buildKey", null],
+    ["bamboo_buildKey", null],
   ];
   return ciVars.some(([key, value]) => {
     if (value === null) {

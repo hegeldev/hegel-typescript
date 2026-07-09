@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+CI environments using Atlassian Bamboo are now detected correctly: CI
+detection (which switches on `derandomize` and disables the example database)
+checked for a `bamboo.buildKey` environment variable, but Bamboo exposes it as
+`bamboo_buildKey`.
+
+Documentation fixes: the Getting Started guide's examples now use the
+post-0.2.0 `test("name", () => hegel.test(...))` form, `fromRegex` documents
+its regex dialect (Python `re` syntax, passed to the engine verbatim) and the
+`fullmatch` semantics (full match by default since 0.4.0; `fullmatch: false`
+for contains-a-match behaviour), and the README shows the real failure output
+format.
+
 The `unique` and `minSize` contracts of collection generators are now enforced
 on final (post-`.map()`) values. Previously a mapped element generator kept its
 source's schema and applied the map after generation, so the engine enforced

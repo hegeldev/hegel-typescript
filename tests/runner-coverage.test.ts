@@ -32,6 +32,25 @@ describe("defaultSettings CI detection", () => {
     }
   });
 
+  test("defaultSettings detects Bamboo CI via bamboo_buildKey", () => {
+    // ci-info's convention for Bamboo is the env var `bamboo_buildKey`
+    // (Bamboo exposes its `bamboo.buildKey` property with `_`, since `.`
+    // is not valid in environment variable names).
+    const original = process.env["bamboo_buildKey"];
+    try {
+      process.env["bamboo_buildKey"] = "PROJ-PLAN-1";
+      const settings = defaultSettings();
+      expect(settings.database).toEqual(hegel.Database.disabled);
+      expect(settings.derandomize).toBe(true);
+    } finally {
+      if (original === undefined) {
+        delete process.env["bamboo_buildKey"];
+      } else {
+        process.env["bamboo_buildKey"] = original;
+      }
+    }
+  });
+
   test("defaultSettings detects CI via value-matched env vars (e.g. GITHUB_ACTIONS=true)", () => {
     // This test covers the `value !== null` branch in isInCI() (runner.ts line 64)
     // where CI vars with specific expected values are checked.
@@ -44,7 +63,7 @@ describe("defaultSettings CI detection", () => {
       "GITLAB_CI",
       "HEROKU_TEST_RUN_ID",
       "TEAMCITY_VERSION",
-      "bamboo.buildKey",
+      "bamboo_buildKey",
     ];
     const valueVars = ["BUILDKITE", "CIRCLECI", "CIRRUS_CI", "GITHUB_ACTIONS", "TF_BUILD"];
     const allVars = [...nullVars, ...valueVars];
@@ -81,7 +100,7 @@ describe("defaultSettings CI detection", () => {
       "GITLAB_CI",
       "HEROKU_TEST_RUN_ID",
       "TEAMCITY_VERSION",
-      "bamboo.buildKey",
+      "bamboo_buildKey",
       "BUILDKITE",
       "CIRCLECI",
       "CIRRUS_CI",

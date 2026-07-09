@@ -1,7 +1,7 @@
 /**
  * Global lazy libhegel handle.
  *
- * The native library is located (and, on first use, downloaded) and loaded the
+ * The native library (bundled with the package) is located and loaded the
  * first time a test runs, then reused for the lifetime of the process. Unlike
  * the previous subprocess-based client there is no server to manage: the engine
  * runs on a worker thread inside libhegel, owned by each run handle.

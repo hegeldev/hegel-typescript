@@ -50,7 +50,7 @@ class SampledFromGenerator<T> extends Generator<T> {
   }
 }
 
-/** Pick from a fixed list of values. Panics if empty. */
+/** Pick from a fixed list of values. Throws an `Error` if the list is empty. */
 export function sampledFrom<T>(elements: readonly T[]): Generator<T> {
   return new SampledFromGenerator(elements);
 }
