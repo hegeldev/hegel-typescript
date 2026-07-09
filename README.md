@@ -56,11 +56,17 @@ test("my_sort matches builtin", () =>
 This test will fail when run with `vitest`! Hegel will produce a minimal failing test case for us:
 
 ```
-Draw 1: [0, 0]
+var draw_1 = [ 0, 0 ];
+
+sort mismatch: [0,0] != [0]
 Error: sort mismatch: [0,0] != [0]
+    at my-sort.test.ts:16:13
+    ...
+
+Error: Property test failed: sort mismatch: [0,0] != [0] [at my-sort.test.ts:16:13]
 ```
 
-Hegel reports the minimal example showing that our sort is incorrectly dropping duplicates. If we remove the `new Set(...)` deduplication from `mySort()`, this test will then pass (because it's just comparing the standard sort against itself).
+Hegel replays the minimal example (each `var draw_N = ...;` line is the value of the corresponding `tc.draw()` call), showing that our sort is incorrectly dropping duplicates. If we remove the `new Set(...)` deduplication from `mySort()`, this test will then pass (because it's just comparing the standard sort against itself).
 
 ## Async tests
 
