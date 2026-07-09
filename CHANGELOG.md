@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+Collection generators now use one consistent notion of equality when
+deduplicating elements. Previously the non-schema (collection protocol) paths
+disagreed: `arrays(..., { unique: true })` compared `JSON.stringify` output
+(which equates `NaN` with `null` and all functions with each other, making
+unique arrays of such values impossible to generate), while `sets` and `maps`
+used reference equality (so a generated `Set` could contain many structurally
+identical objects). All three now share a documented structural value-equality
+helper: nested arrays/objects compare by contents, `NaN` equals `NaN`, `0`
+equals `-0`, and functions compare by reference.
+
 ## 0.4.0 - 2026-07-09
 
 This release changes the default value of `fullmatch` in `fromRegex` from `false` to `true`.

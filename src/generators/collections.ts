@@ -6,6 +6,7 @@
 
 import { TestCase, Collection, Labels } from "../testCase.js";
 import { Generator, BasicGenerator } from "./core.js";
+import { valuesEqual } from "./equality.js";
 
 export interface CollectionOptions {
   minSize?: number;
@@ -13,6 +14,13 @@ export interface CollectionOptions {
 }
 
 export interface ArrayOptions extends CollectionOptions {
+  /**
+   * Require all elements of the generated array to be distinct.
+   *
+   * Elements are compared by structural value equality ({@link valuesEqual}):
+   * nested arrays and objects are compared by contents, `NaN` equals `NaN`,
+   * `0` equals `-0`, and functions compare by reference.
+   */
   unique?: boolean;
 }
 
@@ -69,7 +77,7 @@ class ArraysGenerator<T> extends Generator<T[]> {
     while (collection.more()) {
       const element = this.elements.doDraw(tc);
       if (this.unique) {
-        if (result.some((existing) => JSON.stringify(existing) === JSON.stringify(element))) {
+        if (result.some((existing) => valuesEqual(existing, element))) {
           collection.reject("duplicate element");
           continue;
         }
@@ -135,7 +143,7 @@ class SetsGenerator<T> extends Generator<Set<T>> {
     const result = new Set<T>();
     while (collection.more()) {
       const element = this.elements.doDraw(tc);
-      if (result.has(element)) {
+      if ([...result].some((existing) => valuesEqual(existing, element))) {
         collection.reject("duplicate element");
         continue;
       }
@@ -150,7 +158,14 @@ class SetsGenerator<T> extends Generator<Set<T>> {
   }
 }
 
-/** Generate Sets with elements from the given generator. */
+/**
+ * Generate Sets with elements from the given generator.
+ *
+ * Elements are deduplicated by structural value equality ({@link valuesEqual}),
+ * not merely by reference: the generated Set never contains two structurally
+ * equal elements (e.g. two `{ v: 0 }` objects), and `minSize`/`maxSize` count
+ * structurally distinct elements.
+ */
 export function sets<T>(elements: Generator<T>, options?: CollectionOptions): Generator<Set<T>> {
   return new SetsGenerator(elements, options);
 }
@@ -214,7 +229,7 @@ class MapsGenerator<K, V> extends Generator<Map<K, V>> {
       const key = this.keys.doDraw(tc);
       const value = this.values.doDraw(tc);
       tc.stopSpan();
-      if (result.has(key)) {
+      if ([...result.keys()].some((existing) => valuesEqual(existing, key))) {
         collection.reject("duplicate key");
         continue;
       }
@@ -229,7 +244,13 @@ class MapsGenerator<K, V> extends Generator<Map<K, V>> {
   }
 }
 
-/** Generate Maps with keys and values from the given generators. */
+/**
+ * Generate Maps with keys and values from the given generators.
+ *
+ * Keys are deduplicated by structural value equality ({@link valuesEqual}),
+ * not merely by reference: the generated Map never contains two structurally
+ * equal keys, and `minSize`/`maxSize` count structurally distinct keys.
+ */
 export function maps<K, V>(
   keys: Generator<K>,
   values: Generator<V>,
