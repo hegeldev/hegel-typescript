@@ -70,11 +70,15 @@ class OneOfGenerator<T> extends Generator<T> {
     if (basics.every((b) => b !== null)) {
       const validBasics = basics as BasicGenerator<T>[];
       const childSchemas = validBasics.map((b) => b.schema);
-      this.basic = new BasicGenerator({ type: "one_of", generators: childSchemas }, (raw) => {
-        if (!Array.isArray(raw)) throw new Error(`Expected array, got ${typeof raw}`);
-        const index = raw[0] as number;
-        return validBasics[index].parseRaw(raw[1]);
-      });
+      this.basic = new BasicGenerator(
+        { type: "one_of", generators: childSchemas },
+        (raw) => {
+          if (!Array.isArray(raw)) throw new Error(`Expected array, got ${typeof raw}`);
+          const index = raw[0] as number;
+          return validBasics[index].parseRaw(raw[1]);
+        },
+        validBasics.every((b) => b.injectiveParse),
+      );
     } else {
       this.basic = null;
     }
@@ -124,6 +128,7 @@ class OptionalGenerator<T> extends Generator<T | null> {
           if (index === 0) return null;
           return innerBasic.parseRaw(raw[1]);
         },
+        innerBasic.injectiveParse,
       );
     } else {
       this.basic = null;

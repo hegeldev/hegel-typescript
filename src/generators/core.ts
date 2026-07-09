@@ -61,10 +61,25 @@ export class BasicGenerator<T> extends Generator<T> {
   readonly schema: Record<string, unknown>;
   private readonly parse: ((raw: unknown) => T) | null;
 
-  constructor(schema: Record<string, unknown>, parse?: (raw: unknown) => T) {
+  /**
+   * Whether `parse` is known to map distinct raw values to distinct parsed
+   * values. `false` whenever a user-supplied `.map()` is involved (its
+   * function may collapse values). Collection generators consult this flag:
+   * engine-side `unique` / `min_size` constraints act on raw values, so they
+   * can only be trusted when parsing preserves distinctness; otherwise the
+   * collection falls back to deduplicating final values client-side.
+   */
+  readonly injectiveParse: boolean;
+
+  constructor(
+    schema: Record<string, unknown>,
+    parse?: (raw: unknown) => T,
+    injectiveParse: boolean = true,
+  ) {
     super();
     this.schema = schema;
     this.parse = parse ?? null;
+    this.injectiveParse = injectiveParse;
   }
 
   doDraw(tc: TestCase): T {
@@ -103,7 +118,9 @@ class MappedGenerator<T, U> extends Generator<U> {
     const sourceBasic = this.source.asBasic();
     if (!sourceBasic) return null;
     const f = this.f;
-    return new BasicGenerator(sourceBasic.schema, (raw) => f(sourceBasic.parseRaw(raw)));
+    // The mapping function may collapse distinct values, so the resulting
+    // parse is not injective.
+    return new BasicGenerator(sourceBasic.schema, (raw) => f(sourceBasic.parseRaw(raw)), false);
   }
 }
 

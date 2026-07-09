@@ -50,8 +50,11 @@ class ArraysGenerator<T> extends Generator<T[]> {
     this.maxSize = maxSize;
     this.unique = unique;
 
+    // The engine enforces `unique` on raw (pre-parse) values, so the schema
+    // path is only sound when parsing preserves distinctness; for e.g. mapped
+    // elements, fall back to deduplicating final values client-side.
     const elementBasic = elements.asBasic();
-    if (elementBasic) {
+    if (elementBasic && (!unique || elementBasic.injectiveParse)) {
       const schema: Record<string, unknown> = {
         type: "list",
         unique,
@@ -60,10 +63,14 @@ class ArraysGenerator<T> extends Generator<T[]> {
       };
       if (maxSize !== null) schema["max_size"] = maxSize;
 
-      this.basic = new BasicGenerator(schema, (raw) => {
-        if (!Array.isArray(raw)) throw new Error(`Expected array, got ${typeof raw}`);
-        return raw.map((v: unknown) => elementBasic.parseRaw(v));
-      });
+      this.basic = new BasicGenerator(
+        schema,
+        (raw) => {
+          if (!Array.isArray(raw)) throw new Error(`Expected array, got ${typeof raw}`);
+          return raw.map((v: unknown) => elementBasic.parseRaw(v));
+        },
+        elementBasic.injectiveParse,
+      );
     } else {
       this.basic = null;
     }
@@ -117,8 +124,12 @@ class SetsGenerator<T> extends Generator<Set<T>> {
     this.minSize = minSize;
     this.maxSize = maxSize;
 
+    // The engine enforces uniqueness and min_size on raw (pre-parse) values,
+    // so the schema path is only sound when parsing preserves distinctness;
+    // for e.g. mapped elements, fall back to deduplicating final values
+    // client-side.
     const elementBasic = elements.asBasic();
-    if (elementBasic) {
+    if (elementBasic && elementBasic.injectiveParse) {
       const schema: Record<string, unknown> = {
         type: "list",
         unique: true,
@@ -191,10 +202,15 @@ class MapsGenerator<K, V> extends Generator<Map<K, V>> {
     this.minSize = minSize;
     this.maxSize = maxSize;
 
+    // The engine enforces key uniqueness and min_size on raw (pre-parse)
+    // keys, so the schema path is only sound when key parsing preserves
+    // distinctness; for e.g. mapped keys, fall back to deduplicating final
+    // keys client-side. (Values need no deduplication, so a mapped value
+    // generator keeps the schema path.)
     const keyBasic = keys.asBasic();
     const valueBasic = values.asBasic();
 
-    if (keyBasic && valueBasic) {
+    if (keyBasic && valueBasic && keyBasic.injectiveParse) {
       const schema: Record<string, unknown> = {
         type: "dict",
         keys: keyBasic.schema,
@@ -203,17 +219,23 @@ class MapsGenerator<K, V> extends Generator<Map<K, V>> {
       };
       if (maxSize !== null) schema["max_size"] = maxSize;
 
-      this.basic = new BasicGenerator(schema, (raw) => {
-        if (!Array.isArray(raw)) throw new Error(`Expected array, got ${typeof raw}`);
-        const map = new Map<K, V>();
-        for (const entry of raw) {
-          if (!Array.isArray(entry) || entry.length !== 2) {
-            throw new Error("Expected [key, value] pair");
+      this.basic = new BasicGenerator(
+        schema,
+        (raw) => {
+          if (!Array.isArray(raw)) throw new Error(`Expected array, got ${typeof raw}`);
+          const map = new Map<K, V>();
+          for (const entry of raw) {
+            if (!Array.isArray(entry) || entry.length !== 2) {
+              throw new Error("Expected [key, value] pair");
+            }
+            map.set(keyBasic.parseRaw(entry[0]), valueBasic.parseRaw(entry[1]));
           }
-          map.set(keyBasic.parseRaw(entry[0]), valueBasic.parseRaw(entry[1]));
-        }
-        return map;
-      });
+          return map;
+        },
+        // Keys parse injectively (guarded above); distinct raw dicts can
+        // still collapse if value parsing does.
+        valueBasic.injectiveParse,
+      );
     } else {
       this.basic = null;
     }

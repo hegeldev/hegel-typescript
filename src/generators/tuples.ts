@@ -24,6 +24,7 @@ class TuplesGenerator extends Generator<unknown[]> {
           if (!Array.isArray(raw)) throw new Error(`Expected array, got ${typeof raw}`);
           return raw.map((v: unknown, i: number) => validBasics[i].parseRaw(v));
         },
+        validBasics.every((b) => b.injectiveParse),
       );
     } else {
       this.basic = null;

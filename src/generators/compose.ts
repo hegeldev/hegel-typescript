@@ -48,6 +48,7 @@ class RecordGenerator<T extends Record<string, unknown>> extends Generator<T> {
           }
           return obj as T;
         },
+        validBasics.every((b) => b.injectiveParse),
       );
     } else {
       this.basic = null;

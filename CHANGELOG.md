@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+The `unique` and `minSize` contracts of collection generators are now enforced
+on final (post-`.map()`) values. Previously a mapped element generator kept its
+source's schema and applied the map after generation, so the engine enforced
+uniqueness and minimum size on the raw pre-map values: with a non-injective
+map, `arrays(g.map(f), { unique: true })` could contain duplicate elements, and
+`sets(g.map(f), { minSize: n })` / `maps(keys.map(f), values, { minSize: n })`
+could come out smaller than `minSize` after deduplication. Collections now
+detect elements or keys whose generator involves a `.map()` (including inside
+`tuples`, `record`, `oneOf`, `optional`, or nested collections) and deduplicate
+the final values instead, drawing more elements until the size contract holds.
+
 Collection generators now use one consistent notion of equality when
 deduplicating elements. Previously the non-schema (collection protocol) paths
 disagreed: `arrays(..., { unique: true })` compared `JSON.stringify` output
