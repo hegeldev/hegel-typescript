@@ -187,7 +187,12 @@ export function binary(options?: BinaryOptions): Generator<Uint8Array> {
 }
 
 export interface RegexOptions {
-  /** Whether the entire string must match the pattern (default `true`). */
+  /**
+   * Whether the generated string must match the pattern in its entirety
+   * (as if anchored with `^...$`). Defaults to `true`. Pass `false` to make
+   * the generated string merely *contain* a match: it may have an arbitrary
+   * prefix and suffix around the matching portion.
+   */
   fullmatch?: boolean;
 }
 
@@ -202,9 +207,20 @@ class FromRegexGenerator extends SchemaStringGenerator {
 }
 
 /**
- * Generate strings matching a regex pattern. Defaults to full match (the
- * entire string matches the pattern); pass `{ fullmatch: false }` for
- * substring/contains behavior.
+ * Generate strings matching a regex pattern.
+ *
+ * The pattern is passed verbatim to the Hegel engine, which implements
+ * **Python `re` syntax**, not JavaScript `RegExp` syntax. JS `RegExp`
+ * objects and flags are not accepted — pass the pattern as a plain string.
+ * Most simple patterns (character classes, repetition, alternation, groups)
+ * mean the same thing in both dialects, but JS-specific constructs may be
+ * rejected at draw time, and Python-specific escapes (e.g. `(?P<name>...)`)
+ * differ from their JS spellings.
+ *
+ * By default (`fullmatch: true`) the entire generated string matches the
+ * pattern, as if it were anchored with `^...$`. Pass `{ fullmatch: false }`
+ * to generate strings that merely *contain* a match — they may have an
+ * arbitrary prefix and suffix around the matching portion.
  */
 export function fromRegex(pattern: string, options?: RegexOptions): Generator<string> {
   return new FromRegexGenerator(pattern, options);
