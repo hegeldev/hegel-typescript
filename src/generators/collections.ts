@@ -17,7 +17,7 @@ export interface ArrayOptions extends CollectionOptions {
   /**
    * Require all elements of the generated array to be distinct.
    *
-   * Elements are compared by structural value equality ({@link valuesEqual}):
+   * Elements are compared by structural value equality:
    * nested arrays and objects are compared by contents, `NaN` equals `NaN`,
    * `0` equals `-0`, and functions compare by reference.
    */
@@ -172,7 +172,8 @@ class SetsGenerator<T> extends Generator<Set<T>> {
 /**
  * Generate Sets with elements from the given generator.
  *
- * Elements are deduplicated by structural value equality ({@link valuesEqual}),
+ * Elements are deduplicated by structural value equality (see
+ * {@link ArrayOptions.unique | unique}),
  * not merely by reference: the generated Set never contains two structurally
  * equal elements (e.g. two `{ v: 0 }` objects), and `minSize`/`maxSize` count
  * structurally distinct elements.
@@ -269,7 +270,8 @@ class MapsGenerator<K, V> extends Generator<Map<K, V>> {
 /**
  * Generate Maps with keys and values from the given generators.
  *
- * Keys are deduplicated by structural value equality ({@link valuesEqual}),
+ * Keys are deduplicated by structural value equality (see
+ * {@link ArrayOptions.unique | unique}),
  * not merely by reference: the generated Map never contains two structurally
  * equal keys, and `minSize`/`maxSize` count structurally distinct keys.
  */
