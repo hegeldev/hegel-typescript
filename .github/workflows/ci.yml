@@ -194,8 +194,8 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: python .github/scripts/release.py push-or-pr
 
-  pr-docs:
-    name: pr-docs
+  push-docs:
+    name: push-docs
     needs: [release]
     if: needs.release.outputs.skip != 'true'
     runs-on: ubuntu-latest
@@ -231,10 +231,9 @@ jobs:
       - name: Build docs
         run: npm run docs
 
-      - name: PR docs to website repo
+      - name: Push docs to website repo
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           HEGEL_RELEASE_APP_ID: ${{ vars.HEGEL_RELEASE_APP_ID }}
           HEGEL_RELEASE_APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
           VERSION: ${{ needs.release.outputs.version }}
-        run: python3 .github/scripts/pr_docs.py
+        run: python3 .github/scripts/push_docs.py
