@@ -92,7 +92,7 @@ describe("failing test detection", () => {
           throw new Error("Found positive number");
         }
       }),
-    ).toThrow("Property test failed");
+    ).toThrow("Found positive number");
   });
 
   test("non-Error thrown value is reported", () => {
@@ -101,7 +101,7 @@ describe("failing test detection", () => {
         tc.draw(gs.booleans());
         throw new Error("custom failure");
       }),
-    ).toThrow("Property test failed");
+    ).toThrow("custom failure");
   });
 });
 
@@ -148,7 +148,7 @@ describe("async test bodies", () => {
         },
         { testCases: 50 },
       ),
-    ).rejects.toThrow("Property test failed");
+    ).rejects.toThrow("async failure");
   });
 
   test("hegel.testAsync() awaits async bodies before resolving", async () => {
@@ -185,7 +185,7 @@ describe("async test bodies", () => {
       caughtSync = e as Error;
     }
     expect(caughtSync).toBeNull();
-    await expect(promise).rejects.toThrow(/Property test failed/);
+    await expect(promise).rejects.toThrow(/boom/);
   });
 });
 
@@ -197,5 +197,5 @@ test("handles throwing weird types", () => {
         throw n;
       }
     }),
-  ).toThrow("Property test failed: 12345");
+  ).toThrow("12345");
 });

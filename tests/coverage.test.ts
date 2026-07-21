@@ -202,7 +202,7 @@ describe("shrinking", () => {
     } catch (e) {
       // The error should report the shrunk example
       expect(e).toBeInstanceOf(Error);
-      expect((e as Error).message).toContain("Property test failed");
+      expect((e as Error).message).toContain("positive");
     }
   });
 
@@ -216,7 +216,7 @@ describe("shrinking", () => {
       });
     } catch (e) {
       expect(e).toBeInstanceOf(Error);
-      expect((e as Error).message).toContain("Property test failed");
+      expect((e as Error).message).toContain("found positive in list");
     }
   });
 });
