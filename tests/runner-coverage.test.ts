@@ -230,7 +230,7 @@ describe("non-Error failures", () => {
         tc.draw(gs.integers({ minValue: 0, maxValue: 100 }));
         throw "boom-string";
       }),
-    ).toThrow(/Property test failed: boom-string/);
+    ).toThrow(/boom-string/);
   });
 });
 
@@ -246,7 +246,7 @@ describe("engine error reporting", () => {
         },
         { testCases: 1 },
       ),
-    ).toThrow(/Property test failed/);
+    ).toThrow();
   });
 
   test("excessive filtering trips the FilterTooMuch health check (run-level error)", () => {
@@ -271,6 +271,6 @@ describe("engine error reporting", () => {
           throw new Error("flaky failure");
         }
       }),
-    ).toThrow(/Property test failed/);
+    ).toThrow();
   });
 });

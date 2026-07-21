@@ -411,7 +411,7 @@ export class Hegel {
           return;
         }
         if (status === RunStatus.ERROR) {
-          throw new Error(`Property test failed: ${lib.runError(result)}`);
+          throw new Error(String(lib.runError(result)));
         }
         // RunStatus.FAILED: replay each distinct counterexample's blob as a
         // final, client-owned case. A genuine counterexample re-fails on replay,
@@ -432,7 +432,7 @@ export class Hegel {
           }
         }
         const detail = finalError instanceof Error ? finalError.message : String(finalError);
-        throw new Error(`Property test failed: ${detail} [${origins.join("; ")}]`);
+        throw new Error(`${detail} [${origins.join("; ")}]`);
       } finally {
         lib.freeRun(run);
       }

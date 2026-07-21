@@ -36,8 +36,8 @@ try {
 assert.ok(caught, "expected property to fail");
 assert.match(
   caught.message,
-  /Property test failed/,
-  `expected 'Property test failed' in error message, got: ${caught.message}`,
+  /found big number/,
+  `expected 'found big number' in error message, got: ${caught.message}`,
 );
 
 // 3. assume().
