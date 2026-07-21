@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1 - 2026-07-21
+
+Remove the `Property test failed:` prefix from the error thrown when a property fails.
+
 ## 0.4.0 - 2026-07-09
 
 This release changes the default value of `fullmatch` in `fromRegex` from `false` to `true`.
