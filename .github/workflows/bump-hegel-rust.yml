@@ -53,7 +53,7 @@ jobs:
           VERSION: ${{ github.event.client_payload.version || inputs.version }}
         run: python .github/scripts/bump_hegel_rust.py "$VERSION"
 
-      # The version bump only changes the pinned constant + checksums. The C ABI
+      # The version bump only changes the pinned constant. The C ABI
       # may have shifted with the new release, so realign the koffi FFI wrapper
       # (src/libhegel.ts) before the PR is reviewed. Skipped when nothing was
       # bumped.
@@ -66,7 +66,7 @@ jobs:
           github_token: ${{ steps.app-token.outputs.token }}
           prompt: |
             The pinned libhegel version was just bumped to v${{ steps.bump.outputs.version }}
-            (src/checksums.ts) on this checkout. Align the TypeScript koffi FFI wrapper in
+            (src/libhegel-version.ts) on this checkout. Align the TypeScript koffi FFI wrapper in
             src/libhegel.ts to the new release's C ABI, so that `just check` passes.
 
             The authoritative C header for the new release is

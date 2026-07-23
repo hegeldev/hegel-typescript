@@ -24,12 +24,13 @@
     }
   },
   "files": [
-    "dist",
-    "native"
+    "dist"
   ],
+  "prettier": {
+    "printWidth": 100
+  },
   "scripts": {
     "build": "tsc",
-    "prepack": "node scripts/fetch-libhegel.mjs --all",
     "test": "vitest run --coverage",
     "lint": "prettier --check . && eslint . && tsc --noEmit",
     "format": "prettier --write .",
@@ -59,5 +60,12 @@
   "dependencies": {
     "cbor-x": "^1.6.0",
     "koffi": "^3.0.2"
+  },
+  "optionalDependencies": {
+    "@hegeldev/hegel-darwin-arm64": "0.4.1",
+    "@hegeldev/hegel-linux-arm64": "0.4.1",
+    "@hegeldev/hegel-linux-x64": "0.4.1",
+    "@hegeldev/hegel-win32-arm64": "0.4.1",
+    "@hegeldev/hegel-win32-x64": "0.4.1"
   }
 }

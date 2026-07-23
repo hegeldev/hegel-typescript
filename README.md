@@ -19,13 +19,14 @@ To install: `npm install --save-dev @hegeldev/hegel`.
 Hegel requires Node 20.11+. Bun and Deno are not currently supported.
 
 Hegel drives [libhegel](https://github.com/hegeldev/hegel-rust) — the native Rust
-engine — directly via FFI. The prebuilt `libhegel` shared library for every
-supported platform is bundled inside the npm package (under `native/`), so there
-is nothing to download or compile at install time — `npm install` just works
-offline. Set `HEGEL_LIBHEGEL_PATH` to point at a local build to override the
-bundled library.
+engine — directly via FFI. The prebuilt `libhegel` shared library ships as a
+small per-platform npm package (`@hegeldev/hegel-linux-x64`,
+`@hegeldev/hegel-darwin-arm64`, ...); your package manager automatically
+installs the one matching your platform alongside `@hegeldev/hegel`, so there is
+nothing to download or compile at install time. Set `HEGEL_LIBHEGEL_PATH` to
+point at a local build to override it.
 
-Supported platforms (those with a bundled libhegel artifact): Linux
+Supported platforms (those with a published libhegel package): Linux
 amd64/arm64, macOS arm64 (Apple Silicon), and Windows amd64/arm64.
 
 ## Quickstart
