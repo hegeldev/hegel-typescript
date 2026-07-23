@@ -3,6 +3,7 @@ import json
 import os
 import re
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -60,23 +61,42 @@ def set_version(package_json: Path, new_version: str) -> None:
     package_json.write_text(json.dumps(data, indent=2) + "\n")
 
 
+def is_published(name: str, version: str) -> bool:
+    view = subprocess.run(
+        ["npm", "view", f"{name}@{version}", "version"],
+        capture_output=True,
+        text=True,
+    )
+    return view.returncode == 0 and bool(view.stdout.strip())
+
+
 def publish_platform_packages(version: str) -> None:
     subprocess.run(
         ["node", "scripts/make-platform-packages.mjs"], check=True, cwd=ROOT
     )
+    names = []
     for pkg_dir in sorted((ROOT / "platform-packages").iterdir()):
         name = json.loads((pkg_dir / "package.json").read_text())["name"]
+        names.append(name)
         # tolerate re-runs of a partially failed release: skip versions that
         # are already published.
-        view = subprocess.run(
-            ["npm", "view", f"{name}@{version}", "version"],
-            capture_output=True,
-            text=True,
-        )
-        if view.returncode == 0 and view.stdout.strip():
+        if is_published(name, version):
             print(f"{name}@{version} already published, skipping")
             continue
         subprocess.run(["npm", "publish"], check=True, cwd=pkg_dir)
+
+    # a fresh publish can lag on the registry read path for a few seconds.
+    # npm silently drops optional dependencies it cannot resolve, so
+    # regenerating the lockfile before every package is visible desyncs it
+    # from package.json.
+    for name in names:
+        for _ in range(30):
+            if is_published(name, version):
+                break
+            print(f"waiting for {name}@{version} to appear on the registry")
+            time.sleep(2)
+        else:
+            raise ValueError(f"{name}@{version} never appeared on the registry")
 
 
 def add_changelog(path: Path, *, version: str, content: str) -> None:
