@@ -10,7 +10,7 @@ import {
   type Bindings,
   type Ptr,
 } from "../src/libhegel.js";
-import { StopTestError, Labels } from "../src/testCase.js";
+import { AssumeError, StopTestError, Labels } from "../src/testCase.js";
 import { testLibPath } from "./libPath.js";
 
 // ---------------------------------------------------------------------------
@@ -154,6 +154,14 @@ describe("Libhegel wrapper logic (fake bindings)", () => {
   it("maps STOP_TEST to StopTestError", () => {
     const lib = new Libhegel(fakeBindings({ startSpan: () => -1 }));
     expect(() => lib.startSpan(null, null, Labels.LIST)).toThrow(StopTestError);
+  });
+
+  it("maps ASSUME to AssumeError", () => {
+    // The engine can reject a draw internally (e.g. a format generator's
+    // precondition), but only on unlucky random draws — drive the code
+    // deterministically instead.
+    const lib = new Libhegel(fakeBindings({ generate: () => -2 }));
+    expect(() => lib.generate(null, null, Buffer.alloc(0))).toThrow(AssumeError);
   });
 
   it("maps other non-OK codes to LibhegelError with the diagnostic", () => {

@@ -11,7 +11,7 @@
 
 import { Libhegel } from "./libhegel.js";
 import { locateLibhegel } from "./locate.js";
-import { LIBHEGEL_VERSION } from "./checksums.js";
+import { LIBHEGEL_VERSION } from "./libhegel-version.js";
 
 let cached: Libhegel | null = null;
 

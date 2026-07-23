@@ -9,9 +9,8 @@
 CLAUDE.local.md
 
 .venv/
-# Bundled native libhegel libraries (populated at pack/test time).
 native/
-# The engine's default on-disk example database (.hegel/examples/).
+platform-packages/
 .hegel/
 .hypothesis/
 __pycache__/

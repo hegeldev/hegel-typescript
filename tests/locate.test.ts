@@ -1,88 +1,130 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
 import {
-  libhegelAssetName,
-  nativeDir,
+  libhegelPackageName,
   resolveLibrary,
+  resolvePackagedBinary,
   locateLibhegel,
   LIBRARY_PATH_ENV,
 } from "../src/locate.js";
-import { LIBHEGEL_CHECKSUMS, LIBHEGEL_VERSION } from "../src/checksums.js";
+import { LIBHEGEL_VERSION } from "../src/libhegel-version.js";
+import { PLATFORMS } from "../scripts/fetch-libhegel.mjs";
 
 const HOST_PLATFORM = process.platform;
 const HOST_ARCH = process.arch;
-const REAL_ASSET = libhegelAssetName(HOST_PLATFORM, HOST_ARCH);
 
-describe("libhegelAssetName", () => {
-  it("maps each supported os/arch to a bundled asset", () => {
-    expect(libhegelAssetName("linux", "x64")).toBe("libhegel-linux-amd64.so");
-    expect(libhegelAssetName("linux", "arm64")).toBe("libhegel-linux-arm64.so");
-    expect(libhegelAssetName("darwin", "arm64")).toBe("libhegel-darwin-arm64.dylib");
-    expect(libhegelAssetName("win32", "x64")).toBe("libhegel-windows-amd64.dll");
-    expect(libhegelAssetName("win32", "arm64")).toBe("libhegel-windows-arm64.dll");
+// A supported platform that is never the host's, so its platform package can
+// never be installed in this repo's node_modules (package managers skip
+// optional dependencies whose os/cpu don't match).
+const OTHER_PLATFORM: NodeJS.Platform = HOST_PLATFORM === "linux" ? "darwin" : "linux";
+
+describe("libhegelPackageName", () => {
+  it("maps each supported os/arch to a platform package", () => {
+    expect(libhegelPackageName("linux", "x64")).toBe("@hegeldev/hegel-linux-x64");
+    expect(libhegelPackageName("linux", "arm64")).toBe("@hegeldev/hegel-linux-arm64");
+    expect(libhegelPackageName("darwin", "arm64")).toBe("@hegeldev/hegel-darwin-arm64");
+    expect(libhegelPackageName("win32", "x64")).toBe("@hegeldev/hegel-win32-x64");
+    expect(libhegelPackageName("win32", "arm64")).toBe("@hegeldev/hegel-win32-arm64");
   });
 
   it("throws for an unsupported platform", () => {
-    expect(() => libhegelAssetName("freebsd" as NodeJS.Platform, "x64")).toThrow(
+    expect(() => libhegelPackageName("freebsd" as NodeJS.Platform, "x64")).toThrow(
       /Unsupported platform/,
     );
   });
 
   it("throws for an unsupported architecture", () => {
-    expect(() => libhegelAssetName("linux", "ia32")).toThrow(/Unsupported architecture/);
+    expect(() => libhegelPackageName("linux", "ia32")).toThrow(/Unsupported architecture/);
   });
 });
 
-describe("nativeDir", () => {
-  it("points at the package's native/ directory", () => {
-    expect(path.basename(nativeDir())).toBe("native");
+describe("platform matrix consistency", () => {
+  it("scripts, locate.ts, and package.json agree on the supported targets", () => {
+    const pkg = JSON.parse(
+      fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+    ) as {
+      optionalDependencies: Record<string, string>;
+    };
+    // every scripts-side target passes locate.ts validation and is pinned as
+    // an optionalDependency; no pins exist beyond the scripts-side targets.
+    const names = PLATFORMS.map((p) => libhegelPackageName(p.platform, p.arch));
+    expect(names.toSorted()).toEqual(Object.keys(pkg.optionalDependencies).toSorted());
+  });
+});
+
+describe("resolvePackagedBinary", () => {
+  it("resolves an installed specifier to a path", () => {
+    expect(resolvePackagedBinary("koffi")).not.toBeNull();
+  });
+
+  it("returns null for an uninstalled package", () => {
+    expect(resolvePackagedBinary("@hegeldev/not-a-real-package/binary")).toBeNull();
   });
 });
 
 describe("resolveLibrary", () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "hegel-native-"));
-  });
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  it("returns the explicit override without consulting the bundle", () => {
+  it("returns the explicit override without consulting the platform package", () => {
     expect(
       resolveLibrary({
         env: { [LIBRARY_PATH_ENV]: "/opt/libhegel.so" },
         platform: HOST_PLATFORM,
         arch: HOST_ARCH,
-        nativeDir: tmpDir,
       }),
     ).toBe("/opt/libhegel.so");
   });
 
-  it("returns the bundled artifact for the host platform", () => {
-    const dest = path.join(tmpDir, REAL_ASSET);
-    fs.writeFileSync(dest, "fake lib");
+  it("ignores an empty override", () => {
     expect(
-      resolveLibrary({ env: {}, platform: HOST_PLATFORM, arch: HOST_ARCH, nativeDir: tmpDir }),
-    ).toBe(dest);
+      resolveLibrary({
+        env: { [LIBRARY_PATH_ENV]: "" },
+        platform: "linux",
+        arch: "arm64",
+        resolvePackaged: () => "/resolved/libhegel-linux-arm64.so",
+      }),
+    ).toBe("/resolved/libhegel-linux-arm64.so");
   });
 
-  it("throws when the bundled artifact is missing", () => {
+  it("resolves the platform package's binary export", () => {
+    const resolved: string[] = [];
+    expect(
+      resolveLibrary({
+        env: {},
+        platform: "linux",
+        arch: "arm64",
+        resolvePackaged: (specifier) => {
+          resolved.push(specifier);
+          return "/resolved/libhegel-linux-arm64.so";
+        },
+      }),
+    ).toBe("/resolved/libhegel-linux-arm64.so");
+    expect(resolved).toEqual(["@hegeldev/hegel-linux-arm64/binary"]);
+  });
+
+  it("throws when the platform package is not installed", () => {
     expect(() =>
-      resolveLibrary({ env: {}, platform: HOST_PLATFORM, arch: HOST_ARCH, nativeDir: tmpDir }),
-    ).toThrow(/Bundled libhegel not found/);
+      resolveLibrary({
+        env: {},
+        platform: HOST_PLATFORM,
+        arch: HOST_ARCH,
+        resolvePackaged: () => null,
+      }),
+    ).toThrow(/libhegel not found/);
   });
 
-  it("propagates the unsupported-platform error before checking the bundle", () => {
+  it("uses the module system by default to find the platform package", () => {
+    // OTHER_PLATFORM's package is never installed here, so the default
+    // resolver comes up empty and resolution fails.
+    expect(() => resolveLibrary({ env: {}, platform: OTHER_PLATFORM, arch: "arm64" })).toThrow(
+      /libhegel not found/,
+    );
+  });
+
+  it("propagates the unsupported-platform error before any lookup", () => {
     expect(() =>
       resolveLibrary({
         env: {},
         platform: "freebsd" as NodeJS.Platform,
         arch: HOST_ARCH,
-        nativeDir: tmpDir,
       }),
     ).toThrow(/Unsupported platform/);
   });
@@ -99,20 +141,10 @@ describe("locateLibhegel", () => {
     process.env[LIBRARY_PATH_ENV] = "/tmp/some-libhegel.so";
     expect(locateLibhegel()).toBe("/tmp/some-libhegel.so");
   });
-
-  it("resolves the bundled artifact when no override is set", () => {
-    delete process.env[LIBRARY_PATH_ENV];
-    // native/ is populated before the test run (just fetch-libhegel), so the
-    // host artifact resolves to a real file under the package's native dir.
-    const resolved = locateLibhegel();
-    expect(resolved).toBe(path.join(nativeDir(), REAL_ASSET));
-    expect(fs.existsSync(resolved)).toBe(true);
-  });
 });
 
-describe("checksums module", () => {
-  it("pins a version and provides a checksum per published asset", () => {
+describe("libhegel-version module", () => {
+  it("pins a semver libhegel version", () => {
     expect(LIBHEGEL_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(Object.keys(LIBHEGEL_CHECKSUMS).length).toBe(5);
   });
 });

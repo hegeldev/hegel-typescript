@@ -1,9 +1,9 @@
 set ignore-comments := true
 
-# Download the host's published libhegel artifact into native/ (if missing,
-# verified against the pinned checksum) and print its path. Used to run tests
-# against the real native library; the same script with --all bundles every
-# platform's artifact at npm pack time (see package.json `prepack`).
+# Download the host's published libhegel artifact into native/ (if missing)
+# and print its path. Used to run tests against the real native library. (End
+# users instead get the library from the @hegeldev/hegel-<os>-<arch> platform
+# packages; see scripts/make-platform-packages.mjs.)
 @fetch-libhegel:
     node scripts/fetch-libhegel.mjs
 
@@ -16,17 +16,17 @@ build-libhegel:
     cargo build --release -p hegeltest-c --manifest-path ../hegel-rust/Cargo.toml
     echo "../hegel-rust/target/release/libhegel_c.so"
 
-# Regenerate src/checksums.ts from a hegel-rust release. Targets the latest
-# release; pass a version (e.g. `just update-checksums 0.20.1`) to pin an exact
-# one.
-update-checksums version="":
-    node scripts/update-checksums.mjs {{version}}
-    npx prettier --write src/checksums.ts
+# Regenerate src/libhegel-version.ts from a hegel-rust release. Targets the
+# latest release; pass a version (e.g. `just update-libhegel 0.20.1`) to pin an
+# exact one.
+update-libhegel version="":
+    node scripts/update-libhegel.mjs {{version}}
+    npx prettier --write src/libhegel-version.ts
 
 check-test:
     #!/usr/bin/env bash
     set -euo pipefail
-    node scripts/fetch-libhegel.mjs > /dev/null
+    export HEGEL_LIBHEGEL_PATH="${HEGEL_LIBHEGEL_PATH:-$(node scripts/fetch-libhegel.mjs)}"
     npx vitest run --coverage
     python3 scripts/check-coverage.py
 

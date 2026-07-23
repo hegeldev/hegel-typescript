@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 RUST_REPO = "hegeldev/hegel-rust"
 BRANCH = "ci/bump-hegel-rust"
-CHECKSUMS = ROOT / "src" / "checksums.ts"
+VERSION_TS = ROOT / "src" / "libhegel-version.ts"
 RELEASE_MD = ROOT / "RELEASE.md"
 
 
@@ -25,9 +25,9 @@ def set_output(name: str, value: str) -> None:
 
 
 def get_pinned_version() -> str:
-    text = CHECKSUMS.read_text()
+    text = VERSION_TS.read_text()
     m = re.search(r'^export const LIBHEGEL_VERSION = "([^"]+)";', text, re.MULTILINE)
-    assert m is not None, "could not find LIBHEGEL_VERSION in checksums.ts"
+    assert m is not None, "could not find LIBHEGEL_VERSION in libhegel-version.ts"
     return m.group(1)
 
 
@@ -40,11 +40,11 @@ def bump(requested: str) -> None:
     """
     current = get_pinned_version()
 
-    # `just update-checksums` regenerates src/checksums.ts for the target
+    # `just update-libhegel` regenerates src/libhegel-version.ts for the target
     # release (empty requested -> latest) and formats it. The script discovers
     # the resolved version itself, so we read it back rather than trusting the
     # request (which may be empty for a manual latest-bump).
-    subprocess.run(["just", "update-checksums", requested], check=True, cwd=ROOT)
+    subprocess.run(["just", "update-libhegel", requested], check=True, cwd=ROOT)
     new = get_pinned_version()
 
     if new == current:
@@ -68,7 +68,7 @@ def bump(requested: str) -> None:
     # A fixed branch we reuse across releases. Commit locally only; the workflow
     # pushes it after folding in the FFI alignment.
     git("checkout", "-B", BRANCH)
-    git("add", str(CHECKSUMS), str(RELEASE_MD))
+    git("add", str(VERSION_TS), str(RELEASE_MD))
     git(
         "commit",
         "-m",

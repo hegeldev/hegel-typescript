@@ -52,7 +52,31 @@ def bump_version(current: str, release_type: str) -> str:
 def set_version(package_json: Path, new_version: str) -> None:
     data = json.loads(package_json.read_text())
     data["version"] = new_version
+    # the per-platform binary packages are published in lockstep with the main
+    # package, pinned to the exact same version.
+    for name in data.get("optionalDependencies", {}):
+        if name.startswith("@hegeldev/hegel-"):
+            data["optionalDependencies"][name] = new_version
     package_json.write_text(json.dumps(data, indent=2) + "\n")
+
+
+def publish_platform_packages(version: str) -> None:
+    subprocess.run(
+        ["node", "scripts/make-platform-packages.mjs"], check=True, cwd=ROOT
+    )
+    for pkg_dir in sorted((ROOT / "platform-packages").iterdir()):
+        name = json.loads((pkg_dir / "package.json").read_text())["name"]
+        # tolerate re-runs of a partially failed release: skip versions that
+        # are already published.
+        view = subprocess.run(
+            ["npm", "view", f"{name}@{version}", "version"],
+            capture_output=True,
+            text=True,
+        )
+        if view.returncode == 0 and view.stdout.strip():
+            print(f"{name}@{version} already published, skipping")
+            continue
+        subprocess.run(["npm", "publish"], check=True, cwd=pkg_dir)
 
 
 def add_changelog(path: Path, *, version: str, content: str) -> None:
@@ -119,6 +143,9 @@ def release() -> None:
     new_version = bump_version(data["version"], release_type)
 
     set_version(package_json, new_version)
+    # the platform packages must exist on the registry at the new version
+    # before anything resolves the main package.json against it
+    publish_platform_packages(new_version)
     # regenerate lockfile after version bump
     subprocess.run(["npm", "install", "--package-lock-only"], check=True, cwd=ROOT)
 

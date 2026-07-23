@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { checkVersion, loadLibhegel, getLibhegel } from "../src/session.js";
-import { LIBHEGEL_VERSION } from "../src/checksums.js";
+import { LIBHEGEL_VERSION } from "../src/libhegel-version.js";
 
 describe("checkVersion", () => {
   it("accepts a matching major.minor (any patch)", () => {

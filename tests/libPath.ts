@@ -6,19 +6,19 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { libhegelAssetName } from "../src/locate.js";
+import { hostAsset } from "../scripts/fetch-libhegel.mjs";
+import { LIBHEGEL_VERSION } from "../src/libhegel-version.js";
 
 export function testLibPath(): string {
   const override = process.env.HEGEL_LIBHEGEL_PATH;
   if (override) {
     return override;
   }
-  const asset = libhegelAssetName(process.platform, process.arch);
-  const candidate = path.join(process.cwd(), "native", asset);
+  const candidate = path.join(process.cwd(), "native", LIBHEGEL_VERSION, hostAsset());
   if (!fs.existsSync(candidate)) {
     throw new Error(
       `libhegel not found at ${candidate}. Set HEGEL_LIBHEGEL_PATH or run ` +
-        `\`just fetch-libhegel\` to download the v0.23.0 artifact into native/.`,
+        `\`just fetch-libhegel\` to download the pinned libhegel into native/.`,
     );
   }
   return candidate;

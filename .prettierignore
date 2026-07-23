@@ -1,10 +1,2 @@
-dist/
-docs/
-coverage/
-node_modules/
-.venv/
-.hegel/
-.hypothesis/
-.hegelator/
 RELEASE.md
 CHANGELOG.md
