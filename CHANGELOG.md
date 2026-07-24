@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.3 - 2026-07-24
+
+Hegel now officially supports Bun 1.2.5+ and Deno 2+. (Deno requires `--allow-ffi --allow-read --allow-env`).
+
 ## 0.4.2 - 2026-07-23
 
 The native libhegel shared libraries are now distributed as per-platform npm
