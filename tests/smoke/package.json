@@ -1,5 +1,5 @@
 {
-  "name": "hegel-old-node-tests",
+  "name": "hegel-smoke-tests",
   "private": true,
   "version": "0.0.0",
   "type": "module",

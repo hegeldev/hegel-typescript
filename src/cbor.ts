@@ -11,6 +11,8 @@
  * @packageDocumentation
  */
 
+// Deno only added the `Buffer` global in 2.4
+import { Buffer } from "node:buffer";
 import { addExtension, encode, decode } from "cbor-x";
 import { wtf8ToString } from "./wtf8.js";
 
