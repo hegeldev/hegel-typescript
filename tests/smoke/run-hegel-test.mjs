@@ -1,5 +1,4 @@
-// tests run by our CI job for older node versions. Separated out because vitest doesn't
-// support older node versions.
+// Smoke tests run by CI against other supported runtimes (bun and deno)
 
 import assert from "node:assert/strict";
 import * as hegel from "@hegeldev/hegel";

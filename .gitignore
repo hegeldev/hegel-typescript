@@ -29,3 +29,4 @@ docs/
 .DS_Store
 Thumbs.db
 .hegelator/
+tests/smoke/package-lock.json

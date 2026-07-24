@@ -21,6 +21,7 @@
  * @packageDocumentation
  */
 
+import { Buffer } from "node:buffer";
 import koffi, { type LibraryHandle } from "koffi";
 import { StopTestError, AssumeError } from "./testCase.js";
 

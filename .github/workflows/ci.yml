@@ -84,15 +84,103 @@ jobs:
         run: echo "HEGEL_LIBHEGEL_PATH=$(just fetch-libhegel)" >> "$GITHUB_ENV"
 
       - name: Install fixture
-        working-directory: tests/old_node
+        working-directory: tests/smoke
         run: npm install --no-audit --no-fund
 
       - name: Run minimum-Node smoke tests
-        working-directory: tests/old_node
+        working-directory: tests/smoke
         run: |
           for f in *.mjs; do
             echo "Running $f"
             node "$f"
+          done
+
+  test-bun:
+    name: test (bun ${{ matrix.version }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["1.2.5", "latest"]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install just
+        run: sudo apt-get update && sudo apt-get install -y just
+
+      # Node is still needed to build the package and install the fixture.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ matrix.version }}
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Fetch libhegel
+        run: echo "HEGEL_LIBHEGEL_PATH=$(just fetch-libhegel)" >> "$GITHUB_ENV"
+
+      - name: Install fixture
+        working-directory: tests/smoke
+        run: npm install --no-audit --no-fund
+
+      - name: Run smoke tests
+        working-directory: tests/smoke
+        run: |
+          for f in *.mjs; do
+            echo "Running $f"
+            bun "$f"
+          done
+
+  test-deno:
+    name: test (deno ${{ matrix.version }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["2.0.0", "v2.x"]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install just
+        run: sudo apt-get update && sudo apt-get install -y just
+
+      # Node is still needed to build the package and install the fixture.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: ${{ matrix.version }}
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Fetch libhegel
+        run: echo "HEGEL_LIBHEGEL_PATH=$(just fetch-libhegel)" >> "$GITHUB_ENV"
+
+      - name: Install fixture
+        working-directory: tests/smoke
+        run: npm install --no-audit --no-fund
+
+      - name: Run smoke tests
+        working-directory: tests/smoke
+        run: |
+          for f in *.mjs; do
+            echo "Running $f"
+            deno run --allow-ffi --allow-read --allow-env "$f"
           done
 
   docs:
@@ -116,7 +204,7 @@ jobs:
   release:
     name: release
     if: github.event_name == 'push' && github.repository == 'hegeldev/hegel-typescript'
-    needs: [lint, test, test-node-20, docs]
+    needs: [lint, test, test-node-20, test-bun, test-deno, docs]
     runs-on: ubuntu-latest
     permissions:
       contents: write
