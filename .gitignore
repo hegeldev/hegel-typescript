@@ -6,6 +6,7 @@
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/changelog/
+!.claude/skills/align-libhegel/
 CLAUDE.local.md
 
 .venv/
