@@ -36,9 +36,9 @@ The layers, and what an ABI change usually touches:
 - **`src/wtf8.ts`** — decodes engine-returned string bytes (UTF-8 exactly,
   tolerant of lone surrogates). Touch only if string encoding changes.
 
-**Within the binding layer, the koffi prototypes *must* track the C API.**
+**Within the binding layer, the koffi prototypes _must_ track the C API.**
 When a C function gains a parameter, the prototype string in `bindLibrary`
-grows with it. A behavior-preserving default for a new *optional* parameter (a
+grows with it. A behavior-preserving default for a new _optional_ parameter (a
 NULL callback, a `0`-means-default flag) is absorbed inside `bindLibrary`'s
 returned wrapper — but that absorption must be **documented in the `Bindings`
 interface docs** so a future reader can tell a deliberate default from an
@@ -151,7 +151,7 @@ this client uses, three places move together: the **prototype string** (or
   commit message and move on.
 - **Changed signature** (a new arg, or a value moving from return to
   out-param) → remember the convention: ctx first, result-code return,
-  produced value through a trailing out-param. A new *optional* arg with a
+  produced value through a trailing out-param. A new _optional_ arg with a
   behavior-preserving default may be absorbed in `bindLibrary`'s wrapper, but
   document the absorption in the `Bindings` docs.
 - **Changed enum/constant values** → update the exported `const` objects
@@ -176,9 +176,10 @@ this client uses, three places move together: the **prototype string** (or
   way.
 - Prototype strings (`lib.func("int hegel_x(void* ctx, ...)")`) are the
   default and self-documenting. Functions taking **structs by value** cannot
-  be expressed with anonymous types in string form — those use the `fs(name,
-  [types])` helper with the `TypeObject`s and `koffi.out(koffi.pointer(t))`
-  for the out-param (see `hegel_generate_date` / `hegel_generate_bytes`).
+  be expressed with anonymous types in string form — those use the
+  `fs(name, [types])` helper with the `TypeObject`s and
+  `koffi.out(koffi.pointer(t))` for the out-param (see `hegel_generate_date` /
+  `hegel_generate_bytes`).
 - **Out-parameters are single-element JS arrays**: declare `_Out_ T*` in the
   prototype, pass `[null]` / `[0]` / `[false]`, read `out[0]` after the call.
   A `_Out_ char**` comes back as a JS string (or `null` for the engine's
@@ -203,14 +204,14 @@ this client uses, three places move together: the **prototype string** (or
   script beats an afternoon of debugging a garbage struct field. Delete the
   script afterwards.
 - **References for unclear semantics**: the implementation is
-  `hegel-c/src/` in hegel-rust *at the release tag* (ownership, error codes,
+  `hegel-c/src/` in hegel-rust _at the release tag_ (ownership, error codes,
   sentinel values), and hegel-go's `internal/libhegel/` is a second, complete
   binding of the same ABI to sanity-check your reading against.
 
 ## 5. Coverage and tests
 
 `just check` enforces **100% coverage** (vitest v8 thresholds plus
-`scripts/check-coverage.py`), including 100% *function* coverage — so **a
+`scripts/check-coverage.py`), including 100% _function_ coverage — so **a
 binding nothing calls fails the build**. Bind only the functions the front end
 actually uses, and land coverage in the same change as the binding:
 
@@ -252,7 +253,7 @@ The steps above are done by the same context that made the edits, so they
 share its blind spots: a symbol you never noticed in the header is a symbol
 you also won't notice is misbound. Close that gap with a **fresh-context
 audit** as the final gate. Launch a separate agent (Task tool,
-`subagent_type: "general-purpose"`) that has *not* seen your edits and whose
+`subagent_type: "general-purpose"`) that has _not_ seen your edits and whose
 only job is to check the binding against the header.
 
 Give the agent a self-contained prompt — it starts with no context:
