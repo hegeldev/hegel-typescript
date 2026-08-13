@@ -153,9 +153,14 @@ jobs:
             esac
             # Authors other than the bot on the PR's commits? (GraphQL reports
             # the bot's login without the [bot] suffix; check both spellings.)
+            # A commit whose author email isn't linked to a GitHub account
+            # reports login as an EMPTY STRING (not null), which jq's `//`
+            # treats as truthy — so test for "" explicitly to fall through to
+            # the git author name, and count a fully unknown author as human:
+            # never close a PR on an identity we couldn't resolve.
             others=$(gh pr view "$pr" --json commits \
-              --jq '[.commits[].authors[] | (.login // .name // empty)] | unique
-                    | map(select(. != "" and . != "hegel-release" and . != "hegel-release[bot]"))
+              --jq '[.commits[].authors[] | (if (.login // "") != "" then .login elif (.name // "") != "" then .name else "unknown author" end)] | unique
+                    | map(select(. != "hegel-release" and . != "hegel-release[bot]"))
                     | join(", ")')
             if [ -z "$others" ]; then
               gh pr close "$pr" --comment "Superseded by #${new_pr}, which pins libhegel ${VERSION}."
