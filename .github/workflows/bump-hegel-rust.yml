@@ -70,19 +70,15 @@ jobs:
           allowed_bots: hegel-release
           prompt: |
             The pinned libhegel version was just bumped to v${{ steps.bump.outputs.version }}
-            (src/libhegel-version.ts) on this checkout. Align the TypeScript koffi FFI wrapper in
-            src/libhegel.ts to the new release's C ABI, so that `just check` passes.
-
-            The authoritative C header for the new release is
-            https://raw.githubusercontent.com/hegeldev/hegel-rust/v${{ steps.bump.outputs.version }}/hegel-c/include/hegel.h
-            — fetch it and reconcile the bound function signatures, enums, and result
-            codes in src/libhegel.ts (and, only if the ABI demands it, the thin call
-            sites in src/runner.ts / src/session.ts). Do NOT change the public
+            (src/libhegel-version.ts) on this checkout. Use the align-libhegel skill to align
+            the TypeScript koffi FFI binding layer (src/libhegel.ts and, only if the ABI
+            demands it, src/generate.ts / src/runner.ts / src/session.ts) to the new
+            release, so that `just check` passes. Do NOT change the public
             `@hegeldev/hegel` API (test, testAsync, Settings, generators) — only the
             internal binding layer. Do NOT commit or push; leave all changes in the
             working tree for the next step to commit.
           claude_args: >-
-            --allowed-tools "Bash,Edit,Write,Read,Glob,Grep,WebFetch"
+            --allowed-tools "Bash,Edit,Write,Read,Glob,Grep,WebFetch,Skill"
             --max-turns 60
 
       # Fold the FFI alignment into the bump commit so the branch carries a
