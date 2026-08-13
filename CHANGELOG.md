@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.4 - 2026-08-13
+
+This patch bumps our pinned libhegel ([hegel-rust](hegeldev/hegel-rust)) from [0.23.0](https://github.com/hegeldev/hegel-rust/releases/tag/v0.23.0) to [0.32.4](https://github.com/hegeldev/hegel-rust/releases/tag/v0.32.4).
+
 ## 0.4.3 - 2026-07-24
 
 Hegel now officially supports Bun 1.2.5+ and Deno 2+. (Deno requires `--allow-ffi --allow-read --allow-env`).

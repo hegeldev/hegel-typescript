@@ -1,6 +1,6 @@
 {
   "name": "@hegeldev/hegel",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Property-based testing for TypeScript",
   "type": "module",
   "repository": {
@@ -61,10 +61,10 @@
     "koffi": "^3.0.2"
   },
   "optionalDependencies": {
-    "@hegeldev/hegel-darwin-arm64": "0.4.3",
-    "@hegeldev/hegel-linux-arm64": "0.4.3",
-    "@hegeldev/hegel-linux-x64": "0.4.3",
-    "@hegeldev/hegel-win32-arm64": "0.4.3",
-    "@hegeldev/hegel-win32-x64": "0.4.3"
+    "@hegeldev/hegel-darwin-arm64": "0.4.4",
+    "@hegeldev/hegel-linux-arm64": "0.4.4",
+    "@hegeldev/hegel-linux-x64": "0.4.4",
+    "@hegeldev/hegel-win32-arm64": "0.4.4",
+    "@hegeldev/hegel-win32-x64": "0.4.4"
   }
 }
