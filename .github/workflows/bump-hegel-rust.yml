@@ -70,19 +70,15 @@ jobs:
           allowed_bots: hegel-release
           prompt: |
             The pinned libhegel version was just bumped to v${{ steps.bump.outputs.version }}
-            (src/libhegel-version.ts) on this checkout. Align the TypeScript koffi FFI wrapper in
-            src/libhegel.ts to the new release's C ABI, so that `just check` passes.
-
-            The authoritative C header for the new release is
-            https://raw.githubusercontent.com/hegeldev/hegel-rust/v${{ steps.bump.outputs.version }}/hegel-c/include/hegel.h
-            — fetch it and reconcile the bound function signatures, enums, and result
-            codes in src/libhegel.ts (and, only if the ABI demands it, the thin call
-            sites in src/runner.ts / src/session.ts). Do NOT change the public
+            (src/libhegel-version.ts) on this checkout. Use the align-libhegel skill to align
+            the TypeScript koffi FFI binding layer (src/libhegel.ts and, only if the ABI
+            demands it, src/generate.ts / src/runner.ts / src/session.ts) to the new
+            release, so that `just check` passes. Do NOT change the public
             `@hegeldev/hegel` API (test, testAsync, Settings, generators) — only the
             internal binding layer. Do NOT commit or push; leave all changes in the
             working tree for the next step to commit.
           claude_args: >-
-            --allowed-tools "Bash,Edit,Write,Read,Glob,Grep,WebFetch"
+            --allowed-tools "Bash,Edit,Write,Read,Glob,Grep,WebFetch,Skill"
             --max-turns 60
 
       # Fold the FFI alignment into the bump commit so the branch carries a
@@ -98,7 +94,10 @@ jobs:
           git add -A
           git commit --amend --no-edit
 
-      # The single push: force-push the reused branch and open/update the PR.
+      # The single push: force-push the per-version branch and open/update the
+      # PR. The branch name embeds the pinned version, so the force-push only
+      # ever overwrites a re-run of this same version — never another
+      # version's (or a human's) work.
       - name: Push and open/update the PR
         if: steps.bump.outputs.bumped == 'true'
         env:
@@ -126,3 +125,41 @@ jobs:
           else
             gh pr create --title "$title" --body "$body"
           fi
+
+      # Older bump PRs are now superseded by this one. Close the ones that
+      # carry only bot commits; a PR someone (or an alignment agent) pushed
+      # work to is left open with a note instead — closing must never bury
+      # manual work. Runs after the new PR exists, and best-effort: a hiccup
+      # here must not fail the bump itself.
+      - name: Supersede older bump PRs
+        if: steps.bump.outputs.bumped == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ steps.bump.outputs.version }}
+          BRANCH: ${{ steps.bump.outputs.branch }}
+        run: |
+          set -euo pipefail
+          new_pr=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number')
+
+          gh pr list --state open --json number,headRefName \
+            --jq '.[] | [.number, .headRefName] | @tsv' |
+          while IFS=$'\t' read -r pr head; do
+            [ "$head" = "$BRANCH" ] && continue
+            # Match the legacy fixed branch name and the per-version branches.
+            case "$head" in
+              ci/bump-hegel-rust | ci/bump-hegel-rust-*) ;;
+              *) continue ;;
+            esac
+            # Authors other than the bot on the PR's commits? (GraphQL reports
+            # the bot's login without the [bot] suffix; check both spellings.)
+            others=$(gh pr view "$pr" --json commits \
+              --jq '[.commits[].authors[] | (.login // .name // empty)] | unique
+                    | map(select(. != "" and . != "hegel-release" and . != "hegel-release[bot]"))
+                    | join(", ")')
+            if [ -z "$others" ]; then
+              gh pr close "$pr" --comment "Superseded by #${new_pr}, which pins libhegel ${VERSION}."
+            else
+              gh pr comment "$pr" --body "Superseded by #${new_pr}, which pins libhegel ${VERSION}. Leaving this PR open because it carries commits by: ${others}."
+            fi
+          done
