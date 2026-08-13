@@ -13,7 +13,9 @@ export interface IntegerOptions {
 }
 
 function parseInteger(raw: unknown): number {
-  // cbor-x may decode values near the safe integer boundary as BigInt
+  // The schema interpreter hands back BigInt for values outside the safe
+  // integer range, which in-range bounds guarantee cannot happen here; the
+  // conversion below is for uniformity with hand-rolled DataSources.
   if (typeof raw === "bigint") return Number(raw);
   return raw as number;
 }

@@ -7,7 +7,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { encode, decode } from "./cbor.js";
+import { generateValue } from "./generate.js";
 import { TestCase, StopTestError, AssumeError, type DataSource } from "./testCase.js";
 import { getLibhegel } from "./session.js";
 import { Libhegel, Status, RunStatus, NativeVerbosity, type Ptr } from "./libhegel.js";
@@ -102,12 +102,18 @@ export function defaultSettings(): Settings {
 /**
  * {@link DataSource} backed by a native libhegel test case. All draws, spans
  * and collection operations dispatch to the engine via the {@link Libhegel}
- * C-ABI wrapper.
+ * C-ABI wrapper; schema draws are interpreted onto the ABI's typed generate
+ * calls by {@link generateValue}.
+ *
+ * The native collection handles behind the {@link DataSource}'s numeric
+ * collection ids are owned by this object — the runner calls {@link dispose}
+ * once the test case is over to release them.
  */
 export class NativeDataSource implements DataSource {
   private readonly lib: Libhegel;
   private readonly ctx: Ptr;
   private readonly tc: Ptr;
+  private readonly collections: Ptr[] = [];
 
   constructor(lib: Libhegel, ctx: Ptr, tc: Ptr) {
     this.lib = lib;
@@ -116,8 +122,7 @@ export class NativeDataSource implements DataSource {
   }
 
   generate(schema: Record<string, unknown>): unknown {
-    const out = this.lib.generate(this.ctx, this.tc, encode(schema));
-    return decode(out);
+    return generateValue(this.lib, this.ctx, this.tc, schema);
   }
 
   startSpan(label: number): void {
@@ -129,19 +134,28 @@ export class NativeDataSource implements DataSource {
   }
 
   newCollection(minSize: number, maxSize?: number): number {
-    return Number(this.lib.newCollection(this.ctx, this.tc, minSize, maxSize));
+    this.collections.push(this.lib.newCollection(this.ctx, this.tc, minSize, maxSize));
+    return this.collections.length - 1;
   }
 
   collectionMore(collectionId: number): boolean {
-    return this.lib.collectionMore(this.ctx, this.tc, BigInt(collectionId));
+    return this.lib.collectionMore(this.ctx, this.tc, this.collections[collectionId]);
   }
 
   collectionReject(collectionId: number, why?: string): void {
-    this.lib.collectionReject(this.ctx, this.tc, BigInt(collectionId), why ?? null);
+    this.lib.collectionReject(this.ctx, this.tc, this.collections[collectionId], why ?? null);
   }
 
   markComplete(status: number, origin: string | null): void {
     this.lib.markComplete(this.ctx, this.tc, status, origin);
+  }
+
+  /** Release the native collection handles created by this data source. */
+  dispose(): void {
+    for (const collection of this.collections) {
+      this.lib.freeCollection(collection);
+    }
+    this.collections.length = 0;
   }
 }
 
@@ -395,44 +409,60 @@ export class Hegel {
           const tc = lib.nextTestCase(ctx, run);
           if (tc === null) break;
           const ds = new NativeDataSource(lib, ctx, tc);
-          yield { ds, isFinal: false };
+          try {
+            yield { ds, isFinal: false };
+          } finally {
+            ds.dispose();
+            lib.freeTestCase(tc);
+          }
         }
 
         const result = lib.runResult(ctx, run);
-        const status = lib.runStatus(result);
+        try {
+          const status = lib.runStatus(result);
 
-        /* v8 ignore start: only runs inside Antithesis */
-        if (isRunningInAntithesis() && this._testLocation) {
-          emitAntithesisAssertion(this._testLocation, status === RunStatus.PASSED);
-        }
-        /* v8 ignore stop */
-
-        if (status === RunStatus.PASSED) {
-          return;
-        }
-        if (status === RunStatus.ERROR) {
-          throw new Error(String(lib.runError(result)));
-        }
-        // RunStatus.FAILED: replay each distinct counterexample's blob as a
-        // final, client-owned case. A genuine counterexample re-fails on replay,
-        // so the body throws its own error again — captured here for the message.
-        const count = lib.failureCount(result);
-        const origins: string[] = [];
-        let finalError: unknown = null;
-        for (let i = 0; i < count; i++) {
-          const failure = lib.failure(result, i);
-          origins.push(lib.failureOrigin(failure));
-          const replayTc = lib.testCaseFromBlob(ctx, settings, lib.reproductionBlob(failure));
-          try {
-            const ds = new NativeDataSource(lib, ctx, replayTc);
-            const replay = yield { ds, isFinal: true };
-            finalError = (replay as { error?: unknown }).error;
-          } finally {
-            lib.freeTestCase(replayTc);
+          /* v8 ignore start: only runs inside Antithesis */
+          if (isRunningInAntithesis() && this._testLocation) {
+            emitAntithesisAssertion(this._testLocation, status === RunStatus.PASSED);
           }
+          /* v8 ignore stop */
+
+          if (status === RunStatus.PASSED) {
+            return;
+          }
+          if (status === RunStatus.ERROR) {
+            throw new Error(String(lib.runError(result)));
+          }
+          // RunStatus.FAILED: replay each distinct counterexample's blob as a
+          // final, client-owned case. A genuine counterexample re-fails on replay,
+          // so the body throws its own error again — captured here for the message.
+          const count = lib.failureCount(result);
+          const origins: string[] = [];
+          let finalError: unknown = null;
+          for (let i = 0; i < count; i++) {
+            const failure = lib.failure(result, i);
+            let blob: string | null;
+            try {
+              origins.push(lib.failureOrigin(failure));
+              blob = lib.reproductionBlob(failure);
+            } finally {
+              lib.freeFailure(failure);
+            }
+            const replayTc = lib.testCaseFromBlob(ctx, settings, blob);
+            const ds = new NativeDataSource(lib, ctx, replayTc);
+            try {
+              const replay = yield { ds, isFinal: true };
+              finalError = (replay as { error?: unknown }).error;
+            } finally {
+              ds.dispose();
+              lib.freeTestCase(replayTc);
+            }
+          }
+          const detail = finalError instanceof Error ? finalError.message : String(finalError);
+          throw new Error(`${detail} [${origins.join("; ")}]`);
+        } finally {
+          lib.freeRunResult(result);
         }
-        const detail = finalError instanceof Error ? finalError.message : String(finalError);
-        throw new Error(`${detail} [${origins.join("; ")}]`);
       } finally {
         lib.freeRun(run);
       }

@@ -387,3 +387,34 @@ describe("asBasic composition", () => {
       expect(Number.isInteger(n)).toBe(true);
     }));
 });
+
+// ---------------------------------------------------------------------------
+// Duplicate rejection in engine-driven unique collections. The two-element
+// draws over a two-value range make a duplicate draw (and so a rejection)
+// all but certain within a run, deterministically covering the reject paths.
+// ---------------------------------------------------------------------------
+
+describe("duplicate rejection in schema-driven collections", () => {
+  test("unique arrays reject duplicate elements", () =>
+    hegel.test((tc) => {
+      const arr = tc.draw(
+        gs.arrays(gs.integers({ minValue: 0, maxValue: 1 }), {
+          unique: true,
+          minSize: 2,
+          maxSize: 2,
+        }),
+      );
+      expect(new Set(arr).size).toBe(2);
+    }));
+
+  test("maps reject duplicate keys", () =>
+    hegel.test((tc) => {
+      const m = tc.draw(
+        gs.maps(gs.integers({ minValue: 0, maxValue: 1 }), gs.booleans(), {
+          minSize: 2,
+          maxSize: 2,
+        }),
+      );
+      expect(m.size).toBe(2);
+    }));
+});

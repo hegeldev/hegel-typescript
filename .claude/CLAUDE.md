@@ -64,35 +64,33 @@ Layers, each building on the previous:
    `HEGEL_E_ASSUME` → `AssumeError` (engine rejected a draw; `mark_complete`
    with `INVALID`), any other non-OK code → `LibhegelError` carrying
    `hegel_context_last_error`. `mark_complete` is called exactly once per case.
-3. **Session** (`src/session.ts`) — a process-global, lazily-loaded `Libhegel`
+3. **Schema interpreter** (`src/generate.ts`) — the ABI exposes one typed
+   entry point per primitive draw (`hegel_generate_integer`,
+   `hegel_generate_string`, …); this module walks the generators' schema IR
+   and drives those calls, handling compound structure (`one_of`, `tuple`,
+   `list`, `dict`, `constant`) client-side with the matching shrinker spans
+   and the collection protocol. String-shaped draws go through cached
+   `hegel_string_generator_t` handles (never freed by design).
+4. **Session** (`src/session.ts`) — a process-global, lazily-loaded `Libhegel`
    handle with a `major.minor` version compatibility check. Users never
    construct it; `hegel.test()` / `hegel.testAsync()` are free functions.
-4. **Test runner** (`src/runner.ts`) — drives `run_start` → `next_test_case` →
+5. **Test runner** (`src/runner.ts`) — drives `run_start` → `next_test_case` →
    `mark_complete` → `run_result`. The engine only explores (generate/shrink);
    the client owns the final replay: on `FAILED`, the runner replays each
    failure's `hegel_failure_reproduction_blob` via `hegel_test_case_from_blob`
    to surface the test's own error as the thrown message. `NativeDataSource`
    implements `DataSource` against a libhegel test case.
-5. **Generators** (`src/generators/`) — transport-agnostic: they build CBOR
-   schemas and draw through the `DataSource` interface. `composite`
+6. **Generators** (`src/generators/`) — transport-agnostic: they build plain
+   schema records and draw through the `DataSource` interface. `composite`
    (imperative) and `record` (declarative) in `compose.ts` are the composition
    entry points.
 
 The C ABI is declared in `hegel-rust/hegel-c/include/hegel.h`. koffi frees
-nothing — `Context`/`Settings`/`Run` handles are freed explicitly in `finally`
-by the runner; test cases from `next_test_case` are borrowed and freed by
-`run_free`.
-
-### CBOR codec (`src/cbor.ts`)
-
-The single CBOR entry point. Two engine strictness rules to know:
-
-- Generated strings (including every string-shaped format generator) come back
-  as CBOR **tag 91** wrapping WTF-8 bytes so lone surrogates survive;
-  `cbor.ts` registers the tag-91 cbor-x extension → `wtf8.ts`.
-- Integer schema bounds must be CBOR integers: cbor-x encodes large JS numbers
-  as floats, which the engine rejects. Encode integer bounds as `bigint` (see
-  `numeric.ts`). The float schema accepts either.
+nothing — every handle the ABI writes back is caller-owned: the runner frees
+`Context`/`Settings`/`Run` handles, each test case from `next_test_case`, the
+run result, each failure, and each collection explicitly in `finally` blocks.
+Generated strings decode through `wtf8.ts` (UTF-8 exactly; safe if the engine
+ever hands back a lone surrogate again).
 
 ### Synchronous FFI
 

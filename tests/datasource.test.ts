@@ -325,6 +325,27 @@ describe("text and characters with alphabet", () => {
 // way to cover the `String(e)` and `!(e instanceof Error)` branches.
 // ---------------------------------------------------------------------------
 
+describe("runTestCase error classification", () => {
+  it("classifies a StopTestError thrown by the body as overrun", () => {
+    const ds = new FakeDataSource();
+    const result = runTestCase(
+      ds,
+      () => {
+        throw new StopTestError();
+      },
+      false,
+    );
+    expect(result.status).toBe("overrun");
+    expect(ds.markCompleteCalls[0].origin).toBeNull();
+  });
+
+  it("integers parse converts a bigint raw value to number", () => {
+    const ds = new FakeDataSource({ generates: [5n] });
+    const tc = new TestCase(ds, false);
+    expect(tc.draw(gs.integers())).toBe(5);
+  });
+});
+
 describe("runTestCase with non-Error throws", () => {
   it("extractOrigin returns '<unknown>' when a non-Error is thrown", () => {
     const ds = new FakeDataSource({ generates: [42] });

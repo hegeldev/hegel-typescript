@@ -214,6 +214,8 @@ describe("NativeDataSource collection rejection", () => {
       }
       ds.stopSpan(false);
       ds.markComplete(Status.VALID, null);
+      ds.dispose();
+      lib.freeTestCase(tc);
       expect(rejects).toBe(2);
     } finally {
       lib.freeRun(run);

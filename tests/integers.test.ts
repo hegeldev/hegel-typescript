@@ -99,3 +99,25 @@ describe("gs.bigIntegers()", () => {
     );
   });
 });
+
+describe("gs.bigIntegers() wide ranges", () => {
+  test("draws huge negative values via the big-integer path", () =>
+    hegel.test(
+      (tc) => {
+        const v = tc.draw(gs.bigIntegers({ minValue: -(2n ** 80n), maxValue: -(2n ** 70n) }));
+        expect(v).toBeLessThanOrEqual(-(2n ** 70n));
+        expect(v).toBeGreaterThanOrEqual(-(2n ** 80n));
+      },
+      { testCases: 10 },
+    ));
+
+  test("an int64 minimum with a huge maximum uses the big-integer path", () =>
+    hegel.test(
+      (tc) => {
+        const v = tc.draw(gs.bigIntegers({ minValue: 0n, maxValue: 2n ** 70n }));
+        expect(v).toBeGreaterThanOrEqual(0n);
+        expect(v).toBeLessThanOrEqual(2n ** 70n);
+      },
+      { testCases: 10 },
+    ));
+});
