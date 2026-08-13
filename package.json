@@ -58,7 +58,6 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "cbor-x": "^1.6.0",
     "koffi": "^3.0.2"
   },
   "optionalDependencies": {
