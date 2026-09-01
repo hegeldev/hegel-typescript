@@ -1,6 +1,6 @@
 /**
  * Thin, typed binding to the native `libhegel` C ABI (see
- * `hegel-rust/hegel-c/include/hegel.h`, version 0.32.5) via {@link koffi}.
+ * `hegel-rust/hegel-c/include/hegel.h`, version 0.33.5) via {@link koffi}.
  *
  * The {@link Libhegel} class owns the loaded library's function pointers and
  * exposes ergonomic wrappers. Every fallible call takes a `hegel_context_t*`
@@ -48,6 +48,11 @@ export const RunStatus = {
   PASSED: 0,
   FAILED: 1,
   ERROR: 2,
+  // `HEGEL_RUN_STATUS_FAILED_NONDETERMINISTIC` (a concurrent state machine
+  // declared the run nondeterministic). Unreachable here: this client binds
+  // none of the state-machine ABI, so it can never create such a run. Mirrored
+  // from the header for completeness; the runner has no dedicated branch for it.
+  FAILED_NONDETERMINISTIC: 3,
 } as const;
 
 /** `hegel_verbosity_t`. */
