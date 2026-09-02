@@ -13,6 +13,12 @@ symbols, and the binding layer must be re-aligned. The public
 `@hegeldev/hegel` API (`test`, `testAsync`, `Settings`, the generators) must
 **not** change as a result — only the internal layers.
 
+New capability the front end does not expose yet — a generator, setting, or
+protocol the release added — is deliberately out of scope here, and is the job
+of `.claude/skills/port-libhegel-features/SKILL.md`. This skill keeps the
+binding compiling with the public API fixed; that one grows the public API and
+records what it skipped in `LIBHEGEL-PARITY.md`.
+
 The layers, and what an ABI change usually touches:
 
 - **`src/libhegel.ts`** — the whole koffi surface. Three things move together
@@ -147,8 +153,9 @@ this client uses, three places move together: the **prototype string** (or
 - **Renamed/retyped symbol** → update all three together, plus any caller that
   consumed the old shape.
 - **New symbol** → bind it **only if the front end needs it** (see §5 — the
-  coverage gate forbids dead bindings). If nothing calls it, note it in the
-  commit message and move on.
+  coverage gate forbids dead bindings). If nothing calls it, it is new
+  capability, not an alignment: note it in the commit message and leave it to
+  `port-libhegel-features`.
 - **Changed signature** (a new arg, or a value moving from return to
   out-param) → remember the convention: ctx first, result-code return,
   produced value through a trailing out-param. A new _optional_ arg with a
