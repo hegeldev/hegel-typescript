@@ -1,6 +1,6 @@
 /**
  * Thin, typed binding to the native `libhegel` C ABI (see
- * `hegel-rust/hegel-c/include/hegel.h`, version 0.32.5) via {@link koffi}.
+ * `hegel-rust/hegel-c/include/hegel.h`, version 0.35.0) via {@link koffi}.
  *
  * The {@link Libhegel} class owns the loaded library's function pointers and
  * exposes ergonomic wrappers. Every fallible call takes a `hegel_context_t*`
@@ -184,6 +184,10 @@ export interface Bindings {
   testCaseFromBlob: (ctx: Ptr, s: Ptr, blob: string | null, out: Ptr[]) => number;
   testCaseFree: (tc: Ptr) => void;
 
+  /**
+   * The C `forced` / `has_forced` parameters are absorbed as `false` / `false`
+   * (this client never forces a boolean draw).
+   */
   generateBoolean: (ctx: Ptr, tc: Ptr, p: number, out: boolean[]) => number;
   generateInteger: (
     ctx: Ptr,
@@ -205,6 +209,10 @@ export interface Bindings {
   generateBytesResultFree: (result: NativeBuffer) => void;
 
   stringGeneratorText: (ctx: Ptr, opts: TextGeneratorOptions, out: Ptr[]) => number;
+  /**
+   * The C `alphabet` parameter is absorbed as NULL (the pattern's own
+   * character classes govern the alphabet; this client never restricts it).
+   */
   stringGeneratorRegex: (ctx: Ptr, pattern: string, fullmatch: boolean, out: Ptr[]) => number;
   stringGeneratorEmail: (ctx: Ptr, out: Ptr[]) => number;
   stringGeneratorUrl: (ctx: Ptr, out: Ptr[]) => number;
