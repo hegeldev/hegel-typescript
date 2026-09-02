@@ -7,6 +7,7 @@
 .claude/skills/*
 !.claude/skills/changelog/
 !.claude/skills/align-libhegel/
+!.claude/skills/port-libhegel-features/
 CLAUDE.local.md
 
 .venv/
