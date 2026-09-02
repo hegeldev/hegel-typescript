@@ -1,0 +1,173 @@
+name: Port libhegel features
+
+on:
+  # Fires however the pin lands on main — a merged bump PR, a human PR that
+  # carries the bump, or a direct push. Deliberately not keyed to the bump PR
+  # merging: bump PRs are frequently superseded and closed unmerged, and the
+  # pin arrives some other way.
+  push:
+    branches: [main]
+    paths:
+      - "src/libhegel-version.ts"
+  # Manual escape hatch and catch-up: `from` overrides the ledger's baseline.
+  workflow_dispatch:
+    inputs:
+      from:
+        description: "libhegel version to port from (empty = last_ported in LIBHEGEL-PARITY.md)"
+        required: false
+        default: ""
+
+permissions: {}
+
+# One port at a time. Never cancel a run in progress: it may be most of the
+# way through an expensive analysis, and the next run picks up the same
+# baseline from the ledger anyway.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  port:
+    name: port libhegel features
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Generate app token
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        id: app-token
+        with:
+          app-id: ${{ vars.HEGEL_RELEASE_APP_ID }}
+          private-key: ${{ secrets.HEGEL_RELEASE_APP_PRIVATE_KEY }}
+          repositories: hegel-typescript
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          token: ${{ steps.app-token.outputs.token }} # zizmor: ignore[artipacked]
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - name: Install just
+        run: sudo apt-get update && sudo apt-get install -y just
+
+      - run: npm ci
+
+      # The baseline is the ledger's last_ported, not github.event.before: the
+      # ledger survives force-pushes, stays correct when several bumps land
+      # between runs, and makes catch-up automatic after a failed run.
+      - name: Resolve the version range
+        id: range
+        env:
+          FROM_INPUT: ${{ inputs.from }}
+        run: |
+          set -euo pipefail
+          to=$(sed -n 's/^export const LIBHEGEL_VERSION = "\(.*\)";$/\1/p' src/libhegel-version.ts)
+          if [ -z "$to" ]; then
+            echo "Could not read LIBHEGEL_VERSION from src/libhegel-version.ts." >&2
+            exit 1
+          fi
+
+          from="$FROM_INPUT"
+          if [ -z "$from" ]; then
+            from=$(sed -n 's/^last_ported: \([0-9][0-9A-Za-z.+-]*\)$/\1/p' LIBHEGEL-PARITY.md | head -n1)
+          fi
+          if [ -z "$from" ]; then
+            echo "Could not read 'last_ported: <version>' from LIBHEGEL-PARITY.md." >&2
+            exit 1
+          fi
+
+          echo "from=$from" >> "$GITHUB_OUTPUT"
+          echo "to=$to" >> "$GITHUB_OUTPUT"
+          if [ "$from" = "$to" ]; then
+            echo "Already ported up to libhegel $to; nothing to do."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Porting libhegel $from -> $to."
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Port the new libhegel features
+        if: steps.range.outputs.changed == 'true'
+        timeout-minutes: 45
+        uses: anthropics/claude-code-action@4d7e1f0cd85743fdc93b1c8040ab54395da024e2 # v1.0.149
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ steps.app-token.outputs.token }}
+          # The pin is usually pushed by hegel-release[bot], so the actor is a
+          # bot. The action blocks bot-initiated runs by default.
+          allowed_bots: hegel-release
+          prompt: |
+            The pinned libhegel version moved from ${{ steps.range.outputs.from }} to
+            ${{ steps.range.outputs.to }} (src/libhegel-version.ts) on this checkout of main.
+
+            Use the port-libhegel-features skill. Work out what capability libhegel gained
+            across that range, port the mechanical features (new generators, settings,
+            result codes, enum values), and write the design-heavy ones up in
+            LIBHEGEL-PARITY.md instead of guessing at an API for them. Update the ledger's
+            last_ported to ${{ steps.range.outputs.to }} and give every feature in the range
+            a row.
+
+            `just check` must pass, including 100% coverage — so tests ship with the port.
+            Add a RELEASE.md if you changed anything under src/ (see the changelog skill).
+            Changes must be additive: never alter or remove existing public API.
+
+            Write a short summary of what you ported and what you skipped, one line per
+            feature with the reason for each skip, to the absolute path
+            /tmp/port-summary.md. It goes in the PR body.
+
+            Do NOT commit or push, and leave no scratch files in the working tree: the next
+            step commits everything it finds.
+          claude_args: >-
+            --allowed-tools "Bash,Edit,Write,Read,Glob,Grep,WebFetch,Skill"
+            --max-turns 150
+
+      # Draft PR off main, never a push to main — so there is no way for this
+      # to re-trigger itself and no retry cap is needed.
+      - name: Push the branch and open/update the draft PR
+        if: steps.range.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          HEGEL_RELEASE_APP_ID: ${{ vars.HEGEL_RELEASE_APP_ID }}
+          VERSION: ${{ steps.range.outputs.to }}
+          FROM_VERSION: ${{ steps.range.outputs.from }}
+        run: |
+          set -euo pipefail
+          git config user.name "hegel-release[bot]"
+          git config user.email "${HEGEL_RELEASE_APP_ID}+hegel-release[bot]@users.noreply.github.com"
+
+          branch="ci/port-hegel-rust-${VERSION}"
+          git checkout -B "$branch"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to port for libhegel ${VERSION}."
+            exit 0
+          fi
+
+          git commit -m "Port new libhegel ${VERSION} features" \
+            -m "First stab at exposing the capability libhegel gained between ${FROM_VERSION} and ${VERSION}. See LIBHEGEL-PARITY.md for what was skipped and why."
+          git push --force origin "$branch"
+
+          workflow_url="https://github.com/hegeldev/hegel-typescript/blob/main/.github/workflows/port-libhegel-features.yml"
+          title="Port new libhegel ${VERSION} features"
+          {
+            printf '%s\n\n' "A first stab at exposing the capability \`libhegel\` gained between \`${FROM_VERSION}\` and \`${VERSION}\`. Draft: the analysis needs a human read before the code does."
+            printf '%s\n\n' "\`LIBHEGEL-PARITY.md\` records what was ported, what was skipped, and why."
+            printf '%s\n' "<details>"
+            printf '%s\n\n' "<summary>AI-generated summary of this port</summary>"
+            if [ -s "${RUNNER_TEMP}/port-summary.md" ]; then
+              cat "${RUNNER_TEMP}/port-summary.md"
+            else
+              printf '%s\n' "No summary was produced; read the diff and \`LIBHEGEL-PARITY.md\`."
+            fi
+            printf '\n%s\n\n' "</details>"
+            printf '%s\n\n' "---"
+            printf '%s\n' "*Automatically generated by [port-libhegel-features.yml](${workflow_url}).*"
+          } > "${RUNNER_TEMP}/pr-body.md"
+
+          if [ -n "$(gh pr list --head "$branch" --state open --json number --jq '.[].number')" ]; then
+            gh pr edit "$branch" --title "$title" --body-file "${RUNNER_TEMP}/pr-body.md"
+          else
+            gh pr create --draft --title "$title" --body-file "${RUNNER_TEMP}/pr-body.md"
+          fi
