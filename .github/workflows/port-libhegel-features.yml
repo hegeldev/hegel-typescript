@@ -115,7 +115,8 @@ jobs:
 
             Write a short summary of what you ported and what you skipped, one line per
             feature with the reason for each skip, to the absolute path
-            /tmp/port-summary.md. It goes in the PR body.
+            ${{ runner.temp }}/port-summary.md. It goes in the PR body, and it is outside
+            the working tree so the commit below does not pick it up.
 
             Do NOT commit or push, and leave no scratch files in the working tree: the next
             step commits everything it finds.
@@ -147,6 +148,27 @@ jobs:
 
           git commit -m "Port new libhegel ${VERSION} features" \
             -m "First stab at exposing the capability libhegel gained between ${FROM_VERSION} and ${VERSION}. See LIBHEGEL-PARITY.md for what was skipped and why."
+
+          # A port PR is opened as a draft precisely so a human finishes it, so
+          # a branch carrying human commits is the expected state, not an edge
+          # case — and re-entry for the same version is easy (a dispatch, or
+          # any pin push while last_ported is behind). Check the *remote*
+          # branch: the checkout is of main and the local branch is fresh.
+          # An author GitHub cannot resolve counts as human; never overwrite
+          # work on an identity we failed to establish.
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            others=$(gh api "repos/${GITHUB_REPOSITORY}/compare/main...${branch}" \
+              --jq '[.commits[] | (if (.author.login // "") != "" then .author.login
+                                   elif (.commit.author.name // "") != "" then .commit.author.name
+                                   else "unknown author" end)] | unique
+                    | map(select(. != "hegel-release" and . != "hegel-release[bot]"))
+                    | join(", ")')
+            if [ -n "$others" ]; then
+              echo "::error::Refusing to force-push ${branch}: it carries commits by ${others}. Land or reset that work, then re-run."
+              exit 1
+            fi
+          fi
+
           git push --force origin "$branch"
 
           workflow_url="https://github.com/hegeldev/hegel-typescript/blob/main/.github/workflows/port-libhegel-features.yml"
