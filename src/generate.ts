@@ -39,8 +39,8 @@ const UINT32_MAX = 0xffffffff;
 // the ranges the engine used for the old CBOR schemas.
 const DATE_MIN: NativeDate = { year: 1, month: 1, day: 1 };
 const DATE_MAX: NativeDate = { year: 9999, month: 12, day: 31 };
-const TIME_MIN: NativeTime = { hour: 0, minute: 0, second: 0, microsecond: 0 };
-const TIME_MAX: NativeTime = { hour: 23, minute: 59, second: 59, microsecond: 999999 };
+const TIME_MIN: NativeTime = { hour: 0, minute: 0, second: 0, nanosecond: 0 };
+const TIME_MAX: NativeTime = { hour: 23, minute: 59, second: 59, nanosecond: 999999999 };
 
 /** Format a drawn date as ISO 8601 (`YYYY-MM-DD`). */
 export function formatDate(d: NativeDate): string {
@@ -51,18 +51,18 @@ export function formatDate(d: NativeDate): string {
 }
 
 /**
- * Format a drawn time of day as ISO 8601 (`HH:MM:SS` or `HH:MM:SS.ffffff`,
- * the microseconds omitted when zero).
+ * Format a drawn time of day as ISO 8601 (`HH:MM:SS` or `HH:MM:SS.fffffffff`,
+ * the nanoseconds omitted when zero).
  */
 export function formatTime(t: NativeTime): string {
   const hour = String(t.hour).padStart(2, "0");
   const minute = String(t.minute).padStart(2, "0");
   const second = String(t.second).padStart(2, "0");
   const base = `${hour}:${minute}:${second}`;
-  if (t.microsecond === 0) {
+  if (t.nanosecond === 0) {
     return base;
   }
-  return `${base}.${String(t.microsecond).padStart(6, "0")}`;
+  return `${base}.${String(t.nanosecond).padStart(9, "0")}`;
 }
 
 /** Format a drawn naive datetime as ISO 8601 (`<date>T<time>`). */
