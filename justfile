@@ -16,9 +16,8 @@ build-libhegel:
     cargo build --release -p hegeltest-c --manifest-path ../hegel-rust/Cargo.toml
     echo "../hegel-rust/target/release/libhegel_c.so"
 
-# Regenerate src/libhegel-version.ts from a hegel-rust release. Targets the
-# latest release; pass a version (e.g. `just update-libhegel 0.20.1`) to pin an
-# exact one.
+# Update the native version only after auditing a matching published Wasm pin.
+# An omitted version uses src/browser/artifact.json, never the latest release.
 update-libhegel version="":
     node scripts/update-libhegel.mjs {{version}}
     npx prettier --write src/libhegel-version.ts
@@ -26,7 +25,7 @@ update-libhegel version="":
 check-test:
     #!/usr/bin/env bash
     set -euo pipefail
-    export HEGEL_LIBHEGEL_PATH="${HEGEL_LIBHEGEL_PATH:-$(node scripts/fetch-libhegel.mjs)}"
+    : "${HEGEL_LIBHEGEL_PATH:?Prepare native libhegel explicitly with just fetch-libhegel and export HEGEL_LIBHEGEL_PATH}"
     npx vitest run --coverage
     python3 scripts/check-coverage.py
 
@@ -39,6 +38,7 @@ check-format:
 check-lint:
     npx eslint .
     npx tsc --noEmit
+    npm run typecheck:portable
 
 check-docs:
     npx typedoc

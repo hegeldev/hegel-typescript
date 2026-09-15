@@ -1,0 +1,13 @@
+{
+  "version": "0.38.1",
+  "source": "64b3c5bcb496cb45549295099dcdec9b91fdfcad",
+  "cargoLockSha256": "68693d6446757621aedb1b31fdbf582b6ee88616bb0d22e4c81f373adcfd5772",
+  "sha256": "1af8eb2a353b864fde9097fde8e22bf598e330aaf868573fe0c9a754076c9755",
+  "rustc": "1.98.1",
+  "rustcCommit": "48a229ceaefd4985c50990b14116b6d856af0985",
+  "cargo": "1.98.1",
+  "target": "wasm32-unknown-unknown",
+  "asset": "libhegel-wasm32-unknown-unknown.wasm",
+  "published": true,
+  "release": { "tag": "v0.38.1" }
+}

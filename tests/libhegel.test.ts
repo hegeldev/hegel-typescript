@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import koffi, { type LibraryHandle } from "koffi";
 import {
   Libhegel,
   bindLibrary,
@@ -99,6 +100,7 @@ function fakeBindings(overrides: Partial<Bindings>): Bindings {
     generateFloat: () => 0,
     generateBytes: () => 0,
     generateBytesResultFree: noop,
+    stringGeneratorFree: noop,
     stringGeneratorText: () => 0,
     stringGeneratorRegex: () => 0,
     stringGeneratorEmail: () => 0,
@@ -109,6 +111,7 @@ function fakeBindings(overrides: Partial<Bindings>): Bindings {
     generateDate: () => 0,
     generateTime: () => 0,
     generateDatetime: () => 0,
+    generateUuid: () => 0,
     generateIpv4: () => 0,
     generateIpv6: () => 0,
     startSpan: () => 0,
@@ -121,7 +124,7 @@ function fakeBindings(overrides: Partial<Bindings>): Bindings {
     runResultStatus: () => RunStatus.PASSED,
     runResultError: () => null,
     runResultFailureCount: () => 0,
-    runResultFailure: () => null,
+    runResultFailure: () => ({}),
     failureFree: noop,
     failureOrigin: () => null,
     failureReproductionBlob: () => null,
@@ -351,7 +354,7 @@ describe("Libhegel wrapper logic (fake bindings)", () => {
     expect(lib.reproductionBlob(null)).toBeNull();
     expect(lib.runStatus(null)).toBe(RunStatus.PASSED);
     expect(lib.failureCount(null)).toBe(0);
-    expect(lib.failure(null, 0)).toBeNull();
+    expect(lib.failure(null, 0)).not.toBeNull();
     expect(lib.generateBoolean(null, null, 0.5)).toBe(false);
     expect(lib.generateInteger(null, null, 0n, 10n)).toBe(0n);
     expect(lib.generateIntegerBig(null, null, 0n, 10n)).toBe(0n);
@@ -567,3 +570,153 @@ describe("Libhegel against the real library", () => {
 
 // Re-export to ensure bindLibrary is referenced (it is used by Libhegel.load).
 void bindLibrary;
+
+// Regression coverage for the audited 0.38.1 ABI and result ownership.
+describe("Libhegel ABI 0.38.1 regressions", () => {
+  it("rejects failed constructors instead of leaking null handles into shared code", () => {
+    const lib = new Libhegel(
+      fakeBindings({
+        contextNew: () => null,
+        settingsNew: () => null,
+        runResultFailure: () => null,
+      }),
+    );
+    expect(() => lib.newContext()).toThrow("null handle");
+    expect(() => lib.newSettings()).toThrow("null handle");
+    expect(() => lib.failure(null, 0)).toThrow("null handle");
+  });
+
+  it.each([-3, -4, -5, -6, -7, -8, -9, -10])(
+    "does not map result %s to assumption or overrun",
+    (code) => {
+      const lib = new Libhegel(
+        fakeBindings({ generateBoolean: () => code, contextLastError: () => "copied diagnostic" }),
+      );
+      expect(() => lib.generateBoolean(null, null, 0.5)).toThrow(LibhegelError);
+    },
+  );
+
+  it("frees native byte/string results when copying fails", () => {
+    const bytesFree = vi.fn();
+    const stringFree = vi.fn();
+    const lib = new Libhegel(
+      fakeBindings({
+        generateBytes: (_ctx, _tc, _min, _max, out) => {
+          out[0] = { data: null, len: -1 };
+          return 0;
+        },
+        generateString: (_ctx, _tc, _generator, out) => {
+          out[0] = { data: null, len: -1 };
+          return 0;
+        },
+        generateBytesResultFree: bytesFree,
+        generateStringResultFree: stringFree,
+      }),
+    );
+    expect(() => lib.generateBytes(null, null, 0)).toThrow("Invalid native buffer result");
+    expect(() => lib.generateString(null, null, null)).toThrow("Invalid native buffer result");
+    expect(bytesFree).toHaveBeenCalledExactlyOnceWith({ data: null, len: -1 });
+    expect(stringFree).toHaveBeenCalledExactlyOnceWith({ data: null, len: -1 });
+  });
+
+  it("checks rejected native setters and rejects NUL before C-string truncation", () => {
+    const lib = Libhegel.load(testLibPath());
+    const ctx = lib.newContext();
+    const settings = lib.newSettings();
+    try {
+      expect(() => lib.setTestCases(null, 1)).toThrow(LibhegelError);
+      expect(() => lib.setVerbosity(null, 1)).toThrow(LibhegelError);
+      expect(() => lib.setSeed(null, 1n)).toThrow(LibhegelError);
+      expect(() => lib.setDerandomize(null, true)).toThrow(LibhegelError);
+      expect(() => lib.setSuppressHealthCheck(null, 1)).toThrow(LibhegelError);
+      expect(() => lib.setReportMultipleFailures(null, true)).toThrow(LibhegelError);
+      expect(() => lib.setDatabase(ctx, null, "")).toThrow(LibhegelError);
+      expect(() => lib.setDatabaseKey(ctx, null, "key")).toThrow(LibhegelError);
+      expect(() => lib.setDatabase(ctx, settings, "path\0suffix")).toThrow("must not contain NUL");
+      expect(() => lib.setDatabaseKey(ctx, settings, "key\0suffix")).toThrow(
+        "must not contain NUL",
+      );
+    } finally {
+      lib.freeSettings(settings);
+      lib.freeContext(ctx);
+    }
+  });
+
+  it("marshals fixed negative dates and nanosecond temporal bounds against the published engine", () => {
+    const lib = Libhegel.load(testLibPath());
+    const ctx = lib.newContext();
+    const settings = lib.newSettings();
+    lib.setDatabase(ctx, settings, "");
+    lib.setVerbosity(settings, NativeVerbosity.QUIET);
+    const run = lib.runStart(ctx, settings);
+    const tc = lib.nextTestCase(ctx, run);
+    try {
+      const date = { year: -12345, month: 6, day: 17 };
+      expect(lib.generateDate(ctx, tc, date, date)).toEqual(date);
+      for (const nanosecond of [1, 123456789, 999999999]) {
+        const time = { hour: 12, minute: 34, second: 56, nanosecond };
+        expect(lib.generateTime(ctx, tc, time, time)).toEqual(time);
+        const datetime = { date, time };
+        expect(lib.generateDatetime(ctx, tc, datetime, datetime)).toEqual(datetime);
+      }
+      const uuid = lib.generateUuid(ctx, tc, 4);
+      expect(uuid).toHaveLength(16);
+      expect(uuid[6] >> 4).toBe(4);
+      expect(uuid[8] >> 6).toBe(2);
+    } finally {
+      lib.markComplete(ctx, tc, Status.VALID, null);
+      lib.freeTestCase(tc);
+      lib.freeRun(run);
+      lib.freeSettings(settings);
+      lib.freeContext(ctx);
+    }
+  });
+});
+
+describe("bindLibrary checked ABI declarations", () => {
+  it("checks configuration codes even when no context diagnostic is available", () => {
+    const func = vi.fn((prototype: string) => {
+      if (prototype.includes("hegel_context_last_error")) return () => null;
+      if (prototype.includes("hegel_settings_set_database(")) return () => -5;
+      return () => 0;
+    });
+    const bindings = bindLibrary({ func } as unknown as LibraryHandle);
+    expect(() => bindings.settingsDatabase({}, {}, "path")).toThrow(LibhegelError);
+    expect(func).toHaveBeenCalledWith("int hegel_context_free(void* ctx)");
+    expect(func).toHaveBeenCalledWith("int hegel_settings_free(void* ctx, void* s)");
+    expect(func).toHaveBeenCalledWith(
+      "int hegel_string_generator_free(void* ctx, void* generator)",
+    );
+  });
+});
+
+it("Libhegel frees engine results when Koffi copying throws", () => {
+  const copyError = new Error("copy failed");
+  const decode = vi.spyOn(koffi, "decode").mockImplementation(() => {
+    throw copyError;
+  });
+  const bytesFree = vi.fn();
+  const stringFree = vi.fn();
+  const lib = new Libhegel(
+    fakeBindings({
+      generateBytes: (_ctx, _tc, _min, _max, out) => {
+        out[0] = { data: {}, len: 1 };
+        return 0;
+      },
+      generateString: (_ctx, _tc, _generator, out) => {
+        out[0] = { data: {}, len: 1 };
+        return 0;
+      },
+      generateBytesResultFree: bytesFree,
+      generateStringResultFree: stringFree,
+    }),
+  );
+  try {
+    expect(() => lib.generateBytes(null, null, 0)).toThrow(copyError);
+    expect(() => lib.generateString(null, null, null)).toThrow(copyError);
+    expect(bytesFree).toHaveBeenCalledTimes(1);
+    expect(stringFree).toHaveBeenCalledTimes(1);
+  } finally {
+    decode.mockRestore();
+  }
+});

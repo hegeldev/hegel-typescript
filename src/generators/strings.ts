@@ -5,6 +5,7 @@
  */
 
 import { TestCase, generateRaw } from "../testCase.js";
+import type { UuidVersion } from "../engine.js";
 import { Generator, BasicGenerator } from "./core.js";
 import { oneOf } from "./combinators.js";
 
@@ -301,4 +302,26 @@ class DatetimesGenerator extends SchemaStringGenerator {
 /** Generate datetime strings (ISO 8601). */
 export function datetimes(): Generator<string> {
   return new DatetimesGenerator();
+}
+
+export interface UuidOptions {
+  /** Restrict to an RFC 4122 version. Omit to generate UUIDs of any version. */
+  version?: UuidVersion;
+}
+
+class UuidsGenerator extends SchemaStringGenerator {
+  constructor(options?: UuidOptions) {
+    const version = options?.version;
+    if (version !== undefined && ![1, 2, 3, 4, 5].includes(version)) {
+      throw new Error(`UUID version must be between 1 and 5, got ${version}`);
+    }
+    const schema: Record<string, unknown> = { type: "uuid" };
+    if (version !== undefined) schema["version"] = version;
+    super(schema);
+  }
+}
+
+/** Generate UUID strings in canonical lowercase hyphenated form. */
+export function uuids(options?: UuidOptions): Generator<string> {
+  return new UuidsGenerator(options);
 }

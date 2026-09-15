@@ -9,15 +9,18 @@ import {
   formatDate,
   formatTime,
   formatDatetime,
+  formatUuid,
   formatIpv4,
   formatIpv6,
   valueKey,
   generateValue,
 } from "../src/generate.js";
-import type { Libhegel } from "../src/libhegel.js";
+import type { Engine, ContextHandle, TestCaseHandle } from "../src/engine.js";
 
 // The schema-validation paths below throw before touching the library.
-const unusedLib = null as unknown as Libhegel;
+const unusedLib = null as unknown as Engine;
+const unusedContext = {} as ContextHandle;
+const unusedCase = {} as TestCaseHandle;
 
 describe("formatDate", () => {
   it("zero-pads all components", () => {
@@ -27,15 +30,17 @@ describe("formatDate", () => {
 });
 
 describe("formatTime", () => {
-  it("omits the microseconds when zero", () => {
-    expect(formatTime({ hour: 0, minute: 0, second: 0, microsecond: 0 })).toBe("00:00:00");
-    expect(formatTime({ hour: 23, minute: 59, second: 59, microsecond: 0 })).toBe("23:59:59");
+  it("omits the nanoseconds when zero", () => {
+    expect(formatTime({ hour: 0, minute: 0, second: 0, nanosecond: 0 })).toBe("00:00:00");
+    expect(formatTime({ hour: 23, minute: 59, second: 59, nanosecond: 0 })).toBe("23:59:59");
   });
 
-  it("zero-pads microseconds to six digits when nonzero", () => {
-    expect(formatTime({ hour: 1, minute: 2, second: 3, microsecond: 42 })).toBe("01:02:03.000042");
-    expect(formatTime({ hour: 1, minute: 2, second: 3, microsecond: 999999 })).toBe(
-      "01:02:03.999999",
+  it("zero-pads nanoseconds to nine digits when nonzero", () => {
+    expect(formatTime({ hour: 1, minute: 2, second: 3, nanosecond: 42 })).toBe(
+      "01:02:03.000000042",
+    );
+    expect(formatTime({ hour: 1, minute: 2, second: 3, nanosecond: 999999999 })).toBe(
+      "01:02:03.999999999",
     );
   });
 });
@@ -45,23 +50,40 @@ describe("formatDatetime", () => {
     expect(
       formatDatetime({
         date: { year: 2024, month: 6, day: 7 },
-        time: { hour: 8, minute: 9, second: 10, microsecond: 0 },
+        time: { hour: 8, minute: 9, second: 10, nanosecond: 0 },
       }),
     ).toBe("2024-06-07T08:09:10");
   });
 });
 
+describe("formatUuid", () => {
+  it("renders canonical lowercase groups", () => {
+    expect(
+      formatUuid(
+        Uint8Array.from([
+          0xa7, 0x0f, 0x44, 0x6c, 0x05, 0xe3, 0x42, 0xa9, 0xa3, 0x1b, 0xf0, 0xd0, 0x54, 0x5d, 0x63,
+          0x16,
+        ]),
+      ),
+    ).toBe("a70f446c-05e3-42a9-a31b-f0d0545d6316");
+  });
+
+  it("rejects the wrong byte count", () => {
+    expect(() => formatUuid(new Uint8Array(15))).toThrow("Expected 16 UUID bytes");
+  });
+});
+
 describe("formatIpv4", () => {
   it("renders dotted-quad", () => {
-    expect(formatIpv4(Buffer.from([192, 168, 0, 1]))).toBe("192.168.0.1");
-    expect(formatIpv4(Buffer.from([0, 0, 0, 0]))).toBe("0.0.0.0");
+    expect(formatIpv4(Uint8Array.from([192, 168, 0, 1]))).toBe("192.168.0.1");
+    expect(formatIpv4(Uint8Array.from([0, 0, 0, 0]))).toBe("0.0.0.0");
   });
 });
 
 describe("formatIpv6", () => {
-  const ip = (...groups: number[]): Buffer => {
-    const bytes = Buffer.alloc(16);
-    groups.forEach((g, i) => bytes.writeUInt16BE(g, i * 2));
+  const ip = (...groups: number[]): Uint8Array => {
+    const bytes = new Uint8Array(16);
+    groups.forEach((g, i) => new DataView(bytes.buffer).setUint16(i * 2, g));
     return bytes;
   };
 
@@ -102,15 +124,15 @@ describe("valueKey", () => {
       valueKey(1),
       valueKey("1"),
       valueKey(true),
-      valueKey(Buffer.from([1])),
+      valueKey(Uint8Array.from([1])),
       valueKey([1]),
     ];
     expect(new Set(keys).size).toBe(keys.length);
   });
 
   it("keys byte strings by content", () => {
-    expect(valueKey(Buffer.from([1, 2]))).toBe(valueKey(new Uint8Array([1, 2])));
-    expect(valueKey(Buffer.from([1, 2]))).not.toBe(valueKey(Buffer.from([1, 3])));
+    expect(valueKey(Uint8Array.from([1, 2]))).toBe(valueKey(new Uint8Array([1, 2])));
+    expect(valueKey(Uint8Array.from([1, 2]))).not.toBe(valueKey(Uint8Array.from([1, 3])));
   });
 
   it("keys arrays recursively", () => {
@@ -121,20 +143,20 @@ describe("valueKey", () => {
 
 describe("generateValue schema validation", () => {
   it("rejects an unknown schema type", () => {
-    expect(() => generateValue(unusedLib, null, null, { type: "mystery" })).toThrow(
+    expect(() => generateValue(unusedLib, unusedContext, unusedCase, { type: "mystery" })).toThrow(
       /Unsupported generator schema type: mystery/,
     );
   });
 
   it("rejects an integer schema with no min_value", () => {
-    expect(() => generateValue(unusedLib, null, null, { type: "integer" })).toThrow(
+    expect(() => generateValue(unusedLib, unusedContext, unusedCase, { type: "integer" })).toThrow(
       /integer schema requires min_value/,
     );
   });
 
   it("rejects an integer schema with no max_value", () => {
-    expect(() => generateValue(unusedLib, null, null, { type: "integer", min_value: 0 })).toThrow(
-      /integer schema requires max_value/,
-    );
+    expect(() =>
+      generateValue(unusedLib, unusedContext, unusedCase, { type: "integer", min_value: 0 }),
+    ).toThrow(/integer schema requires max_value/);
   });
 });

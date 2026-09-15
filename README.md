@@ -20,6 +20,10 @@ Hegel requires Node 20.11+, Bun 1.2.5+, or Deno 2+. (Note that Deno requires `--
 
 Linux amd64/arm64, macOS arm64, and Windows amd64/arm64 are supported.
 
+Browser support uses the same package imports and initializes the Rust Wasm engine during ESM module loading. It requires top-level await and secure-context Web Crypto. Tests and shrinking run on the main thread; browser persistence is unsupported.
+
+The upstream Wasm support is merged and published in libhegel 0.38.1. See [the browser guide](./BROWSER.md) for bundler asset configuration, artifact preparation, and validation commands. Node, Bun and Deno continue to use Koffi.
+
 ## Quickstart
 
 Here's a quick example of how to write a Hegel test:

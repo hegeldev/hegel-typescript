@@ -84,12 +84,15 @@ function download(url, dest, redirects = 5) {
 }
 
 /** Fetch a single asset of the given release into native/<version>/. */
-export async function fetchAsset(asset, version) {
+export async function fetchAsset(asset, version, { offline = false } = {}) {
   const dest = path.join(NATIVE_DIR, version, asset);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   if (fs.existsSync(dest)) {
     process.stderr.write(`libhegel: ${asset} already present\n`);
     return dest;
+  }
+  if (offline) {
+    throw new Error(`libhegel: ${asset} is not prepared for offline packaging`);
   }
   const url = `${BASE_URL}/v${version}/${asset}`;
   const tmp = `${dest}.${process.pid}.partial`;

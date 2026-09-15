@@ -10,11 +10,13 @@
 //
 // Usage:
 //   node scripts/make-platform-packages.mjs
+//   node scripts/make-platform-packages.mjs --host --offline  # consumer tests
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PLATFORMS, fetchAsset, pinnedVersion } from "./fetch-libhegel.mjs";
+import { requirePublished, preparedBytes } from "./wasm-artifact.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = path.join(ROOT, "platform-packages");
@@ -51,12 +53,28 @@ function packageJson({ platform, arch, asset }, { version, engines, repository, 
 }
 
 async function main() {
+  const args = new Set(process.argv.slice(2));
+  const offline = args.delete("--offline");
+  const hostOnly = args.delete("--host");
+  if (args.size > 0) {
+    throw new Error(`unknown arguments: ${[...args].join(" ")}`);
+  }
+  requirePublished();
+  preparedBytes();
   const root = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
   const libhegelVersion = pinnedVersion();
+  const targets = hostOnly
+    ? PLATFORMS.filter(
+        ({ platform, arch }) => platform === process.platform && arch === process.arch,
+      )
+    : PLATFORMS;
+  if (targets.length === 0) {
+    throw new Error(`unsupported packaging host ${process.platform}/${process.arch}`);
+  }
 
   fs.rmSync(OUT_DIR, { recursive: true, force: true });
-  for (const target of PLATFORMS) {
-    const artifact = await fetchAsset(target.asset, libhegelVersion);
+  for (const target of targets) {
+    const artifact = await fetchAsset(target.asset, libhegelVersion, { offline });
     const manifest = packageJson(target, root);
     // weld the generated name/version to the main package's exact pins, so a
     // drift in the naming scheme or a missed pin bump fails loudly here

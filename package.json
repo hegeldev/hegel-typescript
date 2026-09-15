@@ -16,25 +16,35 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "node": "./dist/index.js",
+      "browser": "./dist/browser/index.js",
+      "default": "./dist/browser/index.js"
     },
     "./generators": {
       "types": "./dist/generators/index.d.ts",
-      "import": "./dist/generators/index.js"
-    }
+      "default": "./dist/generators/index.js"
+    },
+    "./libhegel.wasm": "./dist/browser/libhegel-wasm32-unknown-unknown.wasm"
   },
   "files": [
-    "dist"
+    "dist",
+    "BROWSER.md"
   ],
   "prettier": {
     "printWidth": 100
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/wasm-artifact.mjs copy",
     "test": "vitest run --coverage",
     "lint": "prettier --check . && eslint . && tsc --noEmit",
     "format": "prettier --write .",
-    "docs": "typedoc"
+    "docs": "typedoc",
+    "prepack": "npm run build",
+    "prepublishOnly": "node scripts/wasm-artifact.mjs publish-check",
+    "prepare:wasm": "node scripts/wasm-artifact.mjs",
+    "test:browser": "node scripts/test-browser-package.mjs",
+    "test:packaging": "node --test scripts/wasm-artifact.test.mjs scripts/release-wasm.test.mjs",
+    "typecheck:portable": "tsc -p tsconfig.portable.json"
   },
   "keywords": [
     "hegel",
@@ -48,14 +58,20 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@rollup/plugin-node-resolve": "16.0.3",
     "@types/node": "^20.11.0",
     "@vitest/coverage-v8": "^4.0.18",
+    "esbuild": "0.28.2",
     "eslint": "^10.0.2",
+    "playwright": "1.63.0",
     "prettier": "^3.8.1",
+    "rollup": "4.63.1",
     "typedoc": "^0.28.17",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1",
-    "vitest": "^4.0.18"
+    "vite": "8.0.9",
+    "vitest": "^4.0.18",
+    "webpack": "5.110.3"
   },
   "dependencies": {
     "koffi": "^3.0.2"

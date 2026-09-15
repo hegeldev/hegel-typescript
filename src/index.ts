@@ -16,7 +16,8 @@
  * npm install --save-dev @hegeldev/hegel
  * ```
  *
- * Hegel requires Node 20.11+. Bun and Deno are not currently supported.
+ * Hegel supports Node 20.11+, Bun 1.2.5+, Deno 2+, and modern ESM browsers.
+ * Browser module loading initializes Wasm with top-level await.
  *
  * ## Write your first test
  *
@@ -225,5 +226,17 @@
 
 export * as generators from "./generators/index.js";
 export { TestCase } from "./testCase.js";
-export { test, testAsync, Verbosity, HealthCheck, Database } from "./runner.js";
-export type { Settings } from "./runner.js";
+export { Verbosity, HealthCheck, Database } from "./runnerCore.js";
+export type { Settings } from "./runnerCore.js";
+
+import { test as nodeTest, testAsync as nodeTestAsync } from "./runner.js";
+import type { TestCase } from "./testCase.js";
+import type { Settings } from "./runnerCore.js";
+
+// Explicit public types keep the shared declaration graph independent of Node services.
+export const test: (testFn: (tc: TestCase) => void, settings?: Partial<Settings>) => void =
+  nodeTest;
+export const testAsync: (
+  testFn: (tc: TestCase) => void | Promise<void>,
+  settings?: Partial<Settings>,
+) => Promise<void> = nodeTestAsync;

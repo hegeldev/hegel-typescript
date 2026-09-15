@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM"],
+    "types": [],
+    "noEmit": true
+  },
+  "include": [
+    "src/browser/**/*.ts",
+    "src/engine.ts",
+    "src/runtime.ts",
+    "src/runnerCore.ts",
+    "src/generate.ts",
+    "src/testCase.ts",
+    "src/bytes.ts",
+    "src/wtf8.ts"
+  ]
+}

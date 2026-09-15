@@ -16,7 +16,7 @@
 /**
  * Decode a WTF-8 encoded buffer into a JS string, preserving lone surrogates.
  */
-export function wtf8ToString(buf: Buffer): string {
+export function wtf8ToString(buf: Uint8Array): string {
   const codeUnits: number[] = [];
   let i = 0;
   while (i < buf.length) {
@@ -47,5 +47,10 @@ export function wtf8ToString(buf: Buffer): string {
       codeUnits.push(cp);
     }
   }
-  return String.fromCharCode(...codeUnits);
+  // Keep argument counts bounded for long generated strings.
+  let result = "";
+  for (let start = 0; start < codeUnits.length; start += 8192) {
+    result += String.fromCharCode(...codeUnits.slice(start, start + 8192));
+  }
+  return result;
 }

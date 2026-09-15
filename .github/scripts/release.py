@@ -153,6 +153,8 @@ def check(base_ref: str) -> None:
 
 
 def release() -> None:
+    # Verify merged release provenance and prepare Wasm before any version or publish side effect.
+    subprocess.run(["node", "scripts/wasm-artifact.mjs", "release"], check=True, cwd=ROOT)
     release_file = ROOT / "RELEASE.md"
     assert release_file.exists()
 
