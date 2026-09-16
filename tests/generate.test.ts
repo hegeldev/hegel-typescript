@@ -27,15 +27,26 @@ describe("formatDate", () => {
 });
 
 describe("formatTime", () => {
-  it("omits the microseconds when zero", () => {
-    expect(formatTime({ hour: 0, minute: 0, second: 0, microsecond: 0 })).toBe("00:00:00");
-    expect(formatTime({ hour: 23, minute: 59, second: 59, microsecond: 0 })).toBe("23:59:59");
+  it("omits the fraction when zero", () => {
+    expect(formatTime({ hour: 0, minute: 0, second: 0, nanosecond: 0 })).toBe("00:00:00");
+    expect(formatTime({ hour: 23, minute: 59, second: 59, nanosecond: 0 })).toBe("23:59:59");
   });
 
-  it("zero-pads microseconds to six digits when nonzero", () => {
-    expect(formatTime({ hour: 1, minute: 2, second: 3, microsecond: 42 })).toBe("01:02:03.000042");
-    expect(formatTime({ hour: 1, minute: 2, second: 3, microsecond: 999999 })).toBe(
+  it("prints six digits for a whole number of microseconds", () => {
+    expect(formatTime({ hour: 1, minute: 2, second: 3, nanosecond: 42_000 })).toBe(
+      "01:02:03.000042",
+    );
+    expect(formatTime({ hour: 1, minute: 2, second: 3, nanosecond: 999_999_000 })).toBe(
       "01:02:03.999999",
+    );
+  });
+
+  it("prints all nine digits when the nanoseconds are not whole microseconds", () => {
+    expect(formatTime({ hour: 1, minute: 2, second: 3, nanosecond: 42 })).toBe(
+      "01:02:03.000000042",
+    );
+    expect(formatTime({ hour: 1, minute: 2, second: 3, nanosecond: 999_999_999 })).toBe(
+      "01:02:03.999999999",
     );
   });
 });
@@ -45,7 +56,7 @@ describe("formatDatetime", () => {
     expect(
       formatDatetime({
         date: { year: 2024, month: 6, day: 7 },
-        time: { hour: 8, minute: 9, second: 10, microsecond: 0 },
+        time: { hour: 8, minute: 9, second: 10, nanosecond: 0 },
       }),
     ).toBe("2024-06-07T08:09:10");
   });

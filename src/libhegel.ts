@@ -1,6 +1,6 @@
 /**
  * Thin, typed binding to the native `libhegel` C ABI (see
- * `hegel-rust/hegel-c/include/hegel.h`, version 0.32.5) via {@link koffi}.
+ * `hegel-rust/hegel-c/include/hegel.h`, version 0.42.4) via {@link koffi}.
  *
  * The {@link Libhegel} class owns the loaded library's function pointers and
  * exposes ergonomic wrappers. Every fallible call takes a `hegel_context_t*`
@@ -43,17 +43,24 @@ export const Status = {
   INTERESTING: 3,
 } as const;
 
-/** `hegel_run_status_t` — aggregate outcome of a finished run. */
+/**
+ * `hegel_run_status_t` — aggregate outcome of a finished run.
+ *
+ * `FAILED_NONDETERMINISTIC` is reported only for runs whose test cases created
+ * a concurrent state machine; this client drives no state machines, so it
+ * never sees it.
+ */
 export const RunStatus = {
   PASSED: 0,
   FAILED: 1,
   ERROR: 2,
+  FAILED_NONDETERMINISTIC: 3,
 } as const;
 
-/** `hegel_verbosity_t`. */
+/** `hegel_verbosity_t`. `NORMAL` is the engine's zero (and default). */
 export const NativeVerbosity = {
-  QUIET: 0,
-  NORMAL: 1,
+  NORMAL: 0,
+  QUIET: 1,
   VERBOSE: 2,
   DEBUG: 3,
 } as const;
@@ -80,12 +87,12 @@ export interface NativeDate {
   day: number;
 }
 
-/** A `hegel_time_t`: a time of day with microsecond precision. */
+/** A `hegel_time_t`: a time of day with nanosecond precision. */
 export interface NativeTime {
   hour: number;
   minute: number;
   second: number;
-  microsecond: number;
+  nanosecond: number;
 }
 
 /** A `hegel_datetime_t`: a naive datetime (no timezone). */
@@ -140,7 +147,7 @@ const timeType: TypeObject = koffi.struct({
   hour: "uint8_t",
   minute: "uint8_t",
   second: "uint8_t",
-  microsecond: "uint32_t",
+  nanosecond: "uint32_t",
 });
 const datetimeType: TypeObject = koffi.struct({ date: dateType, time: timeType });
 // Both *_result_t structs are {pointer, len}. `data` is bound as uint8_t*
@@ -153,18 +160,24 @@ const bufferResultType: TypeObject = koffi.struct({ data: "uint8_t*", len: "size
  *
  * Fallible calls return the `hegel_result_t` code and write their handle / value
  * through a trailing JS out-array (`[null]`, `[0]`); the infallible-for-our-use
- * accessors (constructors, frees, setters, result getters) are presented here as
- * value-returning wrappers, with the C ABI's `out_*` marshalling and the
- * always-`HEGEL_OK` return code absorbed by {@link bindLibrary}. The output
- * callback taken by `hegel_run_start` / `hegel_test_case_from_blob` is likewise
- * absorbed as NULL (engine output stays on stderr).
+ * accessors (constructors other than `hegel_settings_new`, frees, setters,
+ * result getters) are presented here as value-returning wrappers, with the C
+ * ABI's `out_*` marshalling and the always-`HEGEL_OK` return code absorbed by
+ * {@link bindLibrary}. `hegel_settings_new` stays fallible: it resolves the
+ * default settings profile, which fails when `HEGEL_DEFAULT_PROFILE` names an
+ * unknown profile or a `hegel.toml` is malformed. The output callback taken by
+ * `hegel_run_start` / `hegel_test_case_from_blob` is likewise absorbed as NULL
+ * (engine output stays on stderr), as are `hegel_generate_boolean`'s
+ * `forced` / `has_forced` pair (both `false`: the draw is never forced) and
+ * `hegel_string_generator_regex`'s optional `alphabet` (NULL: no alphabet
+ * restriction).
  */
 export interface Bindings {
   contextNew: () => Ptr;
   contextFree: (ctx: Ptr) => void;
   contextLastError: (ctx: Ptr) => string | null;
 
-  settingsNew: () => Ptr;
+  settingsNew: (ctx: Ptr, out: Ptr[]) => number;
   settingsFree: (s: Ptr) => void;
   settingsTestCases: (s: Ptr, n: number) => void;
   settingsVerbosity: (s: Ptr, v: number) => void;
@@ -408,11 +421,7 @@ export function bindLibrary(lib: LibraryHandle): Bindings {
     contextNew: () => contextNew(),
     contextFree: (ctx) => contextFree(ctx),
     contextLastError: (ctx) => contextLastError(ctx),
-    settingsNew: () => {
-      const out: Ptr[] = [null];
-      settingsNew(null, out);
-      return out[0];
-    },
+    settingsNew: (ctx, out) => settingsNew(ctx, out),
     settingsFree: (s) => settingsFree(null, s),
     settingsTestCases: (s, n) => void settingsTestCases(null, s, n),
     settingsVerbosity: (s, v) => void settingsVerbosity(null, s, v),
@@ -619,8 +628,15 @@ export class Libhegel {
     return this.fns.contextLastError(ctx) ?? "";
   }
 
-  newSettings(): Ptr {
-    return this.fns.settingsNew();
+  /**
+   * Create a settings handle initialized from the default profile. Throws
+   * {@link LibhegelError} when the profile cannot be resolved (an unknown
+   * `HEGEL_DEFAULT_PROFILE`, a malformed `hegel.toml`).
+   */
+  newSettings(ctx: Ptr): Ptr {
+    const out: Ptr[] = [null];
+    this.check(ctx, this.fns.settingsNew(ctx, out), "hegel_settings_new");
+    return out[0];
   }
 
   freeSettings(s: Ptr): void {
@@ -860,7 +876,7 @@ export class Libhegel {
 
   /** Draw a time of day in `[min, max]`. */
   generateTime(ctx: Ptr, tc: Ptr, min: NativeTime, max: NativeTime): NativeTime {
-    const out: NativeTime[] = [{ hour: 0, minute: 0, second: 0, microsecond: 0 }];
+    const out: NativeTime[] = [{ hour: 0, minute: 0, second: 0, nanosecond: 0 }];
     this.check(ctx, this.fns.generateTime(ctx, tc, min, max, out), "hegel_generate_time");
     return out[0];
   }
@@ -870,7 +886,7 @@ export class Libhegel {
     const out: NativeDatetime[] = [
       {
         date: { year: 0, month: 0, day: 0 },
-        time: { hour: 0, minute: 0, second: 0, microsecond: 0 },
+        time: { hour: 0, minute: 0, second: 0, nanosecond: 0 },
       },
     ];
     this.check(ctx, this.fns.generateDatetime(ctx, tc, min, max, out), "hegel_generate_datetime");

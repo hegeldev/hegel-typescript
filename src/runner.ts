@@ -400,8 +400,9 @@ export class Hegel {
   private *runSteps(): Generator<{ ds: NativeDataSource; isFinal: boolean }, void, TestCaseResult> {
     const lib = getLibhegel();
     const ctx = lib.newContext();
-    const settings = lib.newSettings();
+    let settings: Ptr = null;
     try {
+      settings = lib.newSettings(ctx);
       configureSettings(lib, ctx, settings, this._settings, this.testFn);
       const run = lib.runStart(ctx, settings);
       try {
