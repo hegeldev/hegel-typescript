@@ -16,9 +16,10 @@ build-libhegel:
     cargo build --release -p hegeltest-c --manifest-path ../hegel-rust/Cargo.toml
     echo "../hegel-rust/target/release/libhegel_c.so"
 
-# Regenerate src/libhegel-version.ts from a hegel-rust release. Targets the
-# latest release; pass a version (e.g. `just update-libhegel 0.20.1`) to pin an
-# exact one.
+# Regenerate src/libhegel-version.ts from a libhegel release (hegel-rust's
+# `libhegel-v<version>` tags). Targets the latest release; pass a version
+# (e.g. `just update-libhegel 0.42.1`, or the tag `libhegel-v0.42.1`) to pin
+# an exact one.
 update-libhegel version="":
     node scripts/update-libhegel.mjs {{version}}
     npx prettier --write src/libhegel-version.ts

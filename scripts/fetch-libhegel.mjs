@@ -5,9 +5,11 @@
 // packages.
 //
 // The release to download is pinned by LIBHEGEL_VERSION in
-// src/libhegel-version.ts (run `just update-libhegel` to bump it). Artifacts
-// land in a per-version directory (native/<version>/), so a pin bump simply
-// misses the cache and downloads fresh — no invalidation logic needed.
+// src/libhegel-version.ts (run `just update-libhegel` to bump it); its assets
+// hang off hegel-rust's `libhegel-v<version>` tag (the plain `v<version>` tags
+// mark hegeltest releases and carry no binaries). Artifacts land in a
+// per-version directory (native/<version>/), so a pin bump simply misses the
+// cache and downloads fresh — no invalidation logic needed.
 //
 // Usage:
 //   node scripts/fetch-libhegel.mjs   # fetch the host artifact, print its path
@@ -25,6 +27,11 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION_TS = path.join(ROOT, "src", "libhegel-version.ts");
 const NATIVE_DIR = path.join(ROOT, "native");
 const BASE_URL = "https://github.com/hegeldev/hegel-rust/releases/download";
+
+/** The hegel-rust tag that carries the libhegel release of a version. */
+export function releaseTag(version) {
+  return `libhegel-v${version}`;
+}
 
 export const PLATFORMS = [
   { platform: "darwin", arch: "arm64", asset: "libhegel-darwin-arm64.dylib" },
@@ -91,7 +98,7 @@ export async function fetchAsset(asset, version) {
     process.stderr.write(`libhegel: ${asset} already present\n`);
     return dest;
   }
-  const url = `${BASE_URL}/v${version}/${asset}`;
+  const url = `${BASE_URL}/${releaseTag(version)}/${asset}`;
   const tmp = `${dest}.${process.pid}.partial`;
   process.stderr.write(`libhegel: downloading ${asset}\n`);
   await download(url, tmp);

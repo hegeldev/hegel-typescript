@@ -29,6 +29,17 @@ def set_output(name: str, value: str) -> None:
         f.write(f"{name}={value}\n")
 
 
+def release_url(version: str) -> str:
+    """The GitHub release of a libhegel version.
+
+    hegel-rust tags every release `v<hegeltest version>` with no GitHub
+    release; a release that includes hegel-c additionally tags
+    `libhegel-v<hegel-c version>`, and the GitHub release (with the libhegel
+    binaries) hangs off that tag.
+    """
+    return f"https://github.com/{RUST_REPO}/releases/tag/libhegel-v{version}"
+
+
 def get_pinned_version() -> str:
     text = VERSION_TS.read_text()
     m = re.search(r'^export const LIBHEGEL_VERSION = "([^"]+)";', text, re.MULTILINE)
@@ -53,16 +64,16 @@ def bump(requested: str) -> None:
     new = get_pinned_version()
 
     if new == current:
-        print(f"Already pinned to v{current}; nothing to do.")
+        print(f"Already pinned to libhegel {current}; nothing to do.")
         set_output("bumped", "false")
         return
 
-    current_url = f"https://github.com/{RUST_REPO}/releases/tag/v{current}"
-    new_url = f"https://github.com/{RUST_REPO}/releases/tag/v{new}"
+    current_url = release_url(current)
+    new_url = release_url(new)
 
     RELEASE_MD.write_text(
         "RELEASE_TYPE: patch\n\n"
-        f"This patch bumps our pinned libhegel ([hegel-rust]({RUST_REPO})) from "
+        f"This patch bumps our pinned libhegel ([hegel-rust](https://github.com/{RUST_REPO})) from "
         f"[{current}]({current_url}) to [{new}]({new_url}).\n"
     )
 
@@ -89,6 +100,7 @@ def bump(requested: str) -> None:
 
 
 if __name__ == "__main__":
-    # An optional argument pins that exact version; with none we take the
-    # latest. The repository_dispatch trigger passes client_payload.version.
+    # An optional argument pins that exact release, given as either the
+    # `libhegel-v<version>` tag or the bare version; with none we take the
+    # latest. The repository_dispatch trigger passes client_payload.tag.
     bump(sys.argv[1] if len(sys.argv) > 1 else "")
