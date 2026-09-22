@@ -124,6 +124,22 @@ function fakeBindings(overrides: Partial<Bindings>): Bindings {
     collectionReject: () => 0,
     collectionFree: noop,
     markComplete: () => 0,
+    newPool: (_ctx, _tc, out) => {
+      out[0] = {} as Ptr;
+      return 0;
+    },
+    poolAdd: () => 0,
+    poolGenerate: () => 0,
+    poolFree: noop,
+    newStateMachine: (_ctx, _tc, _opts, out) => {
+      out[0] = {} as Ptr;
+      return 0;
+    },
+    stateMachineNextGroup: () => 0,
+    stateMachineNextRule: () => 0,
+    stateMachineRuleRejected: () => 0,
+    stateMachineShouldCheckInvariant: () => 0,
+    stateMachineFree: noop,
     runResultStatus: () => RunStatus.PASSED,
     runResultError: () => null,
     runResultFailureCount: () => 0,
@@ -334,6 +350,26 @@ describe("Libhegel wrapper logic (fake bindings)", () => {
     expect(lib.generateString(null, null, null)).toBe("");
   });
 
+  it("state-machine index reads map the DONE sentinel to null", () => {
+    // koffi returns INT64_MIN as a bigint (it is not a safe integer) and
+    // small indices as numbers; both shapes must decode.
+    const done = -(2n ** 63n);
+    const lib = new Libhegel(
+      fakeBindings({
+        stateMachineNextGroup: (_ctx, _tc, _machine, out) => {
+          out[0] = done;
+          return 0;
+        },
+        stateMachineNextRule: (_ctx, _tc, _machine, _worker, out) => {
+          out[0] = 2;
+          return 0;
+        },
+      }),
+    );
+    expect(lib.stateMachineNextGroup(null, null, null)).toBeNull();
+    expect(lib.stateMachineNextRule(null, null, null, 0)).toBe(2);
+  });
+
   it("trivial pass-throughs do not throw", () => {
     const lib = new Libhegel(fakeBindings({}));
     expect(lib.version()).toBe("0.0.0");
@@ -350,6 +386,22 @@ describe("Libhegel wrapper logic (fake bindings)", () => {
     lib.collectionReject(null, null, null, "dup");
     lib.freeCollection(null);
     lib.markComplete(null, null, Status.VALID, null);
+    lib.freePool(lib.newPool(null, null));
+    expect(lib.poolAdd(null, null, null)).toBe(0n);
+    expect(lib.poolGenerate(null, null, null, true)).toBe(0n);
+    lib.freeStateMachine(
+      lib.newStateMachine(null, null, {
+        ruleNames: ["a"],
+        ruleGroups: [0],
+        invariantNames: [],
+        invariantAlwaysCheck: [],
+        minConcurrency: 1,
+        maxConcurrency: 1,
+        stepCount: 50,
+      }),
+    );
+    lib.stateMachineRuleRejected(null, null, null, 0);
+    expect(lib.stateMachineShouldCheckInvariant(null, null, null, 0)).toBe(false);
     lib.freeRunResult(lib.runResult(null, null));
     lib.freeFailure(lib.failure(null, 0));
     lib.freeRun(lib.runStart(null, null));

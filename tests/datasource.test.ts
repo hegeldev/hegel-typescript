@@ -85,6 +85,39 @@ class FakeDataSource implements DataSource {
     this._markCompleteCalls.push({ status, origin });
   }
 
+  // The stateful protocol is only exercised against the real engine.
+  newPool(): number {
+    throw new Error("not supported by FakeDataSource");
+  }
+
+  poolAdd(_poolId: number): bigint {
+    throw new Error("not supported by FakeDataSource");
+  }
+
+  poolGenerate(_poolId: number, _consume: boolean): bigint {
+    throw new Error("not supported by FakeDataSource");
+  }
+
+  newStateMachine(): number {
+    throw new Error("not supported by FakeDataSource");
+  }
+
+  stateMachineNextRound(_machineId: number): boolean {
+    throw new Error("not supported by FakeDataSource");
+  }
+
+  stateMachineNextRule(_machineId: number): number | null {
+    throw new Error("not supported by FakeDataSource");
+  }
+
+  stateMachineRuleRejected(_machineId: number): void {
+    throw new Error("not supported by FakeDataSource");
+  }
+
+  stateMachineShouldCheckInvariant(_machineId: number, _invariantIndex: number): boolean {
+    throw new Error("not supported by FakeDataSource");
+  }
+
   get markCompleteCalls() {
     return this._markCompleteCalls;
   }

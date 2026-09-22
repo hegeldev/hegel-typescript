@@ -10,6 +10,8 @@ import {
   type FailureHandle,
   type CollectionHandle,
   type StringGeneratorHandle,
+  type PoolHandle,
+  type StateMachineHandle,
 } from "../src/engine.js";
 import { Database, Verbosity } from "../src/runnerCore.js";
 import type { RuntimeServices } from "../src/runtime.js";
@@ -23,6 +25,8 @@ export const replayCase = {} as TestCaseHandle;
 export const failure = {} as FailureHandle;
 export const collection = {} as CollectionHandle;
 export const stringGenerator = {} as StringGeneratorHandle;
+export const pool = {} as PoolHandle;
+export const stateMachine = {} as StateMachineHandle;
 
 /** Deterministic Engine double; no ABI pointers or generated engine logic. */
 export function fakeEngine() {
@@ -91,6 +95,22 @@ export function fakeEngine() {
     collectionReject: vi.fn<Engine["collectionReject"]>(),
     freeCollection: vi.fn<Engine["freeCollection"]>(),
     markComplete: vi.fn<Engine["markComplete"]>(),
+    newPool: vi.fn<Engine["newPool"]>(() => pool),
+    poolAdd: vi.fn<Engine["poolAdd"]>(() => 0n),
+    poolGenerate: vi.fn<Engine["poolGenerate"]>(() => 0n),
+    freePool: vi.fn<Engine["freePool"]>(),
+    newStateMachine: vi.fn<Engine["newStateMachine"]>(() => stateMachine),
+    stateMachineNextGroup: vi
+      .fn<Engine["stateMachineNextGroup"]>()
+      .mockReturnValueOnce(0)
+      .mockReturnValue(null),
+    stateMachineNextRule: vi
+      .fn<Engine["stateMachineNextRule"]>()
+      .mockReturnValueOnce(0)
+      .mockReturnValue(null),
+    stateMachineRuleRejected: vi.fn<Engine["stateMachineRuleRejected"]>(),
+    stateMachineShouldCheckInvariant: vi.fn<Engine["stateMachineShouldCheckInvariant"]>(() => true),
+    freeStateMachine: vi.fn<Engine["freeStateMachine"]>(),
     runStatus: vi.fn<Engine["runStatus"]>(() => RunStatus.PASSED),
     runError: vi.fn<Engine["runError"]>(() => "backend error"),
     failureCount: vi.fn<Engine["failureCount"]>(() => 1),

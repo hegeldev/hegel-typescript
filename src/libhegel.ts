@@ -17,8 +17,9 @@
  * constructors (`hegel_context_new`, `hegel_settings_new`, `hegel_run_start`,
  * `hegel_test_case_from_blob`) and — new in this ABI — every test case from
  * `hegel_next_test_case`, the run result from `hegel_run_result`, each failure
- * from `hegel_run_result_failure`, and each collection from
- * `hegel_new_collection` (the runner releases them all in `finally` blocks).
+ * from `hegel_run_result_failure`, and each collection, pool and state machine
+ * from `hegel_new_collection` / `hegel_new_pool` / `hegel_new_state_machine`
+ * (the runner releases them all in `finally` blocks).
  * String generators are cached within a run and freed when that run ends.
  *
  * @packageDocumentation
@@ -26,6 +27,7 @@
 
 import {
   EngineError,
+  doneOrIndex,
   type Engine,
   type ContextHandle,
   type SettingsHandle,
@@ -35,6 +37,9 @@ import {
   type FailureHandle,
   type CollectionHandle,
   type StringGeneratorHandle,
+  type PoolHandle,
+  type StateMachineHandle,
+  type StateMachineOptions,
   type NativeDate,
   type NativeTime,
   type NativeDatetime,
@@ -51,6 +56,7 @@ export {
   type NativeDatetime,
   type TextGeneratorOptions,
   type NativeFloatOptions,
+  type StateMachineOptions,
   type UuidVersion,
 } from "./engine.js";
 import { bigIntToTwosComplementLE, twosComplementLEToBigInt } from "./bytes.js";
@@ -202,6 +208,42 @@ export interface Bindings {
   collectionReject: (ctx: Ptr, tc: Ptr, collection: Ptr, why: string | null) => number;
   collectionFree: (collection: Ptr) => void;
   markComplete: (ctx: Ptr, tc: Ptr, status: number, origin: string | null) => number;
+
+  newPool: (ctx: Ptr, tc: Ptr, out: Ptr[]) => number;
+  poolAdd: (ctx: Ptr, tc: Ptr, pool: Ptr, out: (number | bigint)[]) => number;
+  poolGenerate: (
+    ctx: Ptr,
+    tc: Ptr,
+    pool: Ptr,
+    consume: boolean,
+    out: (number | bigint)[],
+  ) => number;
+  poolFree: (pool: Ptr) => void;
+
+  newStateMachine: (
+    ctx: Ptr,
+    tc: Ptr,
+    opts: StateMachineOptions,
+    outMachine: Ptr[],
+    outConcurrency: (number | bigint)[],
+  ) => number;
+  stateMachineNextGroup: (ctx: Ptr, tc: Ptr, machine: Ptr, out: (number | bigint)[]) => number;
+  stateMachineNextRule: (
+    ctx: Ptr,
+    tc: Ptr,
+    machine: Ptr,
+    workerIndex: number,
+    out: (number | bigint)[],
+  ) => number;
+  stateMachineRuleRejected: (ctx: Ptr, tc: Ptr, machine: Ptr, workerIndex: number) => number;
+  stateMachineShouldCheckInvariant: (
+    ctx: Ptr,
+    tc: Ptr,
+    machine: Ptr,
+    invariantIndex: number,
+    out: boolean[],
+  ) => number;
+  stateMachineFree: (machine: Ptr) => void;
 
   runResultStatus: (r: Ptr) => number;
   runResultError: (r: Ptr) => string | null;
@@ -362,6 +404,32 @@ export function bindLibrary(lib: LibraryHandle): Bindings {
     "int hegel_mark_complete(void* ctx, void* tc, uint32_t status, const char* origin)",
   );
 
+  const newPool = f("int hegel_new_pool(void* ctx, void* tc, _Out_ void** out_pool)");
+  const poolAdd = f(
+    "int hegel_pool_add(void* ctx, void* tc, void* pool, _Out_ int64_t* out_variable_id)",
+  );
+  const poolGenerate = f(
+    "int hegel_pool_generate(void* ctx, void* tc, void* pool, bool consume, _Out_ int64_t* out_variable_id)",
+  );
+  const poolFree = f("int hegel_pool_free(void* ctx, void* pool)");
+
+  const newStateMachine = f(
+    "int hegel_new_state_machine(void* ctx, void* tc, const char** rule_names, const int64_t* rule_groups, size_t num_rules, const char** invariant_names, const bool* invariant_always_check, size_t num_invariants, int64_t min_concurrency, int64_t max_concurrency, int64_t step_count, _Out_ void** out_state_machine, _Out_ int64_t* out_concurrency)",
+  );
+  const stateMachineNextGroup = f(
+    "int hegel_state_machine_next_group(void* ctx, void* tc, void* state_machine, _Out_ int64_t* out_group_id)",
+  );
+  const stateMachineNextRule = f(
+    "int hegel_state_machine_next_rule(void* ctx, void* tc, void* state_machine, int64_t worker_index, _Out_ int64_t* out_rule_index)",
+  );
+  const stateMachineRuleRejected = f(
+    "int hegel_state_machine_rule_rejected(void* ctx, void* tc, void* state_machine, int64_t worker_index)",
+  );
+  const stateMachineShouldCheckInvariant = f(
+    "int hegel_state_machine_should_check_invariant(void* ctx, void* tc, void* state_machine, int64_t invariant_index, _Out_ bool* out_should_check)",
+  );
+  const stateMachineFree = f("int hegel_state_machine_free(void* ctx, void* state_machine)");
+
   const runResultStatus = f("int hegel_run_result_status(void* ctx, void* r, _Out_ int* out)");
   const runResultError = f("int hegel_run_result_error(void* ctx, void* r, _Out_ char** out)");
   const runResultFailureCount = f(
@@ -490,6 +558,34 @@ export function bindLibrary(lib: LibraryHandle): Bindings {
       collectionReject(ctx, tc, collection, cString(why)),
     collectionFree: (collection) => checked(collectionFree(null, collection), "collectionFree"),
     markComplete: (ctx, tc, status, origin) => markComplete(ctx, tc, status, cString(origin)),
+    newPool: (ctx, tc, out) => newPool(ctx, tc, out),
+    poolAdd: (ctx, tc, pool, out) => poolAdd(ctx, tc, pool, out),
+    poolGenerate: (ctx, tc, pool, consume, out) => poolGenerate(ctx, tc, pool, consume, out),
+    poolFree: (pool) => checked(poolFree(null, pool), "poolFree"),
+    newStateMachine: (ctx, tc, opts, outMachine, outConcurrency) =>
+      newStateMachine(
+        ctx,
+        tc,
+        opts.ruleNames.map((name) => cString(name)),
+        opts.ruleGroups,
+        opts.ruleNames.length,
+        opts.invariantNames.map((name) => cString(name)),
+        opts.invariantAlwaysCheck,
+        opts.invariantNames.length,
+        opts.minConcurrency,
+        opts.maxConcurrency,
+        opts.stepCount,
+        outMachine,
+        outConcurrency,
+      ),
+    stateMachineNextGroup: (ctx, tc, machine, out) => stateMachineNextGroup(ctx, tc, machine, out),
+    stateMachineNextRule: (ctx, tc, machine, workerIndex, out) =>
+      stateMachineNextRule(ctx, tc, machine, workerIndex, out),
+    stateMachineRuleRejected: (ctx, tc, machine, workerIndex) =>
+      stateMachineRuleRejected(ctx, tc, machine, workerIndex),
+    stateMachineShouldCheckInvariant: (ctx, tc, machine, invariantIndex, out) =>
+      stateMachineShouldCheckInvariant(ctx, tc, machine, invariantIndex, out),
+    stateMachineFree: (machine) => checked(stateMachineFree(null, machine), "stateMachineFree"),
     runResultStatus: (r) => {
       const out: number[] = [0];
       checked(runResultStatus(null, r, out), "runResultStatus");
@@ -906,6 +1002,112 @@ export class Libhegel implements Engine {
 
   markComplete(ctx: Ptr, tc: Ptr, status: number, origin: string | null): void {
     this.check(ctx, this.fns.markComplete(ctx, tc, status, origin), "hegel_mark_complete");
+  }
+
+  /**
+   * Open a variable pool for stateful testing. The returned handle is owned by
+   * the caller — release it with {@link freePool}.
+   */
+  newPool(ctx: Ptr, tc: Ptr): PoolHandle {
+    const out: Ptr[] = [null];
+    this.check(ctx, this.fns.newPool(ctx, tc, out), "hegel_new_pool");
+    return this.requireHandle<PoolHandle>(out[0], "newPool");
+  }
+
+  /** Register a new variable in `pool`, returning its engine-assigned id. */
+  poolAdd(ctx: Ptr, tc: Ptr, pool: Ptr): bigint {
+    const out: (number | bigint)[] = [0];
+    this.check(ctx, this.fns.poolAdd(ctx, tc, pool, out), "hegel_pool_add");
+    return BigInt(out[0]);
+  }
+
+  /**
+   * Draw the id of a variable in `pool`, removing it when `consume` is set.
+   * Throws {@link AssumeError} when the pool is empty.
+   */
+  poolGenerate(ctx: Ptr, tc: Ptr, pool: Ptr, consume: boolean): bigint {
+    const out: (number | bigint)[] = [0];
+    this.check(ctx, this.fns.poolGenerate(ctx, tc, pool, consume, out), "hegel_pool_generate");
+    return BigInt(out[0]);
+  }
+
+  freePool(pool: Ptr): void {
+    this.fns.poolFree(pool);
+  }
+
+  /**
+   * Register a state machine on `tc`. The returned handle is owned by the
+   * caller — release it with {@link freeStateMachine}. The engine's drawn
+   * concurrency level is discarded: this client fixes the bounds at 1.
+   */
+  newStateMachine(ctx: Ptr, tc: Ptr, opts: StateMachineOptions): StateMachineHandle {
+    const outMachine: Ptr[] = [null];
+    const outConcurrency: (number | bigint)[] = [0];
+    this.check(
+      ctx,
+      this.fns.newStateMachine(ctx, tc, opts, outMachine, outConcurrency),
+      "hegel_new_state_machine",
+    );
+    return this.requireHandle<StateMachineHandle>(outMachine[0], "newStateMachine");
+  }
+
+  /**
+   * Start the machine's next round, returning the round's group id, or `null`
+   * once the machine is finished. koffi hands the `int64_t` back as a `number`
+   * when it is safe and a `bigint` only beyond that — which the
+   * `HEGEL_STATE_MACHINE_DONE` sentinel always is.
+   */
+  stateMachineNextGroup(ctx: Ptr, tc: Ptr, machine: Ptr): number | null {
+    const out: (number | bigint)[] = [0];
+    this.check(
+      ctx,
+      this.fns.stateMachineNextGroup(ctx, tc, machine, out),
+      "hegel_state_machine_next_group",
+    );
+    return doneOrIndex(out[0]);
+  }
+
+  /**
+   * Draw the next rule index for `workerIndex` this round, or `null` at the
+   * round's join point.
+   */
+  stateMachineNextRule(ctx: Ptr, tc: Ptr, machine: Ptr, workerIndex: number): number | null {
+    const out: (number | bigint)[] = [0];
+    this.check(
+      ctx,
+      this.fns.stateMachineNextRule(ctx, tc, machine, workerIndex, out),
+      "hegel_state_machine_next_rule",
+    );
+    return doneOrIndex(out[0]);
+  }
+
+  /** Report the rule last handed to `workerIndex` as rejected (assumption failed). */
+  stateMachineRuleRejected(ctx: Ptr, tc: Ptr, machine: Ptr, workerIndex: number): void {
+    this.check(
+      ctx,
+      this.fns.stateMachineRuleRejected(ctx, tc, machine, workerIndex),
+      "hegel_state_machine_rule_rejected",
+    );
+  }
+
+  /** Whether invariant `invariantIndex` should run at the current join point. */
+  stateMachineShouldCheckInvariant(
+    ctx: Ptr,
+    tc: Ptr,
+    machine: Ptr,
+    invariantIndex: number,
+  ): boolean {
+    const out: boolean[] = [false];
+    this.check(
+      ctx,
+      this.fns.stateMachineShouldCheckInvariant(ctx, tc, machine, invariantIndex, out),
+      "hegel_state_machine_should_check_invariant",
+    );
+    return out[0];
+  }
+
+  freeStateMachine(machine: Ptr): void {
+    this.fns.stateMachineFree(machine);
   }
 
   runStatus(r: Ptr): number {

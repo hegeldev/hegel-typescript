@@ -76,3 +76,37 @@ test("fetch returns a value matching its input", () =>
     }
   }));
 ```
+
+## Stateful tests
+
+Some bugs only appear after a particular sequence of operations. For those, describe the operations as the rules of a state machine and let Hegel search over sequences of them with `hegel.stateful.run`:
+
+```typescript
+import { test } from "vitest";
+import * as hegel from "@hegeldev/hegel";
+import * as gs from "@hegeldev/hegel/generators";
+
+const stackMachine: hegel.stateful.StateMachine<{ items: number[] }> = {
+  rules: {
+    push: (tc, stack) => {
+      stack.items.push(tc.draw(gs.integers()));
+    },
+    pop: (tc, stack) => {
+      tc.assume(stack.items.length > 0);
+      stack.items.pop();
+    },
+  },
+  invariants: {
+    nonNegativeLength: (_tc, stack) => {
+      if (stack.items.length < 0) throw new Error("negative length");
+    },
+  },
+};
+
+test("stack", () =>
+  hegel.test((tc) => {
+    hegel.stateful.run(tc, stackMachine, { items: [] });
+  }));
+```
+
+Hegel picks the rules to run at each step, shrinks a failing sequence down to a minimal one, and reports it step by step (`Step 1: push`, `Step 2: pop`, …). See the `stateful` module in the documentation for invariants, step counts, asynchronous rules and `Pool`, which lets rules act on values that earlier rules produced.
