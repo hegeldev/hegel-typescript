@@ -13,6 +13,7 @@ import {
 } from "../src/engine.js";
 import { AssumeError, StopTestError } from "../src/testCase.js";
 import * as gs from "../src/generators/index.js";
+import * as stateful from "../src/stateful.js";
 import { Libhegel } from "../src/libhegel.js";
 import { testLibPath } from "./libPath.js";
 
@@ -162,6 +163,94 @@ describe("WasmEngine pinned raw ABI", () => {
         engine.generateIntegerBig(ctx, tc, -100000000000000000000n, -100000000000000000000n),
       ).toBe(-100000000000000000000n);
     });
+  });
+
+  it("drives pools and state machines like the native adapter", () => {
+    const wasm = wasmFixture().engine;
+    const native = Libhegel.load(testLibPath());
+    const options = {
+      ruleNames: ["push", "pop"],
+      ruleGroups: [0, 0],
+      invariantNames: ["sorted", "small"],
+      invariantAlwaysCheck: [true, false],
+      minConcurrency: 1,
+      maxConcurrency: 1,
+      stepCount: 5,
+    };
+    const drive = (engine: Engine) =>
+      active(engine, (ctx, tc) => {
+        const trace: unknown[] = [];
+        const pool = engine.newPool(ctx, tc);
+        const machine = engine.newStateMachine(ctx, tc, options);
+        try {
+          expect(() => engine.poolGenerate(ctx, tc, pool, false)).toThrow(AssumeError);
+          const first = engine.poolAdd(ctx, tc, pool);
+          const second = engine.poolAdd(ctx, tc, pool);
+          expect(first).not.toBe(second);
+          expect([first, second]).toContain(engine.poolGenerate(ctx, tc, pool, false));
+          expect([first, second]).toContain(engine.poolGenerate(ctx, tc, pool, true));
+          trace.push(engine.poolGenerate(ctx, tc, pool, true));
+          expect(() => engine.poolGenerate(ctx, tc, pool, true)).toThrow(AssumeError);
+          let rounds = 0;
+          while (engine.stateMachineNextGroup(ctx, tc, machine) !== null) {
+            rounds++;
+            for (;;) {
+              const rule = engine.stateMachineNextRule(ctx, tc, machine, 0);
+              if (rule === null) break;
+              trace.push(rule);
+              if (rule === 1) engine.stateMachineRuleRejected(ctx, tc, machine, 0);
+            }
+            expect(engine.stateMachineShouldCheckInvariant(ctx, tc, machine, 0)).toBe(true);
+            trace.push(engine.stateMachineShouldCheckInvariant(ctx, tc, machine, 1));
+          }
+          expect(rounds).toBeGreaterThan(0);
+          expect(rounds).toBeLessThanOrEqual(1000);
+          return trace;
+        } finally {
+          engine.freeStateMachine(machine);
+          engine.freePool(pool);
+        }
+      });
+    expect(drive(wasm)).toEqual(drive(native));
+  });
+
+  it("runs a stateful test with a pool in the browser runner", () => {
+    const runner = createRunner(browserRuntime(wasmFixture().engine));
+    let steps = 0;
+    expect(() =>
+      runner.test(
+        (tc) => {
+          const handles = new stateful.Pool<number>(tc);
+          stateful.run(
+            tc,
+            {
+              rules: {
+                alloc: (_tc, state: { live: Set<number>; next: number }) => {
+                  const handle = state.next++;
+                  handles.add(handle);
+                  state.live.add(handle);
+                  steps++;
+                },
+                free: (tc, state) => {
+                  const handle = tc.draw(handles.valuesConsumed());
+                  state.live.delete(handle);
+                  steps++;
+                  if (state.next > 3) throw new Error(`freed ${handle} late`);
+                },
+              },
+              invariants: {
+                liveMatchesPool: (_tc, state) => {
+                  expect(state.live.size).toBe(handles.size);
+                },
+              },
+            },
+            { live: new Set<number>(), next: 0 },
+          );
+        },
+        { seed: 42, testCases: 30 },
+      ),
+    ).toThrow(/freed \d+ late/);
+    expect(steps).toBeGreaterThan(0);
   });
 
   it("draws NaN and infinities and composes the portable generator helpers", () => {

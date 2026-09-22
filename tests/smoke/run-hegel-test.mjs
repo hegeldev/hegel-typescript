@@ -48,3 +48,38 @@ hegel.test(
   },
   { testCases: 25 },
 );
+
+// 4. A stateful test, with a pool.
+let stepsRun = 0;
+hegel.test(
+  (tc) => {
+    const handles = new hegel.stateful.Pool(tc);
+    hegel.stateful.run(
+      tc,
+      {
+        rules: {
+          alloc: (_tc, state) => {
+            const handle = state.nextHandle++;
+            handles.add(handle);
+            state.live.add(handle);
+            stepsRun++;
+          },
+          free: (tc, state) => {
+            const handle = tc.draw(handles.valuesConsumed());
+            assert.ok(state.live.has(handle), `freed unknown handle ${handle}`);
+            state.live.delete(handle);
+            stepsRun++;
+          },
+        },
+        invariants: {
+          liveMatchesPool: (_tc, state) => {
+            assert.equal(state.live.size, handles.size);
+          },
+        },
+      },
+      { live: new Set(), nextHandle: 0 },
+    );
+  },
+  { testCases: 25 },
+);
+assert.ok(stepsRun > 0, "expected the state machine to run some steps");

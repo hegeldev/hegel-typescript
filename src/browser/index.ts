@@ -8,6 +8,7 @@ const runner = createRunner(browserRuntime(engine));
 export const test = runner.test;
 export const testAsync = runner.testAsync;
 export * as generators from "../generators/index.js";
+export * as stateful from "../stateful.js";
 export { TestCase } from "../testCase.js";
 export { Verbosity, HealthCheck, Database } from "../runnerCore.js";
 export type { Settings } from "../runnerCore.js";

@@ -23,6 +23,12 @@ export type CollectionHandle = { readonly [collectionBrand]: never };
 declare const stringGeneratorBrand: unique symbol;
 export type StringGeneratorHandle = { readonly [stringGeneratorBrand]: never };
 
+declare const poolBrand: unique symbol;
+export type PoolHandle = { readonly [poolBrand]: never };
+
+declare const stateMachineBrand: unique symbol;
+export type StateMachineHandle = { readonly [stateMachineBrand]: never };
+
 /** `hegel_status_t` — outcome of a single test case. */
 export const Status = {
   VALID: 0,
@@ -94,6 +100,37 @@ export interface NativeFloatOptions {
   excludeMin: boolean;
   excludeMax: boolean;
   smallestNonzeroMagnitude: number;
+}
+
+/**
+ * Options for `hegel_new_state_machine`. `ruleGroups` and
+ * `invariantAlwaysCheck` are parallel to `ruleNames` / `invariantNames`.
+ */
+export interface StateMachineOptions {
+  ruleNames: readonly string[];
+  ruleGroups: readonly number[];
+  invariantNames: readonly string[];
+  invariantAlwaysCheck: readonly boolean[];
+  minConcurrency: number;
+  maxConcurrency: number;
+  stepCount: number;
+}
+
+/**
+ * `HEGEL_STATE_MACHINE_DONE` (`INT64_MIN`): the sentinel
+ * `hegel_state_machine_next_group` / `hegel_state_machine_next_rule` write
+ * instead of a group / rule index once the machine (or the worker's round) is
+ * finished.
+ */
+export const STATE_MACHINE_DONE = -0x8000000000000000n;
+
+/**
+ * Decode an `int64_t` written by the state-machine calls: `null` for the
+ * `HEGEL_STATE_MACHINE_DONE` sentinel, the (small, non-negative) index
+ * otherwise.
+ */
+export function doneOrIndex(value: number | bigint): number | null {
+  return BigInt(value) === STATE_MACHINE_DONE ? null : Number(value);
 }
 
 /** Engine/adapter faults must never be submitted to the shrinker. */
@@ -193,6 +230,60 @@ export interface Engine {
   ): void;
   freeCollection(collection: CollectionHandle): void;
   markComplete(ctx: ContextHandle, tc: TestCaseHandle, status: number, origin: string | null): void;
+  /** Open a variable pool for stateful testing; released with {@link freePool}. */
+  newPool(ctx: ContextHandle, tc: TestCaseHandle): PoolHandle;
+  /** Register a new variable in `pool`, returning its engine-assigned id. */
+  poolAdd(ctx: ContextHandle, tc: TestCaseHandle, pool: PoolHandle): bigint;
+  /**
+   * Draw the id of a variable in `pool`, removing it when `consume` is set.
+   * Throws `AssumeError` when the pool is empty.
+   */
+  poolGenerate(ctx: ContextHandle, tc: TestCaseHandle, pool: PoolHandle, consume: boolean): bigint;
+  freePool(pool: PoolHandle): void;
+  /**
+   * Register a state machine on `tc`; released with {@link freeStateMachine}.
+   * The engine's drawn concurrency level is discarded: this client fixes the
+   * bounds at 1.
+   */
+  newStateMachine(
+    ctx: ContextHandle,
+    tc: TestCaseHandle,
+    opts: StateMachineOptions,
+  ): StateMachineHandle;
+  /**
+   * Start the machine's next round, returning the round's group id, or `null`
+   * once the machine is finished.
+   */
+  stateMachineNextGroup(
+    ctx: ContextHandle,
+    tc: TestCaseHandle,
+    machine: StateMachineHandle,
+  ): number | null;
+  /**
+   * Draw the next rule index for `workerIndex` this round, or `null` at the
+   * round's join point.
+   */
+  stateMachineNextRule(
+    ctx: ContextHandle,
+    tc: TestCaseHandle,
+    machine: StateMachineHandle,
+    workerIndex: number,
+  ): number | null;
+  /** Report the rule last handed to `workerIndex` as rejected (assumption failed). */
+  stateMachineRuleRejected(
+    ctx: ContextHandle,
+    tc: TestCaseHandle,
+    machine: StateMachineHandle,
+    workerIndex: number,
+  ): void;
+  /** Whether invariant `invariantIndex` should run at the current join point. */
+  stateMachineShouldCheckInvariant(
+    ctx: ContextHandle,
+    tc: TestCaseHandle,
+    machine: StateMachineHandle,
+    invariantIndex: number,
+  ): boolean;
+  freeStateMachine(machine: StateMachineHandle): void;
   runStatus(r: RunResultHandle): number;
   runError(r: RunResultHandle): string | null;
   failureCount(r: RunResultHandle): number;
