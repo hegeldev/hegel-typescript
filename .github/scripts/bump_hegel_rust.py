@@ -13,6 +13,9 @@ RUST_REPO = "hegeldev/hegel-rust"
 # work. The workflow closes superseded bot-only bump PRs after pushing.
 BRANCH_PREFIX = "ci/bump-hegel-rust-"
 VERSION_TS = ROOT / "src" / "libhegel-version.ts"
+# The Wasm pin of the same release, regenerated alongside VERSION_TS.
+WASM_PIN_JSON = ROOT / "src" / "browser" / "artifact.json"
+WASM_PIN_TS = ROOT / "src" / "browser" / "artifact.ts"
 RELEASE_MD = ROOT / "RELEASE.md"
 
 
@@ -56,10 +59,11 @@ def bump(requested: str) -> None:
     """
     current = get_pinned_version()
 
-    # `just update-libhegel` regenerates src/libhegel-version.ts for the target
-    # release (empty requested -> latest) and formats it. The script discovers
-    # the resolved version itself, so we read it back rather than trusting the
-    # request (which may be empty for a manual latest-bump).
+    # `just update-libhegel` regenerates src/libhegel-version.ts and the Wasm
+    # pin (src/browser/artifact.{json,ts}) for the target release (empty
+    # requested -> latest) and formats them. The script discovers the resolved
+    # version itself, so we read it back rather than trusting the request
+    # (which may be empty for a manual latest-bump).
     subprocess.run(["just", "update-libhegel", requested], check=True, cwd=ROOT)
     new = get_pinned_version()
 
@@ -85,7 +89,7 @@ def bump(requested: str) -> None:
     # workflow pushes it after folding in the FFI alignment.
     branch = BRANCH_PREFIX + new
     git("checkout", "-B", branch)
-    git("add", str(VERSION_TS), str(RELEASE_MD))
+    git("add", str(VERSION_TS), str(WASM_PIN_JSON), str(WASM_PIN_TS), str(RELEASE_MD))
     git(
         "commit",
         "-m",

@@ -16,13 +16,14 @@ build-libhegel:
     cargo build --release -p hegeltest-c --manifest-path ../hegel-rust/Cargo.toml
     echo "../hegel-rust/target/release/libhegel_c.so"
 
-# Regenerate src/libhegel-version.ts from a libhegel release (hegel-rust's
-# `libhegel-v<version>` tags). Targets the latest release; pass a version
-# (e.g. `just update-libhegel 0.42.1`, or the tag `libhegel-v0.42.1`) to pin
-# an exact one.
+# Regenerate the pins (src/libhegel-version.ts for the native library,
+# src/browser/artifact.{json,ts} for the Wasm module) from a libhegel release
+# (hegel-rust's `libhegel-v<version>` tags). Targets the latest release; pass
+# a version (e.g. `just update-libhegel 0.42.1`, or the tag `libhegel-v0.42.1`)
+# to pin an exact one. Follow with `npm run prepare:wasm -- release`.
 update-libhegel version="":
     node scripts/update-libhegel.mjs {{version}}
-    npx prettier --write src/libhegel-version.ts
+    npx prettier --write src/libhegel-version.ts src/browser/artifact.json src/browser/artifact.ts
 
 check-test:
     #!/usr/bin/env bash

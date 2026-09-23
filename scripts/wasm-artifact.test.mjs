@@ -49,6 +49,10 @@ test("rejects corrupt bytes and stale or mismatched provenance", () => {
 test("the published Wasm and native pins agree", () => {
   const version = fs.readFileSync(path.join(ROOT, "src/libhegel-version.ts"), "utf8");
   assert.match(version, new RegExp(`LIBHEGEL_VERSION = ${JSON.stringify(PIN.version)}`));
+  // The browser entry's copy of the pin (it cannot import the JSON portably).
+  const artifact = fs.readFileSync(path.join(ROOT, "src/browser/artifact.ts"), "utf8");
+  assert.match(artifact, new RegExp(`sha256: ${JSON.stringify(PIN.sha256)}`));
+  assert.match(artifact, new RegExp(`asset: ${JSON.stringify(PIN.asset)}`));
   requirePublished(PIN);
 });
 

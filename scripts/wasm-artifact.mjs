@@ -161,6 +161,15 @@ async function development(repo, twice) {
 }
 
 const gh = (...args) => JSON.parse(run("gh", args));
+
+/** The commit a release tag points at (through any annotated tag objects). */
+export function tagCommit(tag) {
+  let object = gh("api", `repos/${REPO}/git/ref/tags/${tag}`).object;
+  while (object.type === "tag") object = gh("api", `repos/${REPO}/git/tags/${object.sha}`).object;
+  if (object.type !== "commit") throw new Error(`Tag ${tag} does not resolve to a commit`);
+  return object.sha;
+}
+
 export async function prepareRelease() {
   requirePublished();
   const rel = gh(
@@ -174,10 +183,8 @@ export async function prepareRelease() {
   );
   if (rel.isDraft || rel.isPrerelease || rel.tagName !== PIN.release.tag)
     throw new Error("Not a stable published release");
-  let object = gh("api", `repos/${REPO}/git/ref/tags/${PIN.release.tag}`).object;
-  while (object.type === "tag") object = gh("api", `repos/${REPO}/git/tags/${object.sha}`).object;
-  if (object.type !== "commit" || object.sha !== PIN.source)
-    throw new Error("Release tag does not match the pinned source");
+  const source = tagCommit(PIN.release.tag);
+  if (source !== PIN.source) throw new Error("Release tag does not match the pinned source");
   // The full comparison payload lists every commit and file changed since the
   // release and outgrows execFileSync's default buffer; only its status matters.
   // (`--jq` prints the selected string raw, without JSON quotes.)
@@ -204,11 +211,7 @@ export async function prepareRelease() {
   ) {
     throw new Error("Published checksum sidecar differs from the pin");
   }
-  save(await download(PIN.asset), "release", {
-    source: object.sha,
-    tag: rel.tagName,
-    merged: true,
-  });
+  save(await download(PIN.asset), "release", { source, tag: rel.tagName, merged: true });
 }
 
 export async function main(args = process.argv.slice(2)) {
