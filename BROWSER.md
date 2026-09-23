@@ -93,7 +93,7 @@ To run everything locally:
 ```sh
 npm ci
 export HEGEL_LIBHEGEL_PATH="$(just fetch-libhegel)"
-npx playwright install chromium
+(cd tests/browser && npm ci && npx playwright install chromium)
 npm run build
 npm test
 npm run test:packaging
@@ -101,6 +101,6 @@ npm run typecheck:portable
 npm run test:browser
 ```
 
-`npm run test:browser` packs and installs the actual main and host-platform tarballs into a temporary consumer. It checks the public declarations without Node types, runs native sync/async, UUID, shrinking and database-persistence tests with no library-path override, then bundles the browser entry with Vite, webpack, esbuild and Rollup. Chromium runs every bundle under `/nested/` with the correct Wasm MIME type, and Vite also covers the incorrect-MIME fallback. Browser checks cover exports, sync/async calls, UUIDs, shrinking to 50, database rejection, emitted assets (byte-identical to the fetched module), request counts and dependency graphs (no Koffi, Node built-ins or polyfills). This matrix does not yet establish Firefox or Safari compatibility.
+`npm run test:browser` (`tests/browser/run.mjs`; the bundlers and Playwright are that fixture's own dependencies, not the library's) packs and installs the actual main and host-platform tarballs into a temporary consumer. It checks the public declarations without Node types, runs native sync/async, UUID, shrinking and database-persistence tests with no library-path override, then bundles the browser entry with Vite, webpack, esbuild and Rollup. Chromium runs every bundle under `/nested/` with the correct Wasm MIME type, and Vite also covers the incorrect-MIME fallback. Browser checks cover exports, sync/async calls, UUIDs, shrinking to 50, database rejection, emitted assets (byte-identical to the fetched module), request counts and dependency graphs (no Koffi, Node built-ins or polyfills). This matrix does not yet establish Firefox or Safari compatibility.
 
 When bumping the engine (`just update-libhegel`, which is also what the automated bump runs), the release must publish the Wasm module and its sidecar, and `src/browser/abi.ts` must be audited against the new `hegel.h`: every raw Wasm signature (in particular the by-value temporal structs, which lower to pointers) must still match the module. At startup the loader checks the module's version string against the pin, nothing more.

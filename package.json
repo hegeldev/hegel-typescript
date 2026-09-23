@@ -40,7 +40,7 @@
     "format": "prettier --write .",
     "docs": "typedoc",
     "prepack": "npm run build",
-    "test:browser": "node scripts/test-browser-package.mjs",
+    "test:browser": "node tests/browser/run.mjs",
     "test:packaging": "node --test scripts/packaging.test.mjs",
     "typecheck:portable": "tsc -p tsconfig.portable.json"
   },
@@ -56,20 +56,14 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@rollup/plugin-node-resolve": "16.0.3",
     "@types/node": "^20.11.0",
     "@vitest/coverage-v8": "^4.0.18",
-    "esbuild": "0.28.2",
     "eslint": "^10.0.2",
-    "playwright": "1.63.0",
     "prettier": "^3.8.1",
-    "rollup": "4.63.1",
     "typedoc": "^0.28.17",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "8.0.9",
-    "vitest": "^4.0.18",
-    "webpack": "5.110.3"
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "koffi": "^3.0.2"

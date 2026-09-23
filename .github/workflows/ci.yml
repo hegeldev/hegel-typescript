@@ -65,7 +65,11 @@ jobs:
         run: just check-test
 
       - run: npm run test:packaging
+      - name: Install the browser test fixture (bundlers, Playwright)
+        working-directory: tests/browser
+        run: npm ci --no-audit --no-fund
       - name: Install Chromium
+        working-directory: tests/browser
         run: npx playwright install --with-deps chromium
       - name: Test packed package in four browser bundlers
         run: npm run test:browser

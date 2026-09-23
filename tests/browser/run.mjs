@@ -1,3 +1,12 @@
+// Packs the package and its host platform package, installs the tarballs into
+// a throwaway consumer, runs it natively, then bundles the browser entry with
+// Vite, webpack, esbuild and Rollup and runs each bundle in Chromium.
+//
+// The bundlers and Playwright are this fixture's own dependencies
+// (tests/browser/package.json), not the library's: run `npm ci` here and
+// `npx playwright install chromium` first, then `npm run test:browser` at the
+// repository root. Needs the pinned native library fetched
+// (`just fetch-libhegel`); the Wasm module is fetched on demand.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
@@ -13,9 +22,9 @@ import { rollup } from "rollup";
 import { nodeResolve } from "@rollup/plugin-node-resolve";
 import ts from "typescript";
 import { fileURLToPath } from "node:url";
-import { PLATFORMS, WASM_ASSET, fetchWasm, sha256 } from "./fetch-libhegel.mjs";
+import { PLATFORMS, WASM_ASSET, fetchWasm, sha256 } from "../../scripts/fetch-libhegel.mjs";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 const temp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hegel-browser-package-")));
 const run = (command, args, cwd = temp, env = process.env) =>
