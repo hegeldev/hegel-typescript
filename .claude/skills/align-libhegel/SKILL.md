@@ -100,11 +100,12 @@ The pin lives in `src/libhegel-version.ts` as `LIBHEGEL_VERSION`. It is
 generated code — regenerate with `just update-libhegel [version]`, never edit
 by hand.
 
-The release **tag is `v<VERSION>`** (note the `v` prefix — the raw path
-without it 404s):
+The release **tag is `libhegel-v<VERSION>`** (hegel-rust's plain `v<VERSION>`
+tags are hegeltest releases and carry no libhegel binaries; the raw path
+without the `libhegel-v` prefix fetches the wrong header or 404s):
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/hegeldev/hegel-rust/v<VERSION>/hegel-c/include/hegel.h
+curl -sSL https://raw.githubusercontent.com/hegeldev/hegel-rust/libhegel-v<VERSION>/hegel-c/include/hegel.h
 ```
 
 Diff it against the previous pin's header first — if the two are identical,
@@ -156,9 +157,12 @@ this client uses, three places move together: the **prototype string** (or
   document the absorption in the `Bindings` docs.
 - **Changed enum/constant values** → update the exported `const` objects
   (`Status`, `RunStatus`, `NativeVerbosity`) and the `RESULT_*` codes at the
-  top of `src/libhegel.ts`, and the `Labels` in `src/testCase.ts` if the
-  `HEGEL_LABEL_*` values moved. Client-invented labels must sit past the last
-  upstream value so they can't collide.
+  top of `src/libhegel.ts`. Watch for renumbering that keeps every name
+  (0.42 swapped `QUIET` and `NORMAL`): the tests still pass, and only a
+  side-by-side header diff catches it. The `Labels` in `src/testCase.ts` are
+  client-chosen identities (the engine hashes `hegel.<kind>` names for its
+  own, via `hegel_label_from_name`) and need no change unless the span API
+  itself does.
 - **Changed struct layout** (`hegel_date_t`, `hegel_time_t`,
   `hegel_datetime_t`, the `*_result_t` buffer structs) → update the
   `koffi.struct({...})` type objects near the top of `src/libhegel.ts` and the
@@ -264,8 +268,8 @@ NOT edit anything — this is a read-only verification.
 
 1. Read the pinned version from src/libhegel-version.ts (LIBHEGEL_VERSION).
 2. Fetch the matching header:
-   curl -sSL https://raw.githubusercontent.com/hegeldev/hegel-rust/v<VERSION>/hegel-c/include/hegel.h
-   (note the `v` prefix on the tag).
+   curl -sSL https://raw.githubusercontent.com/hegeldev/hegel-rust/libhegel-v<VERSION>/hegel-c/include/hegel.h
+   (note the `libhegel-v` prefix on the tag).
 3. Extract every `hegel_*` function declared in the header.
 4. Cross-check each against src/libhegel.ts. A function the client uses must
    have (a) a koffi prototype in bindLibrary whose parameter types match the C

@@ -41,8 +41,8 @@ export const RunStatus = {
 
 /** `hegel_verbosity_t`. */
 export const NativeVerbosity = {
-  QUIET: 0,
-  NORMAL: 1,
+  NORMAL: 0,
+  QUIET: 1,
   VERBOSE: 2,
   DEBUG: 3,
 } as const;
@@ -109,7 +109,12 @@ export interface Engine {
   newContext(): ContextHandle;
   freeContext(ctx: ContextHandle): void;
   lastError(ctx: ContextHandle): string;
-  newSettings(): SettingsHandle;
+  /**
+   * Create a settings handle initialized from the engine's default profile.
+   * Fallible: the engine reports an unknown `HEGEL_DEFAULT_PROFILE` or a
+   * malformed `hegel.toml` through `ctx`.
+   */
+  newSettings(ctx: ContextHandle): SettingsHandle;
   freeSettings(s: SettingsHandle): void;
   setTestCases(s: SettingsHandle, n: number): void;
   setVerbosity(s: SettingsHandle, v: number): void;

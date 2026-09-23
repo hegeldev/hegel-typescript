@@ -184,13 +184,31 @@ describe("settings branches", () => {
       );
     }
   });
+
+  test("an unresolvable default settings profile surfaces as the run's error", () => {
+    const original = process.env["HEGEL_DEFAULT_PROFILE"];
+    try {
+      process.env["HEGEL_DEFAULT_PROFILE"] = "no-such-profile";
+      expect(() =>
+        hegel.test((tc) => {
+          tc.draw(gs.booleans());
+        }),
+      ).toThrow(/unknown settings profile "no-such-profile"/);
+    } finally {
+      if (original === undefined) {
+        delete process.env["HEGEL_DEFAULT_PROFILE"];
+      } else {
+        process.env["HEGEL_DEFAULT_PROFILE"] = original;
+      }
+    }
+  });
 });
 
 describe("NativeDataSource collection rejection", () => {
   test("rejects elements with and without a reason", () => {
     const lib = Libhegel.load(testLibPath());
     const ctx = lib.newContext();
-    const settings = lib.newSettings();
+    const settings = lib.newSettings(ctx);
     lib.setVerbosity(settings, NativeVerbosity.QUIET);
     lib.setDatabase(ctx, settings, "");
     const run = lib.runStart(ctx, settings);

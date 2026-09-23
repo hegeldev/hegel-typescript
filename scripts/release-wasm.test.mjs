@@ -19,7 +19,7 @@ test("release preparation verifies remote evidence and sidecars before accepting
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.copyFileSync(path.join(ROOT, file), dest);
     }
-    const pin = { ...PIN, published: true, release: { tag: `v${PIN.version}` } };
+    const pin = { ...PIN, published: true, release: { tag: `libhegel-v${PIN.version}` } };
     fs.mkdirSync(path.join(temp, "src/browser"));
     fs.writeFileSync(path.join(temp, "src/browser/artifact.json"), JSON.stringify(pin));
     fs.writeFileSync(path.join(temp, "bytes.wasm"), preparedBytes());
@@ -34,7 +34,8 @@ else if (process.argv[3].includes('/git/ref/')) result = {object: {type: 'tag', 
 else if (process.argv[3].includes('/git/tags/')) result = {object: {type: 'commit', sha: scenario === 'source' ? 'wrong-source' : pin.source}};
 else if (process.argv[3].includes('/compare/') && process.argv[4] === '--jq' && process.argv[5] === '.status') result = scenario === 'unmerged' ? 'behind' : 'ahead';
 else throw new Error('unexpected gh invocation: ' + process.argv.slice(2).join(' '));
-console.log(JSON.stringify(result));
+// gh prints --jq string results raw, without JSON quotes.
+console.log(typeof result === 'string' ? result : JSON.stringify(result));
 `,
     );
     fs.chmodSync(path.join(temp, "gh"), 0o755);

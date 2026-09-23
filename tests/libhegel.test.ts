@@ -65,7 +65,10 @@ function fakeBindings(overrides: Partial<Bindings>): Bindings {
     contextNew: () => ({}) as Ptr,
     contextFree: noop,
     contextLastError: () => "",
-    settingsNew: () => ({}) as Ptr,
+    settingsNew: (_ctx, out) => {
+      out[0] = {} as Ptr;
+      return 0;
+    },
     settingsFree: noop,
     settingsTestCases: noop,
     settingsVerbosity: noop,
@@ -335,7 +338,7 @@ describe("Libhegel wrapper logic (fake bindings)", () => {
     const lib = new Libhegel(fakeBindings({}));
     expect(lib.version()).toBe("0.0.0");
     lib.freeContext(lib.newContext());
-    lib.freeSettings(lib.newSettings());
+    lib.freeSettings(lib.newSettings(null));
     lib.setTestCases(null, 10);
     lib.setVerbosity(null, NativeVerbosity.QUIET);
     lib.setSeed(null, 42n);
@@ -391,7 +394,7 @@ function driveIntegerRun(
   opts: { testCases?: number } = {},
 ): { status: number; failureOrigin?: string; reproductionBlob?: string | null } {
   const ctx = lib.newContext();
-  const settings = lib.newSettings();
+  const settings = lib.newSettings(ctx);
   let run: Ptr | undefined;
   try {
     lib.setTestCases(settings, opts.testCases ?? 200);
@@ -469,9 +472,26 @@ describe("Libhegel against the real library", () => {
     expect(typeof res.reproductionBlob).toBe("string");
   });
 
+  it("throws a LibhegelError when the default settings profile cannot be resolved", () => {
+    const original = process.env["HEGEL_DEFAULT_PROFILE"];
+    const ctx = lib.newContext();
+    try {
+      process.env["HEGEL_DEFAULT_PROFILE"] = "no-such-profile";
+      expect(() => lib.newSettings(ctx)).toThrow(LibhegelError);
+      expect(() => lib.newSettings(ctx)).toThrow(/unknown settings profile "no-such-profile"/);
+    } finally {
+      if (original === undefined) {
+        delete process.env["HEGEL_DEFAULT_PROFILE"];
+      } else {
+        process.env["HEGEL_DEFAULT_PROFILE"] = original;
+      }
+      lib.freeContext(ctx);
+    }
+  });
+
   it("throws a LibhegelError on invalid draw arguments (inverted integer bounds)", () => {
     const ctx = lib.newContext();
-    const settings = lib.newSettings();
+    const settings = lib.newSettings(ctx);
     lib.setVerbosity(settings, NativeVerbosity.QUIET);
     lib.setDatabase(ctx, settings, "");
     const run = lib.runStart(ctx, settings);
@@ -490,7 +510,7 @@ describe("Libhegel against the real library", () => {
 
   it("throws when next_test_case is called before completing the previous case", () => {
     const ctx = lib.newContext();
-    const settings = lib.newSettings();
+    const settings = lib.newSettings(ctx);
     lib.setVerbosity(settings, NativeVerbosity.QUIET);
     lib.setDatabase(ctx, settings, "");
     const run = lib.runStart(ctx, settings);
@@ -510,7 +530,7 @@ describe("Libhegel against the real library", () => {
 
   it("drives spans and the collection protocol (lists)", () => {
     const ctx = lib.newContext();
-    const settings = lib.newSettings();
+    const settings = lib.newSettings(ctx);
     lib.setTestCases(settings, 20);
     lib.setVerbosity(settings, NativeVerbosity.QUIET);
     lib.setDatabase(ctx, settings, "");
@@ -571,18 +591,21 @@ describe("Libhegel against the real library", () => {
 // Re-export to ensure bindLibrary is referenced (it is used by Libhegel.load).
 void bindLibrary;
 
-// Regression coverage for the audited 0.38.1 ABI and result ownership.
-describe("Libhegel ABI 0.38.1 regressions", () => {
+// Regression coverage for the audited 0.42.4 ABI and result ownership.
+describe("Libhegel ABI 0.42.4 regressions", () => {
   it("rejects failed constructors instead of leaking null handles into shared code", () => {
     const lib = new Libhegel(
       fakeBindings({
         contextNew: () => null,
-        settingsNew: () => null,
+        settingsNew: (_ctx, out) => {
+          out[0] = null;
+          return 0;
+        },
         runResultFailure: () => null,
       }),
     );
     expect(() => lib.newContext()).toThrow("null handle");
-    expect(() => lib.newSettings()).toThrow("null handle");
+    expect(() => lib.newSettings(null)).toThrow("null handle");
     expect(() => lib.failure(null, 0)).toThrow("null handle");
   });
 
@@ -622,7 +645,7 @@ describe("Libhegel ABI 0.38.1 regressions", () => {
   it("checks rejected native setters and rejects NUL before C-string truncation", () => {
     const lib = Libhegel.load(testLibPath());
     const ctx = lib.newContext();
-    const settings = lib.newSettings();
+    const settings = lib.newSettings(ctx);
     try {
       expect(() => lib.setTestCases(null, 1)).toThrow(LibhegelError);
       expect(() => lib.setVerbosity(null, 1)).toThrow(LibhegelError);
@@ -645,7 +668,7 @@ describe("Libhegel ABI 0.38.1 regressions", () => {
   it("marshals fixed negative dates and nanosecond temporal bounds against the published engine", () => {
     const lib = Libhegel.load(testLibPath());
     const ctx = lib.newContext();
-    const settings = lib.newSettings();
+    const settings = lib.newSettings(ctx);
     lib.setDatabase(ctx, settings, "");
     lib.setVerbosity(settings, NativeVerbosity.QUIET);
     const run = lib.runStart(ctx, settings);

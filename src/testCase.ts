@@ -30,6 +30,13 @@ export class AssumeError extends Error {
 // Span labels
 // ---------------------------------------------------------------------------
 
+/**
+ * The labels this client opens spans with (`hegel_start_span`). To the engine
+ * a label is only an identity — two spans with the same label came from the
+ * same kind of generator — so any stable `u64` works. libhegel derives the
+ * labels for its own spans by hashing `hegel.<kind>` names (see
+ * `hegel_label_from_name`), so these small integers cannot collide with them.
+ */
 export const Labels = {
   LIST: 1,
   LIST_ELEMENT: 2,

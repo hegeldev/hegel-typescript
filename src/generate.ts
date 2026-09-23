@@ -43,7 +43,7 @@ const UINT32_MAX = 0xffffffff;
 const DATE_MIN: NativeDate = { year: 1, month: 1, day: 1 };
 const DATE_MAX: NativeDate = { year: 9999, month: 12, day: 31 };
 const TIME_MIN: NativeTime = { hour: 0, minute: 0, second: 0, nanosecond: 0 };
-const TIME_MAX: NativeTime = { hour: 23, minute: 59, second: 59, nanosecond: 999999999 };
+const TIME_MAX: NativeTime = { hour: 23, minute: 59, second: 59, nanosecond: 999_999_999 };
 
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -58,8 +58,9 @@ export function formatDate(d: NativeDate): string {
 }
 
 /**
- * Format a drawn time of day as ISO 8601 (`HH:MM:SS` or `HH:MM:SS.fffffffff`,
- * the nanoseconds omitted when zero).
+ * Format a drawn time of day as ISO 8601: `HH:MM:SS` on the second,
+ * `HH:MM:SS.ffffff` when the fraction is a whole number of microseconds, and
+ * `HH:MM:SS.fffffffff` (the full nanoseconds) otherwise.
  */
 export function formatTime(t: NativeTime): string {
   const hour = String(t.hour).padStart(2, "0");
@@ -68,6 +69,9 @@ export function formatTime(t: NativeTime): string {
   const base = `${hour}:${minute}:${second}`;
   if (t.nanosecond === 0) {
     return base;
+  }
+  if (t.nanosecond % 1000 === 0) {
+    return `${base}.${String(t.nanosecond / 1000).padStart(6, "0")}`;
   }
   return `${base}.${String(t.nanosecond).padStart(9, "0")}`;
 }

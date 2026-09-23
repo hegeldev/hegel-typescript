@@ -5,6 +5,7 @@ import { browserRuntime } from "../src/browser/runtime.js";
 import { WasmArena } from "../src/browser/arena.js";
 import {
   EngineError,
+  NativeVerbosity,
   RunStatus,
   Status,
   type Engine,
@@ -24,7 +25,7 @@ function active<T>(
 ): T {
   const ctx = engine.newContext();
   try {
-    const settings = engine.newSettings();
+    const settings = engine.newSettings(ctx);
     try {
       engine.setSeed(settings, 42n);
       engine.setDatabase(ctx, settings, "");
@@ -275,7 +276,7 @@ describe("WasmEngine real run lifecycle", () => {
       expect(runtime.note).toHaveBeenCalledWith("replay note");
       const native = Libhegel.load(testLibPath());
       const ctx = native.newContext(),
-        settings = native.newSettings();
+        settings = native.newSettings(ctx);
       try {
         const tc = native.testCaseFromBlob(ctx, settings, replay.mock.calls[0][2]);
         try {
@@ -353,18 +354,21 @@ describe("WasmEngine real run lifecycle", () => {
     for (const adapter of [engine, Libhegel.load(testLibPath())])
       active(adapter, (ctx, tc) => {
         expect(() => {
-          for (let i = 0; i < 10000; i++) adapter.generateBoolean(ctx, tc, 0.5);
+          // The engine concludes a case as overrun once it has made 2^20 choices.
+          for (let i = 0; i <= 1 << 20; i++) adapter.generateBoolean(ctx, tc, 0.5);
         }).toThrow(StopTestError);
         expect(() => adapter.newCollection(ctx, tc, 0, 5)).toThrow(StopTestError);
         adapter.markComplete(ctx, tc, Status.OVERRUN, null);
       });
     const ctx = engine.newContext(),
-      settings = engine.newSettings();
+      settings = engine.newSettings(ctx);
     engine.setDatabase(ctx, settings, null);
     engine.setTestCases(settings, 1);
-    engine.setSuppressHealthCheck(settings, 15);
+    // Every health check except TestCasesTooLarge (bit 2): suppressing that
+    // one also lifts the choice limit the overrun above relies on.
+    engine.setSuppressHealthCheck(settings, 1 | 2 | 8);
     engine.setDerandomize(settings, true);
-    engine.setVerbosity(settings, 0);
+    engine.setVerbosity(settings, NativeVerbosity.QUIET);
     engine.setDatabaseKey(ctx, settings, "Unicode 🙂");
     const run = engine.runStart(ctx, settings);
     let tc;
@@ -402,7 +406,7 @@ describe("WasmEngine error and ownership boundaries", () => {
   it("copies diagnostics before cleanup, checks settings and rejects stale/foreign handles", () => {
     const { engine } = wasmFixture();
     const ctx = engine.newContext(),
-      s = engine.newSettings();
+      s = engine.newSettings(ctx);
     expect(engine.lastError(ctx)).toBe("");
     expect(() => engine.setDatabaseKey(ctx, s, "bad\0key")).toThrow(/NUL/);
     expect(() => engine.setDatabase(ctx, s, "path")).toThrow(/Filesystem/);

@@ -416,7 +416,7 @@ export class Hegel {
     const ctx = lib.newContext();
     const contextErrors: unknown[] = [];
     try {
-      const settings = lib.newSettings();
+      const settings = lib.newSettings(ctx);
       const cache = new StringGeneratorCache(lib);
       const settingsErrors: unknown[] = [];
       try {

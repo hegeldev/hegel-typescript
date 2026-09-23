@@ -1,6 +1,6 @@
 # Browser support
 
-`@hegeldev/hegel` supports browsers with the Wasm artifact published in libhegel 0.38.1. Upstream [PR #478](https://github.com/hegeldev/hegel-rust/pull/478) is merged, and release preparation verifies the published asset before packaging it.
+`@hegeldev/hegel` supports browsers with the Wasm artifact published in libhegel 0.42.4. Upstream [PR #478](https://github.com/hegeldev/hegel-rust/pull/478) is merged, and release preparation verifies the published asset before packaging it.
 
 ## Use the same imports
 
@@ -104,7 +104,7 @@ npm run test:browser
 
 Preparation resolves the release tag to its commit, verifies that the commit is merged into upstream main, checks the Wasm asset and checksum sidecar, and stores the bytes with a provenance receipt under ignored `native/wasm/<sha256>/`.
 
-The published SHA-256 is `1af8eb2a353b864fde9097fde8e22bf598e330aaf868573fe0c9a754076c9755`. The raw by-value temporal struct lowering is tied to this inspected artifact, not guaranteed by the C version string.
+The published SHA-256 is `874ef207c481d70ab46908a89878f53068d364b9157e67a3ae9e4dd5d76c74bf`. The raw by-value temporal struct lowering is tied to this inspected artifact, not guaranteed by the C version string.
 
 `npm run build` and `npm pack` verify the prepared artifact and receipt, then copy bytes to `dist/browser`. They do not download engine assets. Tests use the prepared Wasm by default; `HEGEL_WASM_PATH` can name another local copy only if its checksum matches. Library runtime fetches only the application-served packaged asset, never GitHub. Before this TypeScript package is released, native tests require the explicit native path above because the existing npm platform packages contain the older engine.
 

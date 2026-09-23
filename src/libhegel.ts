@@ -1,6 +1,6 @@
 /**
  * Thin, typed binding to the native `libhegel` C ABI (see
- * `hegel-rust/hegel-c/include/hegel.h`, version 0.38.1) via {@link koffi}.
+ * `hegel-rust/hegel-c/include/hegel.h`, version 0.42.4) via {@link koffi}.
  *
  * The {@link Libhegel} class owns the loaded library's function pointers and
  * exposes ergonomic wrappers. Every fallible call takes a `hegel_context_t*`
@@ -113,18 +113,21 @@ const bufferResultType: TypeObject = koffi.struct({ data: "uint8_t*", len: "size
  *
  * Fallible calls return the `hegel_result_t` code and write their handle / value
  * through a trailing JS out-array (`[null]`, `[0]`); the infallible-for-our-use
- * accessors (constructors, frees, setters, result getters) are presented here as
- * value-returning wrappers, with out-parameter marshalling and checked result
- * codes handled by {@link bindLibrary}. The output
- * callback taken by `hegel_run_start` / `hegel_test_case_from_blob` is likewise
- * absorbed as NULL (engine output stays on stderr).
+ * accessors (constructors other than `hegel_settings_new`, frees, setters,
+ * result getters) are presented here as value-returning wrappers, with
+ * out-parameter marshalling and checked result codes handled by
+ * {@link bindLibrary}. `hegel_settings_new` stays fallible: it resolves the
+ * default settings profile, which fails when `HEGEL_DEFAULT_PROFILE` names an
+ * unknown profile or a `hegel.toml` is malformed. The output callback taken by
+ * `hegel_run_start` / `hegel_test_case_from_blob` is likewise absorbed as NULL
+ * (engine output stays on stderr).
  */
 export interface Bindings {
   contextNew: () => Ptr;
   contextFree: (ctx: Ptr) => void;
   contextLastError: (ctx: Ptr) => string | null;
 
-  settingsNew: () => Ptr;
+  settingsNew: (ctx: Ptr, out: Ptr[]) => number;
   settingsFree: (s: Ptr) => void;
   settingsTestCases: (s: Ptr, n: number) => void;
   settingsVerbosity: (s: Ptr, v: number) => void;
@@ -389,11 +392,7 @@ export function bindLibrary(lib: LibraryHandle): Bindings {
     contextNew: () => contextNew(),
     contextFree: (ctx) => checked(contextFree(ctx), "hegel_context_free"),
     contextLastError: (ctx) => contextLastError(ctx),
-    settingsNew: () => {
-      const out: Ptr[] = [null];
-      checked(settingsNew(null, out), "settingsNew");
-      return out[0];
-    },
+    settingsNew: (ctx, out) => settingsNew(ctx, out),
     settingsFree: (s) => checked(settingsFree(null, s), "hegel_settings_free"),
     settingsTestCases: (s, n) => checked(settingsTestCases(null, s, n), "settingsTestCases"),
     settingsVerbosity: (s, v) => checked(settingsVerbosity(null, s, v), "settingsVerbosity"),
@@ -575,8 +574,15 @@ export class Libhegel implements Engine {
     return this.fns.contextLastError(ctx) ?? "";
   }
 
-  newSettings(): SettingsHandle {
-    return this.requireHandle<SettingsHandle>(this.fns.settingsNew(), "hegel_settings_new");
+  /**
+   * Create a settings handle initialized from the default profile. Throws
+   * {@link LibhegelError} when the profile cannot be resolved (an unknown
+   * `HEGEL_DEFAULT_PROFILE`, a malformed `hegel.toml`).
+   */
+  newSettings(ctx: Ptr): SettingsHandle {
+    const out: Ptr[] = [null];
+    this.check(ctx, this.fns.settingsNew(ctx, out), "hegel_settings_new");
+    return this.requireHandle<SettingsHandle>(out[0], "hegel_settings_new");
   }
 
   freeSettings(s: Ptr): void {

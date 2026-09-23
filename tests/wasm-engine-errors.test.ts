@@ -19,9 +19,9 @@ describe("WasmEngine malformed outputs and cleanup", () => {
     spy.mockImplementation((op, ...args) =>
       op === "settings_new" || op === "version" ? 0 : call(op, ...args),
     );
-    expect(() => engine.newSettings()).toThrow("null owned handle");
-    expect(() => engine.version()).toThrow("version string is null");
     const ctx = engine.newContext();
+    expect(() => engine.newSettings(ctx)).toThrow("null owned handle");
+    expect(() => engine.version()).toThrow("version string is null");
     spy.mockImplementation((op, ...args) => (op === "context_last_error" ? 0 : call(op, ...args)));
     expect(engine.lastError(ctx)).toBe("");
     engine.freeContext(ctx);
@@ -30,7 +30,7 @@ describe("WasmEngine malformed outputs and cleanup", () => {
   it("rejects invalid integer/temporal bounds and big integer output length", () => {
     const { engine, abi } = wasmFixture();
     const ctx = engine.newContext(),
-      settings = engine.newSettings(),
+      settings = engine.newSettings(ctx),
       run = engine.runStart(ctx, settings),
       tc = engine.nextTestCase(ctx, run)!;
     expect(() => engine.generateInteger(ctx, tc, 1n, 0n)).toThrow(EngineError);
@@ -57,7 +57,7 @@ describe("WasmEngine malformed outputs and cleanup", () => {
     (failCopy) => {
       const { engine, abi } = wasmFixture();
       const ctx = engine.newContext(),
-        settings = engine.newSettings(),
+        settings = engine.newSettings(ctx),
         run = engine.runStart(ctx, settings),
         tc = engine.nextTestCase(ctx, run)!;
       const call = abi.call.bind(abi);
@@ -93,7 +93,7 @@ describe("WasmEngine malformed outputs and cleanup", () => {
   it("decodes injected WTF-8 bytes through the exact string-result lifecycle", () => {
     const { engine, abi } = wasmFixture();
     const ctx = engine.newContext(),
-      settings = engine.newSettings(),
+      settings = engine.newSettings(ctx),
       run = engine.runStart(ctx, settings),
       tc = engine.nextTestCase(ctx, run)!;
     const generator = engine.stringGeneratorText(ctx, {
@@ -130,7 +130,7 @@ describe("WasmEngine malformed outputs and cleanup", () => {
   it("supports unbounded bytes/collections and UTF-8 rejection diagnostics", () => {
     const { engine } = wasmFixture();
     const ctx = engine.newContext(),
-      settings = engine.newSettings(),
+      settings = engine.newSettings(ctx),
       run = engine.runStart(ctx, settings),
       tc = engine.nextTestCase(ctx, run)!;
     expect(engine.generateBytes(ctx, tc, 0)).toBeInstanceOf(Uint8Array);

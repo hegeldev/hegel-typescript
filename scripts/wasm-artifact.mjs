@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pinnedVersion } from "./fetch-libhegel.mjs";
+import { pinnedVersion, releaseTag } from "./fetch-libhegel.mjs";
 
 export const ROOT = fileURLToPath(new URL("../", import.meta.url));
 export const PIN = JSON.parse(
@@ -24,7 +24,7 @@ export function verifyBytes(bytes, pin = PIN) {
 export function requirePublished(pin = PIN) {
   if (
     pin.published !== true ||
-    pin.release?.tag !== `v${pin.version}` ||
+    pin.release?.tag !== releaseTag(pin.version) ||
     !/^[a-f0-9]{40}$/.test(pin.source)
   ) {
     throw new Error(
@@ -77,6 +77,14 @@ async function development(repo, twice) {
   if (!repo || PIN.published)
     throw new Error("Usage: prepare:wasm -- dev /path/to/hegel-rust [--verify-reproducible]");
   repo = fs.realpathSync(repo);
+  // Published pins (written by scripts/update-libhegel.mjs) carry only what
+  // the release itself attests to; a development pin must also record the
+  // toolchain and lockfile that its reproducible build is checked against.
+  for (const field of ["rustc", "rustcCommit", "cargo", "cargoLockSha256"]) {
+    if (typeof PIN[field] !== "string") {
+      throw new Error(`Development preparation needs ${field} in src/browser/artifact.json`);
+    }
+  }
   const compiler = run("rustc", [`+${PIN.rustc}`, "-vV"]);
   if (
     !compiler.includes(`commit-hash: ${PIN.rustcCommit}\n`) ||
@@ -172,7 +180,13 @@ export async function prepareRelease() {
     throw new Error("Release tag does not match the pinned source");
   // The full comparison payload lists every commit and file changed since the
   // release and outgrows execFileSync's default buffer; only its status matters.
-  const status = gh("api", `repos/${REPO}/compare/${PIN.source}...main`, "--jq", ".status");
+  // (`--jq` prints the selected string raw, without JSON quotes.)
+  const status = run("gh", [
+    "api",
+    `repos/${REPO}/compare/${PIN.source}...main`,
+    "--jq",
+    ".status",
+  ]).trim();
   if (!["ahead", "identical"].includes(status))
     throw new Error("Release source is not merged into upstream main");
   for (const name of [PIN.asset, `${PIN.asset}.sha256`]) {

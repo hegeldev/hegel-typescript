@@ -16,9 +16,9 @@ import {
 
 test("the preparation receipt and artifact match the single pin", () => {
   verifyBytes(preparedBytes());
-  assert.equal(PIN.version, "0.38.1");
+  assert.equal(PIN.version, "0.42.4");
   assert.equal(PIN.published, true);
-  assert.deepEqual(PIN.release, { tag: "v0.38.1" });
+  assert.deepEqual(PIN.release, { tag: "libhegel-v0.42.4" });
 });
 
 test("rejects corrupt bytes and stale or mismatched provenance", () => {
@@ -40,6 +40,7 @@ test("rejects corrupt bytes and stale or mismatched provenance", () => {
     { ...PIN, release: null },
     { ...PIN, source: "main" },
     { ...PIN, release: { tag: "latest" } },
+    { ...PIN, release: { tag: `v${PIN.version}` } },
   ]) {
     assert.throws(() => requirePublished(bad), /Publication blocked/);
   }

@@ -103,8 +103,9 @@ export class WasmEngine implements Engine {
   lastError(ctx: ContextHandle): string {
     return this.memory.cString(this.abi.call("context_last_error", this.ptr(ctx)) >>> 0) ?? "";
   }
-  newSettings(): SettingsHandle {
-    return this.handle(0, "settings_new", [0]);
+  newSettings(ctx: ContextHandle): SettingsHandle {
+    const ptr = this.ptr(ctx);
+    return this.handle(ptr, "settings_new", [ptr]);
   }
   freeSettings(s: SettingsHandle): void {
     this.free("settings_free", s);
