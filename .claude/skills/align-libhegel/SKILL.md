@@ -21,6 +21,16 @@ The layers, and what an ABI change usually touches:
   wrapper surface), and the `Libhegel` class methods (ergonomic wrappers that
   map result codes to exceptions via `Libhegel.check`). Most alignments end
   here.
+- **`src/engine.ts` / `src/browser/engine.ts` / `src/browser/abi.ts`** — the
+  runtime-independent `Engine` interface that `Libhegel` implements, and its
+  second implementation over the raw Wasm exports of the same release
+  (`libhegel-wasm32-unknown-unknown.wasm`, fetched by `just fetch-libhegel`).
+  Whatever changes in `Libhegel`'s surface changes in `Engine` and
+  `WasmEngine` too, and `abi.ts` holds the exact raw Wasm signature of every
+  export the adapter calls (I = i32, L = i64, D = f64; by-value structs lower
+  to pointers): check each against the new `hegel.h`, since a JS arity check
+  cannot catch a type change. `tests/wasm-engine.test.ts` runs both engines
+  side by side against the real modules.
 - **`src/generate.ts`** — the client-side schema interpreter. The ABI exposes
   one typed entry point per primitive draw (`hegel_generate_integer`,
   `hegel_generate_string`, …); this module walks the generators' schema IR and

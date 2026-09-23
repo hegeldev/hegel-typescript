@@ -16,25 +16,33 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "node": "./dist/index.js",
+      "browser": "./dist/browser/index.js",
+      "default": "./dist/browser/index.js"
     },
     "./generators": {
       "types": "./dist/generators/index.d.ts",
-      "import": "./dist/generators/index.js"
-    }
+      "default": "./dist/generators/index.js"
+    },
+    "./libhegel.wasm": "./dist/browser/libhegel-wasm32-unknown-unknown.wasm"
   },
   "files": [
-    "dist"
+    "dist",
+    "BROWSER.md"
   ],
   "prettier": {
     "printWidth": 100
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/fetch-libhegel.mjs --wasm dist/browser",
     "test": "vitest run --coverage",
     "lint": "prettier --check . && eslint . && tsc --noEmit",
     "format": "prettier --write .",
-    "docs": "typedoc"
+    "docs": "typedoc",
+    "prepack": "npm run build",
+    "test:browser": "node tests/browser/run.mjs",
+    "test:packaging": "node --test scripts/packaging.test.mjs",
+    "typecheck:portable": "tsc -p tsconfig.portable.json"
   },
   "keywords": [
     "hegel",

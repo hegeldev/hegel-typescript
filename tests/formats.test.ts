@@ -101,6 +101,33 @@ describe("gs.datetimes()", () => {
     ));
 });
 
+describe("gs.uuids()", () => {
+  test("generates canonical non-nil UUID strings", () =>
+    hegel.test(
+      (tc) => {
+        const uuid = tc.draw(gs.uuids());
+        expect(uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+        expect(uuid).not.toBe("00000000-0000-0000-0000-000000000000");
+      },
+      { testCases: 30 },
+    ));
+
+  test.each([1, 2, 3, 4, 5] as const)("forces RFC 4122 version %i and variant", (version) =>
+    hegel.test(
+      (tc) => {
+        const uuid = tc.draw(gs.uuids({ version }));
+        expect(uuid[14]).toBe(String(version));
+        expect(uuid[19]).toMatch(/[89ab]/);
+      },
+      { testCases: 10 },
+    ),
+  );
+
+  test("rejects versions outside 1 through 5", () => {
+    expect(() => gs.uuids({ version: 9 as 1 })).toThrow("version must be between 1 and 5");
+  });
+});
+
 describe("gs.ipAddresses()", () => {
   test("gs.ipAddresses({ version: 4 }) generates valid IPv4", () =>
     hegel.test(

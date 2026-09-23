@@ -1,0 +1,15 @@
+{
+  "name": "hegel-browser-package-tests",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Bundlers and browser used by tests/browser/run.mjs; kept out of the library's own dependency tree.",
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "16.0.3",
+    "esbuild": "0.28.2",
+    "playwright": "1.63.0",
+    "rollup": "4.63.1",
+    "vite": "8.0.9",
+    "webpack": "5.110.3"
+  }
+}

@@ -34,6 +34,8 @@ jobs:
         run: npx eslint .
       - name: Typecheck
         run: npx tsc --noEmit
+      - name: Portable typecheck without Node types
+        run: npm run typecheck:portable
       - name: Install zizmor
         run: pip install zizmor==1.23.1
       - name: Run zizmor
@@ -57,8 +59,20 @@ jobs:
           node-version: "22"
 
       - run: npm ci
+      - name: Fetch native libhegel explicitly
+        run: echo "HEGEL_LIBHEGEL_PATH=$(node scripts/fetch-libhegel.mjs)" >> "$GITHUB_ENV"
       - name: Run tests
         run: just check-test
+
+      - run: npm run test:packaging
+      - name: Install the browser test fixture (bundlers, Playwright)
+        working-directory: tests/browser
+        run: npm ci --no-audit --no-fund
+      - name: Install Chromium
+        working-directory: tests/browser
+        run: npx playwright install --with-deps chromium
+      - name: Test packed package in four browser bundlers
+        run: npm run test:browser
 
   test-node-20:
     name: test (node 20)

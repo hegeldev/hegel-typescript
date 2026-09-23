@@ -1,15 +1,20 @@
 set ignore-comments := true
 
-# Download the host's published libhegel artifact into native/ (if missing)
-# and print its path. Used to run tests against the real native library. (End
-# users instead get the library from the @hegeldev/hegel-<os>-<arch> platform
-# packages; see scripts/make-platform-packages.mjs.)
+# Download the host's published libhegel library and the Wasm module of the
+# pinned release into native/<version>/ (if missing), each verified against the
+# release's checksum sidecar, and print the library's path. Used to run tests
+# against the real engine. (End users instead get the library from the
+# @hegeldev/hegel-<os>-<arch> platform packages and the Wasm module from the
+# main package's dist/browser/; see scripts/make-platform-packages.mjs and
+# `npm run build`.)
 @fetch-libhegel:
     node scripts/fetch-libhegel.mjs
 
 # Build libhegel from a sibling ../hegel-rust checkout (for local development
 # against an unreleased engine). Prints the path to export as
-# HEGEL_LIBHEGEL_PATH.
+# HEGEL_LIBHEGEL_PATH. (For the Wasm side, `cargo build -p hegeltest-c
+# --release --target wasm32-unknown-unknown` there and export the module's
+# path as HEGEL_WASM_PATH.)
 build-libhegel:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -40,6 +45,7 @@ check-format:
 check-lint:
     npx eslint .
     npx tsc --noEmit
+    npm run typecheck:portable
 
 check-docs:
     npx typedoc

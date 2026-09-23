@@ -2,8 +2,9 @@
 //
 // Queries a libhegel GitHub release in hegel-rust (the latest by default, or
 // the one named by the argument), checks that it publishes an artifact for
-// every supported platform, and writes a fresh, generated source file pinning
-// its version. Run it to bump the pinned release, then commit the result.
+// every supported platform plus the Wasm module (each with its checksum
+// sidecar), and writes a fresh, generated source file pinning its version.
+// Run it to bump the pinned release, then commit the result.
 //
 // hegel-rust tags every release `v<hegeltest version>` with no GitHub release
 // attached; a release that includes hegel-c additionally tags
@@ -17,7 +18,7 @@ import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { PLATFORMS, releaseTag } from "./fetch-libhegel.mjs";
+import { PLATFORMS, WASM_ASSET, releaseTag } from "./fetch-libhegel.mjs";
 
 const REPO = "hegeldev/hegel-rust";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -39,8 +40,8 @@ function requestedVersion(want) {
 
 /**
  * Query a libhegel release and return its version (tag without the leading
- * "libhegel-v"), verifying that every supported platform's artifact is
- * published.
+ * "libhegel-v"), verifying that every supported platform's artifact and the
+ * Wasm module are published, each with its checksum sidecar.
  */
 function releaseVersion(want) {
   const args = ["release", "view"];
@@ -58,7 +59,9 @@ function releaseVersion(want) {
   }
 
   const published = new Set(rel.assets.map((asset) => asset.name));
-  const missing = PLATFORMS.map((p) => p.asset).filter((asset) => !published.has(asset));
+  const missing = [...PLATFORMS.map((p) => p.asset), WASM_ASSET]
+    .flatMap((asset) => [asset, `${asset}.sha256`])
+    .filter((asset) => !published.has(asset));
   if (missing.length > 0) {
     throw new Error(`release ${rel.tagName} is missing assets: ${missing.join(", ")}`);
   }

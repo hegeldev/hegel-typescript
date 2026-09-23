@@ -15,23 +15,26 @@
  * String-shaped draws go through an immutable `hegel_string_generator_t`
  * built from the schema. Construction is comparatively expensive (regex
  * compilation, Unicode table lookups), so generators are cached per schema
- * object for the life of the process and deliberately never freed — a
- * bounded leak of one native generator per generator instance, matching the
- * cost of the JS objects themselves.
+ * object within each run, with at most 256 entries. Eviction and run teardown
+ * free the handles; no cache entry can cross engine instances.
  *
  * @packageDocumentation
  */
 
-import { Buffer } from "node:buffer";
-import { Labels } from "./testCase.js";
+import { Labels, AssumeError, StopTestError } from "./testCase.js";
 import {
-  Libhegel,
-  fitsInt64,
+  EngineError,
+  type Engine,
+  type ContextHandle,
+  type TestCaseHandle,
+  type StringGeneratorHandle,
   type NativeDate,
   type NativeTime,
   type NativeDatetime,
-  type Ptr,
-} from "./libhegel.js";
+  type UuidVersion,
+} from "./engine.js";
+
+import { fitsInt64 } from "./bytes.js";
 
 const UINT32_MAX = 0xffffffff;
 
@@ -41,6 +44,10 @@ const DATE_MIN: NativeDate = { year: 1, month: 1, day: 1 };
 const DATE_MAX: NativeDate = { year: 9999, month: 12, day: 31 };
 const TIME_MIN: NativeTime = { hour: 0, minute: 0, second: 0, nanosecond: 0 };
 const TIME_MAX: NativeTime = { hour: 23, minute: 59, second: 59, nanosecond: 999_999_999 };
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 /** Format a drawn date as ISO 8601 (`YYYY-MM-DD`). */
 export function formatDate(d: NativeDate): string {
@@ -74,8 +81,17 @@ export function formatDatetime(dt: NativeDatetime): string {
   return `${formatDate(dt.date)}T${formatTime(dt.time)}`;
 }
 
+/** Format 16 big-endian bytes as a canonical lowercase UUID string. */
+export function formatUuid(bytes: Uint8Array): string {
+  if (bytes.length !== 16) {
+    throw new EngineError(`Expected 16 UUID bytes, got ${bytes.length}`);
+  }
+  const hex = bytesToHex(bytes);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 /** Format 4 network-order bytes as a dotted-quad IPv4 address. */
-export function formatIpv4(bytes: Buffer): string {
+export function formatIpv4(bytes: Uint8Array): string {
   return Array.from(bytes).join(".");
 }
 
@@ -85,7 +101,7 @@ export function formatIpv4(bytes: Buffer): string {
  * groups compressed to `::`, and the IPv4-mapped range rendered in the
  * conventional `::ffff:a.b.c.d` form.
  */
-export function formatIpv6(bytes: Buffer): string {
+export function formatIpv6(bytes: Uint8Array): string {
   const groups: number[] = [];
   for (let i = 0; i < 16; i += 2) {
     groups.push((bytes[i] << 8) | bytes[i + 1]);
@@ -140,7 +156,7 @@ export function valueKey(value: unknown): string {
     return `b:${value}`;
   }
   if (value instanceof Uint8Array) {
-    return `x:${Buffer.from(value).toString("hex")}`;
+    return `x:${bytesToHex(value)}`;
   }
   // The only remaining raw value shape is an array (tuple / list / dict
   // entries / one_of pairs).
@@ -165,9 +181,9 @@ function requireIntegerBound(schema: Record<string, unknown>, field: string): bi
 }
 
 function drawInteger(
-  lib: Libhegel,
-  ctx: Ptr,
-  tc: Ptr,
+  lib: Engine,
+  ctx: ContextHandle,
+  tc: TestCaseHandle,
   schema: Record<string, unknown>,
 ): number | bigint {
   const min = requireIntegerBound(schema, "min_value");
@@ -178,7 +194,12 @@ function drawInteger(
   return toJsInteger(value);
 }
 
-function drawFloat(lib: Libhegel, ctx: Ptr, tc: Ptr, schema: Record<string, unknown>): number {
+function drawFloat(
+  lib: Engine,
+  ctx: ContextHandle,
+  tc: TestCaseHandle,
+  schema: Record<string, unknown>,
+): number {
   return lib.generateFloat(ctx, tc, {
     // The float generator always emits width 64; smallest_nonzero_magnitude
     // is the ABI's "no restriction" sentinel for that width.
@@ -193,25 +214,52 @@ function drawFloat(lib: Libhegel, ctx: Ptr, tc: Ptr, schema: Record<string, unkn
   });
 }
 
-// Native string generators cached per schema object (see the module docs for
-// why they are never freed). Each generator instance holds one stable schema
-// object, so object identity is the right cache key.
-const stringGenerators = new WeakMap<Record<string, unknown>, Ptr>();
+/** Run-owned cache. Handles never cross engines and are freed before the context.
+ * The cap also bounds runs whose user code creates a fresh schema for every draw.
+ */
+export class StringGeneratorCache {
+  private readonly generators = new Map<Record<string, unknown>, StringGeneratorHandle>();
+  constructor(private readonly engine: Engine) {}
 
-function stringGeneratorFor(lib: Libhegel, ctx: Ptr, schema: Record<string, unknown>): Ptr {
-  let generator = stringGenerators.get(schema);
-  if (generator === undefined) {
-    generator = buildStringGenerator(lib, ctx, schema);
-    stringGenerators.set(schema, generator);
+  get(lib: Engine, ctx: ContextHandle, schema: Record<string, unknown>): StringGeneratorHandle {
+    if (lib !== this.engine) throw new Error("String generator cache belongs to another engine");
+    const cached = this.generators.get(schema);
+    if (cached !== undefined) return cached;
+    if (this.generators.size >= 256) {
+      const oldest = this.generators.entries().next().value!;
+      this.generators.delete(oldest[0]);
+      lib.freeStringGenerator(oldest[1]);
+    }
+    const generator = buildStringGenerator(lib, ctx, schema);
+    this.generators.set(schema, generator);
+    return generator;
   }
-  return generator;
+
+  dispose(): void {
+    const generators = [...this.generators.values()];
+    this.generators.clear();
+    const errors: unknown[] = [];
+    for (const generator of generators) {
+      try {
+        this.engine.freeStringGenerator(generator);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, "String generator cleanup failed");
+  }
 }
 
-function utf8OrNull(value: string | undefined): Buffer | null {
-  return value === undefined ? null : Buffer.from(value, "utf8");
+function utf8OrNull(value: string | undefined): Uint8Array | null {
+  return value === undefined ? null : new TextEncoder().encode(value);
 }
 
-function buildStringGenerator(lib: Libhegel, ctx: Ptr, schema: Record<string, unknown>): Ptr {
+function buildStringGenerator(
+  lib: Engine,
+  ctx: ContextHandle,
+  schema: Record<string, unknown>,
+): StringGeneratorHandle {
   switch (schema["type"]) {
     case "string": {
       const maxSize = schema["max_size"] as number | undefined;
@@ -243,71 +291,124 @@ function buildStringGenerator(lib: Libhegel, ctx: Ptr, schema: Record<string, un
   }
 }
 
-function drawList(lib: Libhegel, ctx: Ptr, tc: Ptr, schema: Record<string, unknown>): unknown[] {
-  const elementSchema = schema["elements"] as Record<string, unknown>;
-  const unique = schema["unique"] as boolean;
-  lib.startSpan(ctx, tc, Labels.LIST);
-  const collection = lib.newCollection(
-    ctx,
-    tc,
-    schema["min_size"] as number,
-    schema["max_size"] as number | undefined,
-  );
-  const values: unknown[] = [];
-  const seen = new Set<string>();
+// Cleanup must not replace an engine fault with ordinary draw control flow.
+function withCleanup<T>(operation: () => T, cleanup: () => void): T {
+  let failed = false;
+  let failure: unknown;
+  let value!: T;
   try {
-    while (lib.collectionMore(ctx, tc, collection)) {
-      lib.startSpan(ctx, tc, Labels.LIST_ELEMENT);
-      const value = generateValue(lib, ctx, tc, elementSchema);
-      lib.stopSpan(ctx, tc, false);
-      if (unique) {
-        const key = valueKey(value);
-        if (seen.has(key)) {
-          lib.collectionReject(ctx, tc, collection, "duplicate element");
-          continue;
-        }
-        seen.add(key);
-      }
-      values.push(value);
-    }
+    value = operation();
+  } catch (error) {
+    failed = true;
+    failure = error;
   } finally {
-    lib.freeCollection(collection);
+    try {
+      cleanup();
+    } catch (error) {
+      if (!failed) {
+        failed = true;
+        failure = error;
+      } else if (!(error instanceof AssumeError || error instanceof StopTestError)) {
+        failure = new EngineError("Generation cleanup failed", {
+          cause: new AggregateError([failure, error]),
+        });
+      }
+    }
   }
-  lib.stopSpan(ctx, tc, false);
-  return values;
+  if (failed) throw failure;
+  return value;
 }
 
-function drawDict(lib: Libhegel, ctx: Ptr, tc: Ptr, schema: Record<string, unknown>): unknown[] {
+function withSpan<T>(
+  lib: Engine,
+  ctx: ContextHandle,
+  tc: TestCaseHandle,
+  label: number,
+  operation: () => T,
+): T {
+  lib.startSpan(ctx, tc, label);
+  return withCleanup(operation, () => lib.stopSpan(ctx, tc, false));
+}
+
+function drawList(
+  lib: Engine,
+  ctx: ContextHandle,
+  tc: TestCaseHandle,
+  schema: Record<string, unknown>,
+  cache: StringGeneratorCache,
+): unknown[] {
+  const elementSchema = schema["elements"] as Record<string, unknown>;
+  const unique = schema["unique"] as boolean;
+  return withSpan(lib, ctx, tc, Labels.LIST, () => {
+    const collection = lib.newCollection(
+      ctx,
+      tc,
+      schema["min_size"] as number,
+      schema["max_size"] as number | undefined,
+    );
+    return withCleanup(
+      () => {
+        const values: unknown[] = [];
+        const seen = new Set<string>();
+        while (lib.collectionMore(ctx, tc, collection)) {
+          const value = withSpan(lib, ctx, tc, Labels.LIST_ELEMENT, () =>
+            generateValue(lib, ctx, tc, elementSchema, cache),
+          );
+          if (unique) {
+            const key = valueKey(value);
+            if (seen.has(key)) {
+              lib.collectionReject(ctx, tc, collection, "duplicate element");
+              continue;
+            }
+            seen.add(key);
+          }
+          values.push(value);
+        }
+        return values;
+      },
+      () => lib.freeCollection(collection),
+    );
+  });
+}
+
+function drawDict(
+  lib: Engine,
+  ctx: ContextHandle,
+  tc: TestCaseHandle,
+  schema: Record<string, unknown>,
+  cache: StringGeneratorCache,
+): unknown[] {
   const keySchema = schema["keys"] as Record<string, unknown>;
   const valueSchema = schema["values"] as Record<string, unknown>;
-  lib.startSpan(ctx, tc, Labels.MAP);
-  const collection = lib.newCollection(
-    ctx,
-    tc,
-    schema["min_size"] as number,
-    schema["max_size"] as number | undefined,
-  );
-  const entries: unknown[] = [];
-  const seen = new Set<string>();
-  try {
-    while (lib.collectionMore(ctx, tc, collection)) {
-      lib.startSpan(ctx, tc, Labels.MAP_ENTRY);
-      const key = generateValue(lib, ctx, tc, keySchema);
-      const value = generateValue(lib, ctx, tc, valueSchema);
-      lib.stopSpan(ctx, tc, false);
-      const identity = valueKey(key);
-      if (seen.has(identity)) {
-        lib.collectionReject(ctx, tc, collection, "duplicate key");
-        continue;
-      }
-      seen.add(identity);
-      entries.push([key, value]);
-    }
-  } finally {
-    lib.freeCollection(collection);
-  }
-  lib.stopSpan(ctx, tc, false);
-  return entries;
+  return withSpan(lib, ctx, tc, Labels.MAP, () => {
+    const collection = lib.newCollection(
+      ctx,
+      tc,
+      schema["min_size"] as number,
+      schema["max_size"] as number | undefined,
+    );
+    return withCleanup(
+      () => {
+        const entries: unknown[] = [];
+        const seen = new Set<string>();
+        while (lib.collectionMore(ctx, tc, collection)) {
+          const [key, value] = withSpan(lib, ctx, tc, Labels.MAP_ENTRY, () => [
+            generateValue(lib, ctx, tc, keySchema, cache),
+            generateValue(lib, ctx, tc, valueSchema, cache),
+          ]);
+          const identity = valueKey(key);
+          if (seen.has(identity)) {
+            lib.collectionReject(ctx, tc, collection, "duplicate key");
+            continue;
+          }
+          seen.add(identity);
+          entries.push([key, value]);
+        }
+        return entries;
+      },
+      () => lib.freeCollection(collection),
+    );
+  });
 }
 
 /**
@@ -316,11 +417,19 @@ function drawDict(lib: Libhegel, ctx: Ptr, tc: Ptr, schema: Record<string, unkno
  * / {@link LibhegelError} as the underlying draws do.
  */
 export function generateValue(
-  lib: Libhegel,
-  ctx: Ptr,
-  tc: Ptr,
+  lib: Engine,
+  ctx: ContextHandle,
+  tc: TestCaseHandle,
   schema: Record<string, unknown>,
+  cache?: StringGeneratorCache,
 ): unknown {
+  if (cache === undefined) {
+    const owned = new StringGeneratorCache(lib);
+    return withCleanup(
+      () => generateValue(lib, ctx, tc, schema, owned),
+      () => owned.dispose(),
+    );
+  }
   const type = schema["type"] as string;
   switch (type) {
     case "boolean":
@@ -341,7 +450,7 @@ export function generateValue(
     case "email":
     case "url":
     case "domain":
-      return lib.generateString(ctx, tc, stringGeneratorFor(lib, ctx, schema));
+      return lib.generateString(ctx, tc, cache.get(lib, ctx, schema));
     case "ip_address":
       return schema["version"] === 4
         ? formatIpv4(lib.generateIpv4(ctx, tc))
@@ -359,27 +468,28 @@ export function generateValue(
           { date: DATE_MAX, time: TIME_MAX },
         ),
       );
+    case "uuid":
+      return formatUuid(lib.generateUuid(ctx, tc, schema["version"] as UuidVersion | undefined));
     case "constant":
       return schema["value"];
     case "one_of": {
       const options = schema["generators"] as Record<string, unknown>[];
-      lib.startSpan(ctx, tc, Labels.ONE_OF);
-      const index = Number(lib.generateInteger(ctx, tc, 0n, BigInt(options.length - 1)));
-      const value = generateValue(lib, ctx, tc, options[index]);
-      lib.stopSpan(ctx, tc, false);
-      return [index, value];
+      return withSpan(lib, ctx, tc, Labels.ONE_OF, () => {
+        const index = Number(lib.generateInteger(ctx, tc, 0n, BigInt(options.length - 1)));
+        const value = generateValue(lib, ctx, tc, options[index], cache);
+        return [index, value];
+      });
     }
     case "tuple": {
       const elements = schema["elements"] as Record<string, unknown>[];
-      lib.startSpan(ctx, tc, Labels.TUPLE);
-      const values = elements.map((element) => generateValue(lib, ctx, tc, element));
-      lib.stopSpan(ctx, tc, false);
-      return values;
+      return withSpan(lib, ctx, tc, Labels.TUPLE, () =>
+        elements.map((element) => generateValue(lib, ctx, tc, element, cache)),
+      );
     }
     case "list":
-      return drawList(lib, ctx, tc, schema);
+      return drawList(lib, ctx, tc, schema, cache);
     case "dict":
-      return drawDict(lib, ctx, tc, schema);
+      return drawDict(lib, ctx, tc, schema, cache);
     default:
       throw new Error(`Unsupported generator schema type: ${String(type)}`);
   }

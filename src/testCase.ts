@@ -7,7 +7,8 @@
  * @packageDocumentation
  */
 
-import { inspect } from "node:util";
+import { portableDiagnostics, type Diagnostics } from "./runtime.js";
+import { EngineError } from "./engine.js";
 // Type-only import to avoid a runtime cycle: Generator depends on TestCase.
 import type { Generator } from "./generators/core.js";
 
@@ -65,6 +66,8 @@ export const Labels = {
  * value (see {@link Status} in `libhegel.ts`).
  */
 export interface DataSource {
+  readonly diagnostics?: Diagnostics;
+  assertHealthy?(): void;
   generate(schema: Record<string, unknown>): unknown;
   startSpan(label: number): void;
   stopSpan(discard: boolean): void;
@@ -104,7 +107,10 @@ export class TestCase {
     if (this.spanDepth === 0) {
       this.drawCount++;
       if (this._isLastRun) {
-        console.error(`var draw_${this.drawCount} = ${inspect(value, { depth: null })};`);
+        (this._dataSource.diagnostics ?? portableDiagnostics).reportFinalValue(
+          value,
+          this.drawCount,
+        );
       }
     }
     return value;
@@ -124,7 +130,7 @@ export class TestCase {
    */
   note(message: string): void {
     if (this._isLastRun) {
-      console.error(message);
+      (this._dataSource.diagnostics ?? portableDiagnostics).note(message);
     }
   }
 
@@ -150,8 +156,9 @@ export class TestCase {
     this.spanDepth--;
     try {
       this._dataSource.stopSpan(discard);
-    } catch {
-      // Ignore errors during stop_span (matches Rust: `let _ = ...`)
+    } catch (error) {
+      if (error instanceof EngineError) throw error;
+      // Preserve custom data-source behavior; engine faults are never suppressed.
     }
   }
 }

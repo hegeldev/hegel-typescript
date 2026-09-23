@@ -9,7 +9,7 @@ export { integers, bigIntegers, floats, booleans } from "./numeric.js";
 export type { IntegerOptions, BigIntegerOptions, FloatOptions } from "./numeric.js";
 export { text, characters, binary, fromRegex } from "./strings.js";
 export { emails, urls, domains, ipAddresses } from "./strings.js";
-export { dates, times, datetimes } from "./strings.js";
+export { dates, times, datetimes, uuids } from "./strings.js";
 export type {
   CharacterFilterOptions,
   TextOptions,
@@ -18,7 +18,9 @@ export type {
   RegexOptions,
   DomainOptions,
   IpAddressOptions,
+  UuidOptions,
 } from "./strings.js";
+export type { UuidVersion } from "../engine.js";
 
 export { arrays, sets, maps } from "./collections.js";
 export type { CollectionOptions, ArrayOptions } from "./collections.js";

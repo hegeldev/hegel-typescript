@@ -126,7 +126,7 @@ describe("TestCase with fake DataSource", () => {
     const tc = new TestCase(ds, true);
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     tc.draw(gs.integers());
-    expect(spy).toHaveBeenCalledWith(expect.stringContaining("draw_1"));
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining("draw_1"), 42);
     spy.mockRestore();
   });
 
