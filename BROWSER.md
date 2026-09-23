@@ -86,7 +86,7 @@ Use Rollup with `@rollup/plugin-node-resolve` and `output: { format: "es", file:
 
 ## Prepare published bytes explicitly
 
-The pin lives in `src/browser/artifact.json`. It records engine version, exact source commit, Rust compiler commit, Cargo version, lockfile checksum, target, release tag, and artifact checksum.
+The pin lives in `src/browser/artifact.json` (mirrored for the browser bundle in `src/browser/artifact.ts`). A published pin records the engine version, the `libhegel-v<version>` release tag, the commit that tag resolves to, the target, the asset name and the published SHA-256; a development pin (`published: false`, for an unreleased engine) additionally records the Rust compiler version and commit, the Cargo version and the source's `Cargo.lock` checksum that its reproducible build is checked against.
 
 Prepare the pinned release before building:
 
@@ -112,8 +112,8 @@ The published SHA-256 is `874ef207c481d70ab46908a89878f53068d364b9157e67a3ae9e4d
 
 ## Update to a future engine release
 
-Audit the new source, type signatures, and temporal struct calls. Update the single JSON pin with the published checksum and source commit. Keep the toolchain and lockfile evidence accurate. The release source must equal the resolved tag commit and be an ancestor of upstream main.
+`just update-libhegel <engine-version>` (what the automated bump runs) pins one release for both engines: it checks that the release publishes every native asset plus the Wasm module and its checksum sidecar, resolves the release tag to its commit, and regenerates `src/libhegel-version.ts`, `src/browser/artifact.json` and `src/browser/artifact.ts`. Then `npm run prepare:wasm -- release` downloads the Wasm, verifies the stable release, the tag commit, its merge into upstream main and the checksum, and stores the bytes for the build. Release preparation downloads published bytes; it does not rebuild a release.
 
-`node scripts/update-libhegel.mjs <engine-version>` requires that reviewed Wasm pin first. It verifies the native asset set, checks the stable GitHub release and merged source, downloads the Wasm and checksum sidecar, compares the checksum to the pin, then updates the native version. Release preparation downloads published bytes; it does not rebuild a release. Rerun all native, Wasm, coverage, and packed-browser checks.
+Audit the new `hegel.h` against `src/browser/abi.ts`: every raw Wasm signature (in particular the by-value temporal structs, which lower to pointers) must still match the module. Rerun all native, Wasm, coverage, and packed-browser checks.
 
 Release automation repeats explicit release preparation before changing package versions or publishing platform packages. Platform assembly requires release provenance. `prepublishOnly` rejects development pins and verifies that packaged bytes equal the prepared published artifact. npm's deliberate `--ignore-scripts` option can bypass lifecycle hooks; it is not a supported publication procedure.
