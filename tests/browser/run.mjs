@@ -59,7 +59,7 @@ try {
   assert(packed.files.some((f) => f.path === `dist/browser/${WASM_ASSET}`));
   assert(
     !packed.files.some((f) =>
-      /(?:AGENT_HANDOFF|provenance|native\/|\.dylib$|\.node$)/.test(f.path),
+      /(?:native\/|platform-packages\/|\.dylib$|\.so$|\.dll$|\.node$)/.test(f.path),
     ),
   );
   run("node", ["scripts/make-platform-packages.mjs", "--host", "--offline"], ROOT);
