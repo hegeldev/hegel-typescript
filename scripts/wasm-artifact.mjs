@@ -170,8 +170,10 @@ export async function prepareRelease() {
   while (object.type === "tag") object = gh("api", `repos/${REPO}/git/tags/${object.sha}`).object;
   if (object.type !== "commit" || object.sha !== PIN.source)
     throw new Error("Release tag does not match the pinned source");
-  const comparison = gh("api", `repos/${REPO}/compare/${PIN.source}...main`);
-  if (!["ahead", "identical"].includes(comparison.status))
+  // The full comparison payload lists every commit and file changed since the
+  // release and outgrows execFileSync's default buffer; only its status matters.
+  const status = gh("api", `repos/${REPO}/compare/${PIN.source}...main`, "--jq", ".status");
+  if (!["ahead", "identical"].includes(status))
     throw new Error("Release source is not merged into upstream main");
   for (const name of [PIN.asset, `${PIN.asset}.sha256`]) {
     if (!rel.assets.some((a) => a.name === name)) throw new Error(`Release is missing ${name}`);

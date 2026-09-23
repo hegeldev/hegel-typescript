@@ -32,7 +32,8 @@ let result;
 if (process.argv[2] === 'release') result = {tagName: pin.release.tag, isDraft: scenario === 'draft', isPrerelease: scenario === 'prerelease', assets: (scenario === 'missing' ? [] : [pin.asset, pin.asset + '.sha256']).map(name => ({name}))};
 else if (process.argv[3].includes('/git/ref/')) result = {object: {type: 'tag', sha: 'annotated-tag'}};
 else if (process.argv[3].includes('/git/tags/')) result = {object: {type: 'commit', sha: scenario === 'source' ? 'wrong-source' : pin.source}};
-else result = {status: scenario === 'unmerged' ? 'behind' : 'ahead'};
+else if (process.argv[3].includes('/compare/') && process.argv[4] === '--jq' && process.argv[5] === '.status') result = scenario === 'unmerged' ? 'behind' : 'ahead';
+else throw new Error('unexpected gh invocation: ' + process.argv.slice(2).join(' '));
 console.log(JSON.stringify(result));
 `,
     );
