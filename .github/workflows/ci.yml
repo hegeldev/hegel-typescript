@@ -13,42 +13,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  prepare-wasm:
-    name: prepare pinned Wasm
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "22"
-      - name: Prepare exact development source or published release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if node -e "process.exit(require('./src/browser/artifact.json').published ? 0 : 1)"; then
-            node scripts/wasm-artifact.mjs release
-          else
-            SOURCE=$(node -p "require('./src/browser/artifact.json').source")
-            TOOLCHAIN=$(node -p "require('./src/browser/artifact.json').rustc")
-            TARGET=$(node -p "require('./src/browser/artifact.json').target")
-            rustup toolchain install "$TOOLCHAIN" --profile minimal --target "$TARGET"
-            ENGINE=$(mktemp -d)
-            trap 'rm -rf "$ENGINE"' EXIT
-            git -C "$ENGINE" init
-            git -C "$ENGINE" remote add origin https://github.com/hegeldev/hegel-rust.git
-            git -C "$ENGINE" fetch --depth 1 origin "$SOURCE"
-            node scripts/wasm-artifact.mjs dev "$ENGINE" --verify-reproducible
-          fi
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: pinned-wasm
-          path: native/wasm/
-          if-no-files-found: error
-
   lint:
     name: lint
     runs-on: ubuntu-latest
@@ -79,7 +43,6 @@ jobs:
 
   test:
     name: test
-    needs: [prepare-wasm]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -95,10 +58,6 @@ jobs:
         with:
           node-version: "22"
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: pinned-wasm
-          path: native/wasm/
       - run: npm ci
       - name: Fetch native libhegel explicitly
         run: echo "HEGEL_LIBHEGEL_PATH=$(node scripts/fetch-libhegel.mjs)" >> "$GITHUB_ENV"
@@ -113,7 +72,6 @@ jobs:
 
   test-node-20:
     name: test (node 20)
-    needs: [prepare-wasm]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -129,10 +87,6 @@ jobs:
         with:
           node-version: "20"
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: pinned-wasm
-          path: native/wasm/
       - run: npm ci
       - run: npm run build
 
@@ -153,7 +107,6 @@ jobs:
 
   test-bun:
     name: test (bun ${{ matrix.version }})
-    needs: [prepare-wasm]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -178,10 +131,6 @@ jobs:
         with:
           bun-version: ${{ matrix.version }}
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: pinned-wasm
-          path: native/wasm/
       - run: npm ci
       - run: npm run build
 
@@ -202,7 +151,6 @@ jobs:
 
   test-deno:
     name: test (deno ${{ matrix.version }})
-    needs: [prepare-wasm]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -227,10 +175,6 @@ jobs:
         with:
           deno-version: ${{ matrix.version }}
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: pinned-wasm
-          path: native/wasm/
       - run: npm ci
       - run: npm run build
 

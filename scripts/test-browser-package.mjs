@@ -12,8 +12,10 @@ import { build as esbuild } from "esbuild";
 import { rollup } from "rollup";
 import { nodeResolve } from "@rollup/plugin-node-resolve";
 import ts from "typescript";
-import { PLATFORMS } from "./fetch-libhegel.mjs";
-import { ROOT, PIN, verifyBytes, preparedBytes } from "./wasm-artifact.mjs";
+import { fileURLToPath } from "node:url";
+import { PLATFORMS, WASM_ASSET, fetchWasm, sha256 } from "./fetch-libhegel.mjs";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const temp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hegel-browser-package-")));
 const run = (command, args, cwd = temp, env = process.env) =>
@@ -37,10 +39,15 @@ function files(dir) {
 
 let browser;
 try {
-  preparedBytes();
+  // The pinned release's Wasm module, as fetched (and checksum-verified) into native/.
+  const wasmBytes = fs.readFileSync(await fetchWasm());
+  const verifyBytes = (bytes) => {
+    assert(Buffer.from(bytes).equals(wasmBytes), "Wasm differs from the pinned release asset");
+    assert(WebAssembly.validate(bytes), "Invalid Wasm");
+  };
   const packOutput = run("npm", ["pack", "--json", "--pack-destination", temp], ROOT);
   const packed = JSON.parse(packOutput.slice(packOutput.indexOf("[\n")))[0];
-  assert(packed.files.some((f) => f.path === `dist/browser/${PIN.asset}`));
+  assert(packed.files.some((f) => f.path === `dist/browser/${WASM_ASSET}`));
   assert(
     !packed.files.some((f) =>
       /(?:AGENT_HANDOFF|provenance|native\/|\.dylib$|\.node$)/.test(f.path),
@@ -214,7 +221,7 @@ try {
         metafile: true,
       });
       checkGraph(Object.keys(result.metafile.inputs));
-      fs.copyFileSync(wasm, path.join(out, PIN.asset));
+      fs.copyFileSync(wasm, path.join(out, WASM_ASSET));
     },
     rollup: async (out) => {
       // Default node-resolve conditions intentionally exercise the package's default export.
@@ -232,11 +239,13 @@ try {
       } finally {
         await bundle.close();
       }
-      fs.copyFileSync(wasm, path.join(out, PIN.asset));
+      fs.copyFileSync(wasm, path.join(out, WASM_ASSET));
     },
   };
   browser = await chromium.launch({ headless: true });
-  console.log(`Chromium ${browser.version()}; packed ${packed.filename}; Wasm ${PIN.sha256}`);
+  console.log(
+    `Chromium ${browser.version()}; packed ${packed.filename}; Wasm ${sha256(wasmBytes)}`,
+  );
   for (const [name, build] of Object.entries(configurations)) {
     const out = path.join(temp, name);
     fs.mkdirSync(out);

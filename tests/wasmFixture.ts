@@ -1,23 +1,22 @@
 import { existsSync, readFileSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { LIBHEGEL_VERSION } from "../src/libhegel-version.js";
 import { WASM_ARTIFACT } from "../src/browser/artifact.js";
 import { WasmAbi } from "../src/browser/abi.js";
 import { WasmEngine } from "../src/browser/engine.js";
 import { createHostImports } from "../src/browser/host.js";
 
+// The pinned release's Wasm module, fetched next to the native library by
+// `just fetch-libhegel` (or wherever HEGEL_WASM_PATH points, mirroring
+// HEGEL_LIBHEGEL_PATH for the native side).
 const path =
   process.env.HEGEL_WASM_PATH ??
-  new URL(`../native/wasm/${WASM_ARTIFACT.sha256}/${WASM_ARTIFACT.asset}`, import.meta.url);
+  new URL(`../native/${LIBHEGEL_VERSION}/${WASM_ARTIFACT.asset}`, import.meta.url);
 if (!existsSync(path)) {
   throw new Error(
-    "Prepare the pinned published Wasm with npm run prepare:wasm -- release before testing",
+    "Run `just fetch-libhegel` to download the pinned Wasm module (or set HEGEL_WASM_PATH)",
   );
 }
-const bytes = readFileSync(path);
-if (createHash("sha256").update(bytes).digest("hex") !== WASM_ARTIFACT.sha256) {
-  throw new Error("HEGEL_WASM_PATH does not match the pinned artifact checksum");
-}
-export const wasmBytes = Uint8Array.from(bytes).buffer;
+export const wasmBytes = Uint8Array.from(readFileSync(path)).buffer;
 export const wasmModule = new WebAssembly.Module(wasmBytes);
 
 export function wasmFixture() {

@@ -1,7 +1,8 @@
 import { EngineError } from "../engine.js";
 
-// Exact raw-module signatures inspected at WASM_ARTIFACT.source with its pinned
-// toolchain. I = i32, L = i64, D = f64. JS arity checks cannot verify Wasm types.
+// Exact raw-module signatures of the pinned release's Wasm module; audit them
+// against hegel.h on every engine bump. I = i32, L = i64, D = f64. JS arity
+// checks cannot verify Wasm types.
 export const signatures = {
   context_new: "",
   context_free: "I",

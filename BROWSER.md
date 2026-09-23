@@ -1,6 +1,6 @@
 # Browser support
 
-`@hegeldev/hegel` supports browsers with the Wasm artifact published in libhegel 0.42.4. Upstream [PR #478](https://github.com/hegeldev/hegel-rust/pull/478) is merged, and release preparation verifies the published asset before packaging it.
+`@hegeldev/hegel` supports browsers through the WebAssembly build of libhegel that hegel-rust publishes with every release (since [PR #478](https://github.com/hegeldev/hegel-rust/pull/478)); the package ships the module of its pinned engine version.
 
 ## Use the same imports
 
@@ -27,7 +27,7 @@ Generation and shrinking run synchronously on the main browser thread. A long te
 
 `Database.unset` and `Database.disabled` both disable browser persistence. Passing `Database.fromPath(...)` in browser test settings throws, including an empty path; constructing the database value does not. There is no IndexedDB, localStorage, filesystem or cloud database. Browser notes and final replay output use the console. Antithesis and concurrent state machines are not supported in browsers. Nondeterministic engine failures produce an explicit error rather than a false deterministic replay.
 
-All generators use the same schema interpreter and Rust engine as Node, including canonical UUID strings from `uuids()` and version-restricted UUIDs from `uuids({ version: 4 })`. Temporal strings preserve nanoseconds, with nine fractional digits when nonzero. Rust text generation excludes surrogate codepoints; the adapter preserves WTF-8 where the engine returns it.
+All generators use the same schema interpreter and Rust engine as Node, including canonical UUID strings from `uuids()` and version-restricted UUIDs from `uuids({ version: 4 })`. Temporal strings preserve nanoseconds (six fractional digits for whole microseconds, nine otherwise). Rust text generation excludes surrogate codepoints; the adapter preserves WTF-8 where the engine returns it.
 
 ## Bundle the asset
 
@@ -84,16 +84,15 @@ Use esbuild with `bundle: true`, `platform: "browser"`, `format: "esm"`, `target
 
 Use Rollup with `@rollup/plugin-node-resolve` and `output: { format: "es", file: "out/app.js" }`. Default node-resolve conditions work because the package default is the browser entry. If your application splits chunks or changes directories, copy the asset beside the chunk containing Hegel's URL expression or configure an asset plugin to rewrite that URL. The tested copy recipe is for a single output module.
 
-## Prepare published bytes explicitly
+## Maintainers: the Wasm module is one more asset of the pinned release
 
-The pin lives in `src/browser/artifact.json` (mirrored for the browser bundle in `src/browser/artifact.ts`). A published pin records the engine version, the `libhegel-v<version>` release tag, the commit that tag resolves to, the target, the asset name and the published SHA-256; a development pin (`published: false`, for an unreleased engine) additionally records the Rust compiler version and commit, the Cargo version and the source's `Cargo.lock` checksum that its reproducible build is checked against.
+The browser entry runs the same libhegel release as the native library. `src/libhegel-version.ts` is the only pin; hegel-rust publishes `libhegel-wasm32-unknown-unknown.wasm` (with a `.sha256` sidecar) next to the native libraries on the `libhegel-v<version>` release. `just fetch-libhegel` downloads the host library and the Wasm module into `native/<version>/`, verifying each against its sidecar; the tests load the module from there (or from `HEGEL_WASM_PATH`, the counterpart of `HEGEL_LIBHEGEL_PATH`), and `npm run build` fetches it if needed and copies it into `dist/browser/`, where the browser entry's `new URL(...)` expression finds it. The library never downloads anything at runtime; it fetches only the asset the application serves.
 
-Prepare the pinned release before building:
+To run everything locally:
 
 ```sh
 npm ci
-npm run prepare:wasm -- release
-export HEGEL_LIBHEGEL_PATH="$(node scripts/fetch-libhegel.mjs)"
+export HEGEL_LIBHEGEL_PATH="$(just fetch-libhegel)"
 npx playwright install chromium
 npm run build
 npm test
@@ -102,18 +101,6 @@ npm run typecheck:portable
 npm run test:browser
 ```
 
-Preparation resolves the release tag to its commit, verifies that the commit is merged into upstream main, checks the Wasm asset and checksum sidecar, and stores the bytes with a provenance receipt under ignored `native/wasm/<sha256>/`.
+`npm run test:browser` packs and installs the actual main and host-platform tarballs into a temporary consumer. It checks the public declarations without Node types, runs native sync/async, UUID, shrinking and database-persistence tests with no library-path override, then bundles the browser entry with Vite, webpack, esbuild and Rollup. Chromium runs every bundle under `/nested/` with the correct Wasm MIME type, and Vite also covers the incorrect-MIME fallback. Browser checks cover exports, sync/async calls, UUIDs, shrinking to 50, database rejection, emitted assets (byte-identical to the fetched module), request counts and dependency graphs (no Koffi, Node built-ins or polyfills). This matrix does not yet establish Firefox or Safari compatibility.
 
-The published SHA-256 is `874ef207c481d70ab46908a89878f53068d364b9157e67a3ae9e4dd5d76c74bf`. The raw by-value temporal struct lowering is tied to this inspected artifact, not guaranteed by the C version string.
-
-`npm run build` and `npm pack` verify the prepared artifact and receipt, then copy bytes to `dist/browser`. They do not download engine assets. Tests use the prepared Wasm by default; `HEGEL_WASM_PATH` can name another local copy only if its checksum matches. Library runtime fetches only the application-served packaged asset, never GitHub. Before this TypeScript package is released, native tests require the explicit native path above because the existing npm platform packages contain the older engine.
-
-`npm run test:browser` packs and installs actual main and host-platform tarballs into a temporary consumer, using only the native and Wasm artifacts prepared by the preceding commands. It checks public declarations without Node types, runs native sync/async, UUID, shrinking, and database-persistence tests with no library-path override, then bundles the browser entry with Vite, webpack, esbuild and Rollup. Chromium runs every bundle under `/nested/` with the correct Wasm MIME type, and Vite also covers the incorrect-MIME fallback. Browser checks cover exports, sync/async calls, UUIDs, shrinking to 50, database rejection, emitted assets, request counts and dependency graphs. There are no source aliases, runtime GitHub downloads or browser polyfills. This matrix does not yet establish Firefox or Safari compatibility.
-
-## Update to a future engine release
-
-`just update-libhegel <engine-version>` (what the automated bump runs) pins one release for both engines: it checks that the release publishes every native asset plus the Wasm module and its checksum sidecar, resolves the release tag to its commit, and regenerates `src/libhegel-version.ts`, `src/browser/artifact.json` and `src/browser/artifact.ts`. Then `npm run prepare:wasm -- release` downloads the Wasm, verifies the stable release, the tag commit, its merge into upstream main and the checksum, and stores the bytes for the build. Release preparation downloads published bytes; it does not rebuild a release.
-
-Audit the new `hegel.h` against `src/browser/abi.ts`: every raw Wasm signature (in particular the by-value temporal structs, which lower to pointers) must still match the module. Rerun all native, Wasm, coverage, and packed-browser checks.
-
-Release automation repeats explicit release preparation before changing package versions or publishing platform packages. Platform assembly requires release provenance. `prepublishOnly` rejects development pins and verifies that packaged bytes equal the prepared published artifact. npm's deliberate `--ignore-scripts` option can bypass lifecycle hooks; it is not a supported publication procedure.
+When bumping the engine (`just update-libhegel`, which is also what the automated bump runs), the release must publish the Wasm module and its sidecar, and `src/browser/abi.ts` must be audited against the new `hegel.h`: every raw Wasm signature (in particular the by-value temporal structs, which lower to pointers) must still match the module. At startup the loader checks the module's version string against the pin, nothing more.

@@ -34,16 +34,14 @@
     "printWidth": 100
   },
   "scripts": {
-    "build": "tsc && node scripts/wasm-artifact.mjs copy",
+    "build": "tsc && node scripts/fetch-libhegel.mjs --wasm dist/browser",
     "test": "vitest run --coverage",
     "lint": "prettier --check . && eslint . && tsc --noEmit",
     "format": "prettier --write .",
     "docs": "typedoc",
     "prepack": "npm run build",
-    "prepublishOnly": "node scripts/wasm-artifact.mjs publish-check",
-    "prepare:wasm": "node scripts/wasm-artifact.mjs",
     "test:browser": "node scripts/test-browser-package.mjs",
-    "test:packaging": "node --test scripts/wasm-artifact.test.mjs scripts/release-wasm.test.mjs",
+    "test:packaging": "node --test scripts/packaging.test.mjs",
     "typecheck:portable": "tsc -p tsconfig.portable.json"
   },
   "keywords": [

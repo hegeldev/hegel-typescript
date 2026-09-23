@@ -1,34 +1,38 @@
 set ignore-comments := true
 
-# Download the host's published libhegel artifact into native/ (if missing)
-# and print its path. Used to run tests against the real native library. (End
-# users instead get the library from the @hegeldev/hegel-<os>-<arch> platform
-# packages; see scripts/make-platform-packages.mjs.)
+# Download the host's published libhegel library and the Wasm module of the
+# pinned release into native/<version>/ (if missing), each verified against the
+# release's checksum sidecar, and print the library's path. Used to run tests
+# against the real engine. (End users instead get the library from the
+# @hegeldev/hegel-<os>-<arch> platform packages and the Wasm module from the
+# main package's dist/browser/; see scripts/make-platform-packages.mjs and
+# `npm run build`.)
 @fetch-libhegel:
     node scripts/fetch-libhegel.mjs
 
 # Build libhegel from a sibling ../hegel-rust checkout (for local development
 # against an unreleased engine). Prints the path to export as
-# HEGEL_LIBHEGEL_PATH.
+# HEGEL_LIBHEGEL_PATH. (For the Wasm side, `cargo build -p hegeltest-c
+# --release --target wasm32-unknown-unknown` there and export the module's
+# path as HEGEL_WASM_PATH.)
 build-libhegel:
     #!/usr/bin/env bash
     set -euo pipefail
     cargo build --release -p hegeltest-c --manifest-path ../hegel-rust/Cargo.toml
     echo "../hegel-rust/target/release/libhegel_c.so"
 
-# Regenerate the pins (src/libhegel-version.ts for the native library,
-# src/browser/artifact.{json,ts} for the Wasm module) from a libhegel release
-# (hegel-rust's `libhegel-v<version>` tags). Targets the latest release; pass
-# a version (e.g. `just update-libhegel 0.42.1`, or the tag `libhegel-v0.42.1`)
-# to pin an exact one. Follow with `npm run prepare:wasm -- release`.
+# Regenerate src/libhegel-version.ts from a libhegel release (hegel-rust's
+# `libhegel-v<version>` tags). Targets the latest release; pass a version
+# (e.g. `just update-libhegel 0.42.1`, or the tag `libhegel-v0.42.1`) to pin
+# an exact one.
 update-libhegel version="":
     node scripts/update-libhegel.mjs {{version}}
-    npx prettier --write src/libhegel-version.ts src/browser/artifact.json src/browser/artifact.ts
+    npx prettier --write src/libhegel-version.ts
 
 check-test:
     #!/usr/bin/env bash
     set -euo pipefail
-    : "${HEGEL_LIBHEGEL_PATH:?Prepare native libhegel explicitly with just fetch-libhegel and export HEGEL_LIBHEGEL_PATH}"
+    export HEGEL_LIBHEGEL_PATH="${HEGEL_LIBHEGEL_PATH:-$(node scripts/fetch-libhegel.mjs)}"
     npx vitest run --coverage
     python3 scripts/check-coverage.py
 

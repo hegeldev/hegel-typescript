@@ -16,7 +16,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PLATFORMS, fetchAsset, pinnedVersion } from "./fetch-libhegel.mjs";
-import { requirePublished, preparedBytes } from "./wasm-artifact.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = path.join(ROOT, "platform-packages");
@@ -59,8 +58,6 @@ async function main() {
   if (args.size > 0) {
     throw new Error(`unknown arguments: ${[...args].join(" ")}`);
   }
-  requirePublished();
-  preparedBytes();
   const root = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
   const libhegelVersion = pinnedVersion();
   const targets = hostOnly
