@@ -207,5 +207,5 @@ everything else is `patch`. `RELEASE-sample.md` is the worked example and the
 - TypeDoc runs with `treatWarningsAsErrors` — a `{@link Foo}` to a
   non-exported symbol fails `just docs`. Export it or drop the link.
 - Node >= 20.11 required (koffi's loader needs `import.meta.dirname`).
-- `tests/browser/` and `tests/smoke/` are separate npm packages with their own
-  lockfiles; keep tooling that only they need out of the root `package.json`.
+- `tests/browser/` (with its own lockfile) and `tests/smoke/` are separate npm
+  packages; keep tooling that only they need out of the root `package.json`.
