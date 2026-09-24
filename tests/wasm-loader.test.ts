@@ -3,6 +3,7 @@ import { loadWasm } from "../src/browser/load-wasm.js";
 import { WasmEngine } from "../src/browser/engine.js";
 import { WasmAbi, signatures } from "../src/browser/abi.js";
 import { EngineError } from "../src/engine.js";
+import { LIBHEGEL_VERSION } from "../src/libhegel-version.js";
 import { wasmBytes, wasmFixture, wasmModule } from "./wasmFixture.js";
 
 const response = (mime = "application/wasm") =>
@@ -14,15 +15,15 @@ afterEach(() => {
 
 describe("loadWasm", () => {
   it("loads ArrayBuffer and precompiled Module inputs", async () => {
-    expect((await loadWasm(wasmBytes)).version()).toBe("0.42.4");
-    expect((await loadWasm(wasmModule)).version()).toBe("0.42.4");
+    expect((await loadWasm(wasmBytes)).version()).toBe(LIBHEGEL_VERSION);
+    expect((await loadWasm(wasmModule)).version()).toBe(LIBHEGEL_VERSION);
   });
   it("fetches the supplied URL and prefers streaming", async () => {
     const fetch = vi.fn().mockResolvedValue(response());
     vi.stubGlobal("fetch", fetch);
     const streaming = vi.spyOn(WebAssembly, "instantiateStreaming");
     const url = new URL("https://example.test/sub/hegel.wasm");
-    expect((await loadWasm(url)).version()).toBe("0.42.4");
+    expect((await loadWasm(url)).version()).toBe(LIBHEGEL_VERSION);
     expect(fetch).toHaveBeenCalledExactlyOnceWith(url);
     expect(streaming).toHaveBeenCalledTimes(1);
   });
@@ -32,17 +33,19 @@ describe("loadWasm", () => {
       await (await value).arrayBuffer();
       throw new TypeError("unsupported MIME");
     });
-    expect((await loadWasm(supplied)).version()).toBe("0.42.4");
+    expect((await loadWasm(supplied)).version()).toBe(LIBHEGEL_VERSION);
     expect(supplied.bodyUsed).toBe(true);
   });
   it("falls back for actual missing/wrong MIME headers", async () => {
-    expect((await loadWasm(response("text/plain"))).version()).toBe("0.42.4");
-    expect((await loadWasm(new Response(wasmBytes))).version()).toBe("0.42.4");
+    expect((await loadWasm(response("text/plain"))).version()).toBe(LIBHEGEL_VERSION);
+    expect((await loadWasm(new Response(wasmBytes))).version()).toBe(LIBHEGEL_VERSION);
   });
   it("falls back for an actual parameterized Wasm MIME header", async () => {
     const streaming = vi.spyOn(WebAssembly, "instantiateStreaming");
     const fallback = vi.spyOn(WebAssembly, "instantiate");
-    expect((await loadWasm(response("application/wasm; charset=utf-8"))).version()).toBe("0.42.4");
+    expect((await loadWasm(response("application/wasm; charset=utf-8"))).version()).toBe(
+      LIBHEGEL_VERSION,
+    );
     expect(streaming).toHaveBeenCalledTimes(1);
     expect(fallback).toHaveBeenCalledTimes(1);
   });
@@ -51,7 +54,7 @@ describe("loadWasm", () => {
       "WebAssembly",
       Object.assign(Object.create(WebAssembly), { instantiateStreaming: undefined }),
     );
-    expect((await loadWasm(response())).version()).toBe("0.42.4");
+    expect((await loadWasm(response())).version()).toBe(LIBHEGEL_VERSION);
   });
   it("checks HTTP errors before reading the body", async () => {
     const supplied = new Response("not found", { status: 404 });
@@ -78,7 +81,7 @@ describe("loadWasm", () => {
   });
   it("rejects wrong versions and import shapes", async () => {
     vi.spyOn(WasmEngine.prototype, "version").mockReturnValueOnce("0.42.3");
-    await expect(loadWasm(wasmModule)).rejects.toThrow("expected 0.42.4, got 0.42.3");
+    await expect(loadWasm(wasmModule)).rejects.toThrow(`expected ${LIBHEGEL_VERSION}, got 0.42.3`);
     const empty = new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
     await expect(loadWasm(empty)).rejects.toThrow("host imports");
     vi.spyOn(WebAssembly.Module, "imports").mockReturnValue([
