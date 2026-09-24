@@ -591,8 +591,8 @@ describe("Libhegel against the real library", () => {
 // Re-export to ensure bindLibrary is referenced (it is used by Libhegel.load).
 void bindLibrary;
 
-// Regression coverage for the audited 0.42.4 ABI and result ownership.
-describe("Libhegel ABI 0.42.4 regressions", () => {
+// Regression coverage for the audited 0.43.4 ABI and result ownership.
+describe("Libhegel ABI 0.43.4 regressions", () => {
   it("rejects failed constructors instead of leaking null handles into shared code", () => {
     const lib = new Libhegel(
       fakeBindings({
