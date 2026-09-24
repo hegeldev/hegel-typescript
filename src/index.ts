@@ -214,10 +214,42 @@
  * );
  * ```
  *
+ * ## Test stateful systems
+ *
+ * Some bugs only show up after a particular *sequence* of operations. For
+ * those, describe the operations as the rules of a state machine and let
+ * Hegel search over sequences of them — see the {@link stateful} module:
+ *
+ * ```ts
+ * const counterMachine: hegel.stateful.StateMachine<{ value: number }> = {
+ *   rules: {
+ *     increment: (_tc, counter) => {
+ *       counter.value += 1;
+ *     },
+ *     reset: (_tc, counter) => {
+ *       counter.value = 0;
+ *     },
+ *   },
+ *   invariants: {
+ *     nonNegative: (_tc, counter) => {
+ *       if (counter.value < 0) throw new Error("counter went negative");
+ *     },
+ *   },
+ * };
+ *
+ * test(
+ *   "counter",
+ *   hegel.test((tc) => {
+ *     hegel.stateful.run(tc, counterMachine, { value: 0 });
+ *   }),
+ * );
+ * ```
+ *
  * ## Learning more
  *
  * - Browse the `@hegeldev/hegel/generators` module for the full list of
  *   available generators.
+ * - See {@link stateful} for stateful (model-based) testing.
  * - See {@link Settings} for more configuration settings to customize how
  *   your test runs.
  *
@@ -225,6 +257,7 @@
  */
 
 export * as generators from "./generators/index.js";
+export * as stateful from "./stateful.js";
 export { TestCase } from "./testCase.js";
 export { Verbosity, HealthCheck, Database } from "./runnerCore.js";
 export type { Settings } from "./runnerCore.js";
