@@ -27,7 +27,7 @@ export const stringGenerator = {} as StringGeneratorHandle;
 /** Deterministic Engine double; no ABI pointers or generated engine logic. */
 export function fakeEngine() {
   return {
-    version: vi.fn<Engine["version"]>(() => "0.42.4"),
+    version: vi.fn<Engine["version"]>(() => "0.43.7"),
     newContext: vi.fn<Engine["newContext"]>(() => context),
     freeContext: vi.fn<Engine["freeContext"]>(),
     lastError: vi.fn<Engine["lastError"]>(() => "diagnostic"),
