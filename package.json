@@ -42,7 +42,8 @@
     "prepack": "npm run build",
     "test:browser": "node tests/browser/run.mjs",
     "test:packaging": "node --test scripts/packaging.test.mjs",
-    "typecheck:portable": "tsc -p tsconfig.portable.json"
+    "typecheck:portable": "tsc -p tsconfig.portable.json",
+    "typecheck:tests": "tsc -p tsconfig.typetests.json"
   },
   "keywords": [
     "hegel",
