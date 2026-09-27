@@ -18,7 +18,7 @@ runtimes share one runner, one schema interpreter and one public API.
 ```bash
 npm install
 just test    # fetch libhegel into native/, vitest with coverage (fails if < 100%)
-just lint    # prettier --check + eslint + tsc --noEmit + typecheck:portable
+just lint    # prettier --check + eslint + tsc --noEmit + typecheck:portable + typecheck:tests
 just format  # prettier --write
 just docs    # typedoc (treatWarningsAsErrors) + open
 just check   # lint + docs + test — everything CI runs on the main matrix
