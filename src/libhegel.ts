@@ -1,6 +1,6 @@
 /**
  * Thin, typed binding to the native `libhegel` C ABI (see
- * `hegel-rust/hegel-c/include/hegel.h`, version 0.42.4) via {@link koffi}.
+ * `hegel-rust/hegel-c/include/hegel.h`, version 0.44.1) via {@link koffi}.
  *
  * The {@link Libhegel} class owns the loaded library's function pointers and
  * exposes ergonomic wrappers. Every fallible call takes a `hegel_context_t*`
@@ -120,7 +120,11 @@ const bufferResultType: TypeObject = koffi.struct({ data: "uint8_t*", len: "size
  * default settings profile, which fails when `HEGEL_DEFAULT_PROFILE` names an
  * unknown profile or a `hegel.toml` is malformed. The output callback taken by
  * `hegel_run_start` / `hegel_test_case_from_blob` is likewise absorbed as NULL
- * (engine output stays on stderr).
+ * (engine output stays on stderr). Two more absorbed parameters this client
+ * never needs are hardcoded rather than exposed: `hegel_generate_boolean`'s
+ * `forced` / `has_forced` are fixed to `false` (the client never forces a draw),
+ * and `hegel_string_generator_regex`'s `alphabet` is fixed to NULL (no custom
+ * alphabet).
  */
 export interface Bindings {
   contextNew: () => Ptr;

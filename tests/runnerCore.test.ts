@@ -212,24 +212,17 @@ describe("runnerCore engine fault classification and cleanup", () => {
 });
 
 describe("runnerCore run results and replay", () => {
-  it.each([RunStatus.FAILED_NONDETERMINISTIC, 99, RunStatus.ERROR])(
-    "never replays status %s",
-    (status) => {
-      const engine = fakeEngine();
-      engine.runStatus.mockReturnValue(status);
-      expect(() => createRunner(fakeRuntime(engine)).test(() => {})).toThrow(
-        status === RunStatus.FAILED_NONDETERMINISTIC
-          ? /nondeterministic/
-          : status === 99
-            ? /Unknown Hegel/
-            : /backend error/,
-      );
-      expect(engine.failureCount).not.toHaveBeenCalled();
-      expect(engine.testCaseFromBlob).not.toHaveBeenCalled();
-      expect(engine.freeRunResult).toHaveBeenCalledTimes(1);
-      expect(engine.freeRun).toHaveBeenCalledTimes(1);
-    },
-  );
+  it.each([99, RunStatus.ERROR])("never replays status %s", (status) => {
+    const engine = fakeEngine();
+    engine.runStatus.mockReturnValue(status);
+    expect(() => createRunner(fakeRuntime(engine)).test(() => {})).toThrow(
+      status === 99 ? /Unknown Hegel/ : /backend error/,
+    );
+    expect(engine.failureCount).not.toHaveBeenCalled();
+    expect(engine.testCaseFromBlob).not.toHaveBeenCalled();
+    expect(engine.freeRunResult).toHaveBeenCalledTimes(1);
+    expect(engine.freeRun).toHaveBeenCalledTimes(1);
+  });
 
   it("does not interpret a missing failure blob as a fresh test case", () => {
     const engine = fakeEngine();

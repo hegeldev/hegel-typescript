@@ -454,11 +454,6 @@ export class Hegel {
             if (status === RunStatus.ERROR) {
               throw new EngineError(String(lib.runError(result)));
             }
-            if (status === RunStatus.FAILED_NONDETERMINISTIC) {
-              throw new Error(
-                "Hegel reported a nondeterministic failure; deterministic replay is unavailable.",
-              );
-            }
             if (status !== RunStatus.FAILED) {
               throw new EngineError(`Unknown Hegel run status: ${status}`);
             }
@@ -480,6 +475,9 @@ export class Hegel {
               } finally {
                 finishCleanup(failureErrors, () => lib.freeFailure(failure));
               }
+              // A nondeterministic failure reports FAILED with no reproduction
+              // blob (the retired FAILED_NONDETERMINISTIC status is gone); this
+              // client does not capture, so it cannot replay such a failure.
               if (blob === null)
                 throw new EngineError(
                   "Hegel failure has no reproduction blob; deterministic replay is unavailable",
