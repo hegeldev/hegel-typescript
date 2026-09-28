@@ -292,7 +292,7 @@ describe("WasmEngine real run lifecycle", () => {
   });
 
   it.each([false, true])(
-    "reports a real flaky run as ERROR without frontend replay, async=%s",
+    "surfaces a flaky run whose failure carries no reproduction blob, async=%s",
     async (async) => {
       const { engine } = wasmFixture();
       const status = vi.spyOn(engine, "runStatus");
@@ -309,13 +309,16 @@ describe("WasmEngine real run lifecycle", () => {
           throw new Error("flaky failure");
         }
       };
-      // Status 3 is for declared concurrent state machines, not ordinary flakiness.
-      if (async) await expect(runner.testAsync(body, { seed: 42 })).rejects.toThrow(/flaky/i);
-      else expect(() => runner.test(body, { seed: 42 })).toThrow(/flaky/i);
+      // Ordinary flakiness is reported as a plain FAILED run (run status 3 was
+      // retired in the 0.35 ABI break); an unconfirmed flaky failure carries no
+      // reproduce blob, so there is nothing to replay deterministically.
+      const noBlob = /no reproduction blob/;
+      if (async) await expect(runner.testAsync(body, { seed: 42 })).rejects.toThrow(noBlob);
+      else expect(() => runner.test(body, { seed: 42 })).toThrow(noBlob);
       expect(seen).toBe(true);
-      expect(status).toHaveReturnedWith(RunStatus.ERROR);
-      expect(failureCount).not.toHaveBeenCalled();
-      expect(failure).not.toHaveBeenCalled();
+      expect(status).toHaveReturnedWith(RunStatus.FAILED);
+      expect(failureCount).toHaveBeenCalled();
+      expect(failure).toHaveBeenCalled();
       expect(replay).not.toHaveBeenCalled();
       expect(free).toHaveBeenCalledTimes(1);
     },
