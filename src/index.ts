@@ -30,15 +30,13 @@
  * import * as hegel from "@hegeldev/hegel";
  * import * as gs from "@hegeldev/hegel/generators";
  *
- * test(
- *   "integer self equality",
+ * test("integer self equality", () =>
  *   hegel.test((tc) => {
  *     const n = tc.draw(gs.integers());
  *     if (n !== n) {
  *       throw new Error("integer was not equal to itself");
  *     }
- *   }),
- * );
+ *   }));
  * ```
  *
  * Now run the test using `npx vitest run`. You should see that this test
@@ -53,15 +51,13 @@
  * Next, try a test that fails:
  *
  * ```ts
- * test(
- *   "integers always below 50",
+ * test("integers always below 50", () =>
  *   hegel.test((tc) => {
  *     const n = tc.draw(gs.integers());
  *     if (n >= 50) {
  *       throw new Error(`n=${n} is too large`);
  *     }
- *   }),
- * );
+ *   }));
  * ```
  *
  * This test asserts that any integer is less than 50, which is obviously
@@ -72,15 +68,13 @@
  * `minValue` and `maxValue` options:
  *
  * ```ts
- * test(
- *   "bounded integers always below 50",
+ * test("bounded integers always below 50", () =>
  *   hegel.test((tc) => {
  *     const n = tc.draw(gs.integers({ minValue: 0, maxValue: 49 }));
  *     if (n >= 50) {
  *       throw new Error(`n=${n} is too large`);
  *     }
- *   }),
- * );
+ *   }));
  * ```
  *
  * Run the test again. It should now pass.
@@ -95,8 +89,7 @@
  * For example, you can use `arrays` to generate an array of integers:
  *
  * ```ts
- * test(
- *   "append increases length",
+ * test("append increases length", () =>
  *   hegel.test((tc) => {
  *     const xs = tc.draw(gs.arrays(gs.integers()));
  *     const initialLength = xs.length;
@@ -104,8 +97,7 @@
  *     if (xs.length <= initialLength) {
  *       throw new Error("length did not increase");
  *     }
- *   }),
- * );
+ *   }));
  * ```
  *
  * This test checks that appending an element to a random array of integers
@@ -120,8 +112,7 @@
  *   name: string;
  * }
  *
- * test(
- *   "person",
+ * test("person", () =>
  *   hegel.test((tc) => {
  *     const person: Person = {
  *       age: tc.draw(gs.integers({ minValue: 0, maxValue: 120 })),
@@ -129,8 +120,7 @@
  *     };
  *     // use person in your test
  *     void person;
- *   }),
- * );
+ *   }));
  * ```
  *
  * For composite values you want to reuse across tests, build a generator with
@@ -145,13 +135,11 @@
  *   name: gs.text({ minSize: 1, maxSize: 50 }),
  * });
  *
- * test(
- *   "person via record",
+ * test("person via record", () =>
  *   hegel.test((tc) => {
  *     const person = tc.draw(personGen);
  *     void person;
- *   }),
- * );
+ *   }));
  * ```
  *
  * Note that you can feed the results of one `draw` into subsequent calls — this
@@ -179,8 +167,7 @@
  * Use the {@link TestCase.note | note} method to attach debug information:
  *
  * ```ts
- * test(
- *   "addition is commutative",
+ * test("addition is commutative", () =>
  *   hegel.test((tc) => {
  *     const x = tc.draw(gs.integers());
  *     const y = tc.draw(gs.integers());
@@ -188,8 +175,7 @@
  *     if (x + y !== y + x) {
  *       throw new Error("addition is not commutative");
  *     }
- *   }),
- * );
+ *   }));
  * ```
  *
  * Notes only appear when Hegel replays the minimal failing example.
@@ -200,8 +186,7 @@
  * {@link Settings} override as the second argument to {@link test}:
  *
  * ```ts
- * test(
- *   "integers many",
+ * test("integers many", () =>
  *   hegel.test(
  *     (tc) => {
  *       const n = tc.draw(gs.integers());
@@ -210,8 +195,7 @@
  *       }
  *     },
  *     { testCases: 500 },
- *   ),
- * );
+ *   ));
  * ```
  *
  * ## Learning more
