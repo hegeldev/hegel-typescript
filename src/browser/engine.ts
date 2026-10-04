@@ -1,5 +1,6 @@
 import {
   EngineError,
+  doneOrIndex,
   type Engine,
   type ContextHandle,
   type SettingsHandle,
@@ -9,6 +10,9 @@ import {
   type FailureHandle,
   type CollectionHandle,
   type StringGeneratorHandle,
+  type PoolHandle,
+  type StateMachineHandle,
+  type StateMachineOptions,
   type NativeDate,
   type NativeTime,
   type NativeDatetime,
@@ -513,6 +517,133 @@ export class WasmEngine implements Engine {
       const c = this.ptr(ctx);
       this.check(c, "mark_complete", [c, this.ptr(tc), u32(status), a.utf8CString(origin)]);
     });
+  }
+  newPool(ctx: ContextHandle, tc: TestCaseHandle): PoolHandle {
+    const c = this.ptr(ctx);
+    return this.handle(c, "new_pool", [c, this.ptr(tc)], true);
+  }
+  private variableId(ctx: number, op: "pool_add" | "pool_generate", args: Argument[]): bigint {
+    return this.output(ctx, op, args, 8, 8, (a, p) => a.view(p, 8).getBigInt64(0, true), true);
+  }
+  poolAdd(ctx: ContextHandle, tc: TestCaseHandle, pool: PoolHandle): bigint {
+    const c = this.ptr(ctx);
+    return this.variableId(c, "pool_add", [c, this.ptr(tc), this.ptr(pool)]);
+  }
+  poolGenerate(ctx: ContextHandle, tc: TestCaseHandle, pool: PoolHandle, consume: boolean): bigint {
+    const c = this.ptr(ctx);
+    return this.variableId(c, "pool_generate", [c, this.ptr(tc), this.ptr(pool), +consume]);
+  }
+  freePool(pool: PoolHandle): void {
+    this.free("pool_free", pool);
+  }
+  newStateMachine(
+    ctx: ContextHandle,
+    tc: TestCaseHandle,
+    opts: StateMachineOptions,
+  ): StateMachineHandle {
+    return WasmArena.scoped(this.abi, (a) => {
+      // `int64_t` group ids, written little-endian; a present empty array is
+      // still a valid (never dereferenced) pointer, like `stringList`.
+      const groups = a.alloc(Math.max(8, opts.ruleGroups.length * 8), 8);
+      opts.ruleGroups.forEach((group, index) => {
+        a.view(groups + index * 8, 8).setBigInt64(0, BigInt(group), true);
+      });
+      const c = this.ptr(ctx);
+      // The machine handle is not the trailing out-parameter here: the drawn
+      // concurrency level follows it (and is discarded, the bounds being 1).
+      const machine = a.alloc(4, 4);
+      const concurrency = a.alloc(8, 8);
+      this.check(
+        c,
+        "new_state_machine",
+        [
+          c,
+          this.ptr(tc),
+          a.stringList(opts.ruleNames),
+          groups,
+          u32(opts.ruleNames.length),
+          a.stringList(opts.invariantNames),
+          a.input(Uint8Array.from(opts.invariantAlwaysCheck, Number)),
+          u32(opts.invariantNames.length),
+          BigInt(opts.minConcurrency),
+          BigInt(opts.maxConcurrency),
+          BigInt(opts.stepCount),
+          machine,
+          concurrency,
+        ],
+        true,
+      );
+      return this.owned<StateMachineHandle>(a.pointer(machine));
+    });
+  }
+  private stateMachineIndex(
+    ctx: ContextHandle,
+    tc: TestCaseHandle,
+    machine: StateMachineHandle,
+    op: "state_machine_next_group" | "state_machine_next_rule",
+    extra: Argument[],
+  ): number | null {
+    const c = this.ptr(ctx);
+    return this.output(
+      c,
+      op,
+      [c, this.ptr(tc), this.ptr(machine), ...extra],
+      8,
+      8,
+      (a, p) => doneOrIndex(a.view(p, 8).getBigInt64(0, true)),
+      true,
+    );
+  }
+  stateMachineNextGroup(
+    ctx: ContextHandle,
+    tc: TestCaseHandle,
+    machine: StateMachineHandle,
+  ): number | null {
+    return this.stateMachineIndex(ctx, tc, machine, "state_machine_next_group", []);
+  }
+  stateMachineNextRule(
+    ctx: ContextHandle,
+    tc: TestCaseHandle,
+    machine: StateMachineHandle,
+    workerIndex: number,
+  ): number | null {
+    return this.stateMachineIndex(ctx, tc, machine, "state_machine_next_rule", [
+      BigInt(workerIndex),
+    ]);
+  }
+  stateMachineRuleRejected(
+    ctx: ContextHandle,
+    tc: TestCaseHandle,
+    machine: StateMachineHandle,
+    workerIndex: number,
+  ): void {
+    const c = this.ptr(ctx);
+    this.check(
+      c,
+      "state_machine_rule_rejected",
+      [c, this.ptr(tc), this.ptr(machine), BigInt(workerIndex)],
+      true,
+    );
+  }
+  stateMachineShouldCheckInvariant(
+    ctx: ContextHandle,
+    tc: TestCaseHandle,
+    machine: StateMachineHandle,
+    invariantIndex: number,
+  ): boolean {
+    const c = this.ptr(ctx);
+    return this.output(
+      c,
+      "state_machine_should_check_invariant",
+      [c, this.ptr(tc), this.ptr(machine), BigInt(invariantIndex)],
+      1,
+      1,
+      (a, p) => a.boolean(p),
+      true,
+    );
+  }
+  freeStateMachine(machine: StateMachineHandle): void {
+    this.free("state_machine_free", machine);
   }
   runStatus(r: RunResultHandle): number {
     return this.output(0, "run_result_status", [0, this.ptr(r)], 4, 4, (a, p) =>

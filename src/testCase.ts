@@ -53,7 +53,18 @@ export const Labels = {
   MAPPED: 13,
   SAMPLED_FROM: 14,
   ENUM_VARIANT: 15,
+  /** One round of a stateful test: the rule selection plus the rule's draws. */
+  STATEFUL_RULE: 16,
 } as const;
+
+/** The registration for a state machine, see {@link DataSource.newStateMachine}. */
+export interface StateMachineSpec {
+  ruleNames: readonly string[];
+  invariantNames: readonly string[];
+  /** Parallel to `invariantNames`: whether the invariant is exempt from sampling. */
+  invariantAlwaysCheck: readonly boolean[];
+  stepCount: number;
+}
 
 /**
  * Abstraction over the data backend for a test case.
@@ -64,6 +75,10 @@ export const Labels = {
  *
  * `status` passed to {@link DataSource.markComplete} is a `hegel_status_t`
  * value (see {@link Status} in `libhegel.ts`).
+ *
+ * Collections, pools and state machines are identified by numeric ids handed
+ * out by their `new*` method; the data source owns the underlying handles for
+ * the life of the test case.
  */
 export interface DataSource {
   readonly diagnostics?: Diagnostics;
@@ -75,6 +90,27 @@ export interface DataSource {
   collectionMore(collectionId: number): boolean;
   collectionReject(collectionId: number, why?: string): void;
   markComplete(status: number, origin: string | null): void;
+
+  /** Open a variable pool (see `stateful.Pool`). */
+  newPool(): number;
+  /** Register a new variable in the pool, returning its engine-assigned id. */
+  poolAdd(poolId: number): bigint;
+  /**
+   * Draw the id of a variable in the pool, removing it when `consume` is set.
+   * Throws {@link AssumeError} when the pool is empty.
+   */
+  poolGenerate(poolId: number, consume: boolean): bigint;
+
+  /** Register a sequential state machine (single group, concurrency 1). */
+  newStateMachine(spec: StateMachineSpec): number;
+  /** Start the next round; `false` once the machine is finished. */
+  stateMachineNextRound(machineId: number): boolean;
+  /** The index of the next rule to run this round, or `null` at the join point. */
+  stateMachineNextRule(machineId: number): number | null;
+  /** Report the rule last returned by {@link stateMachineNextRule} as rejected. */
+  stateMachineRuleRejected(machineId: number): void;
+  /** Whether invariant `invariantIndex` should run at the current join point. */
+  stateMachineShouldCheckInvariant(machineId: number, invariantIndex: number): boolean;
 }
 
 export class TestCase {

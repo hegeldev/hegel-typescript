@@ -6,7 +6,13 @@
  */
 
 import { generateValue, StringGeneratorCache } from "./generate.js";
-import { TestCase, StopTestError, AssumeError, type DataSource } from "./testCase.js";
+import {
+  TestCase,
+  StopTestError,
+  AssumeError,
+  type DataSource,
+  type StateMachineSpec,
+} from "./testCase.js";
 import {
   EngineError,
   Status,
@@ -17,6 +23,8 @@ import {
   type TestCaseHandle,
   type SettingsHandle,
   type CollectionHandle,
+  type PoolHandle,
+  type StateMachineHandle,
 } from "./engine.js";
 import { portableDiagnostics, type Diagnostics, type RuntimeServices } from "./runtime.js";
 
@@ -75,15 +83,17 @@ export interface Settings {
  * {@link DataSource} backed by an opaque engine test case. Schema draws are
  * interpreted by {@link generateValue}; adapters own all ABI marshalling.
  *
- * The native collection handles behind the {@link DataSource}'s numeric
- * collection ids are owned by this object — the runner calls {@link dispose}
- * once the test case is over to release them.
+ * The engine's collection, pool and state-machine handles behind the
+ * {@link DataSource}'s numeric ids are owned by this object — the runner calls
+ * {@link dispose} once the test case is over to release them.
  */
 export class EngineDataSource implements DataSource {
   private readonly lib: Engine;
   private readonly ctx: ContextHandle;
   private readonly tc: TestCaseHandle;
   private readonly collections: CollectionHandle[] = [];
+  private readonly pools: PoolHandle[] = [];
+  private readonly machines: StateMachineHandle[] = [];
 
   private fault: EngineError | undefined;
   private completed = false;
@@ -137,6 +147,68 @@ export class EngineDataSource implements DataSource {
     this.call(() => this.lib.markComplete(this.ctx, this.tc, status, origin));
   }
 
+  newPool(): number {
+    this.pools.push(this.call(() => this.lib.newPool(this.ctx, this.tc)));
+    return this.pools.length - 1;
+  }
+
+  poolAdd(poolId: number): bigint {
+    return this.call(() => this.lib.poolAdd(this.ctx, this.tc, this.pools[poolId]));
+  }
+
+  poolGenerate(poolId: number, consume: boolean): bigint {
+    return this.call(() => this.lib.poolGenerate(this.ctx, this.tc, this.pools[poolId], consume));
+  }
+
+  newStateMachine(spec: StateMachineSpec): number {
+    this.machines.push(
+      this.call(() =>
+        this.lib.newStateMachine(this.ctx, this.tc, {
+          ruleNames: spec.ruleNames,
+          // One concurrency group, so rules never need to be kept apart.
+          ruleGroups: spec.ruleNames.map(() => 0),
+          invariantNames: spec.invariantNames,
+          invariantAlwaysCheck: spec.invariantAlwaysCheck,
+          minConcurrency: 1,
+          maxConcurrency: 1,
+          stepCount: spec.stepCount,
+        }),
+      ),
+    );
+    return this.machines.length - 1;
+  }
+
+  stateMachineNextRound(machineId: number): boolean {
+    // With a single group the id it reports carries no information; only
+    // whether the machine has another round to run matters.
+    return this.call(
+      () => this.lib.stateMachineNextGroup(this.ctx, this.tc, this.machines[machineId]) !== null,
+    );
+  }
+
+  stateMachineNextRule(machineId: number): number | null {
+    return this.call(() =>
+      this.lib.stateMachineNextRule(this.ctx, this.tc, this.machines[machineId], 0),
+    );
+  }
+
+  stateMachineRuleRejected(machineId: number): void {
+    this.call(() =>
+      this.lib.stateMachineRuleRejected(this.ctx, this.tc, this.machines[machineId], 0),
+    );
+  }
+
+  stateMachineShouldCheckInvariant(machineId: number, invariantIndex: number): boolean {
+    return this.call(() =>
+      this.lib.stateMachineShouldCheckInvariant(
+        this.ctx,
+        this.tc,
+        this.machines[machineId],
+        invariantIndex,
+      ),
+    );
+  }
+
   assertHealthy(): void {
     if (this.fault !== undefined) throw this.fault;
   }
@@ -155,15 +227,19 @@ export class EngineDataSource implements DataSource {
 
   /** Release every owned handle even when a destructor fails. */
   dispose(): void {
-    const collections = this.collections.splice(0);
     const errors: unknown[] = [];
-    for (const collection of collections) {
-      try {
-        this.lib.freeCollection(collection);
-      } catch (error) {
-        errors.push(error);
+    const release = <H>(handles: H[], free: (handle: H) => void): void => {
+      for (const handle of handles.splice(0)) {
+        try {
+          free(handle);
+        } catch (error) {
+          errors.push(error);
+        }
       }
-    }
+    };
+    release(this.collections, (collection) => this.lib.freeCollection(collection));
+    release(this.pools, (pool) => this.lib.freePool(pool));
+    release(this.machines, (machine) => this.lib.freeStateMachine(machine));
     try {
       if (this.ownsCache) this.cache.dispose();
     } catch (error) {
