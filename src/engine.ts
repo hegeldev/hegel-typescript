@@ -36,6 +36,11 @@ export const RunStatus = {
   PASSED: 0,
   FAILED: 1,
   ERROR: 2,
+  // Retired from the ABI in the 0.35 break and still unused as of 0.44.2: the
+  // engine now reports a nondeterministic failure as a plain `FAILED` run whose
+  // failures carry no reproduction blob. hegel.h reserves value 3 and notes that
+  // bindings built against the old header may still compare against it, so the
+  // runner keeps this guard defensively; the engine never returns it.
   FAILED_NONDETERMINISTIC: 3,
 } as const;
 
