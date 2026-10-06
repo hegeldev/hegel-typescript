@@ -1,6 +1,6 @@
 /**
  * Thin, typed binding to the native `libhegel` C ABI (see
- * `hegel-rust/hegel-c/include/hegel.h`, version 0.42.4) via {@link koffi}.
+ * `hegel-rust/hegel-c/include/hegel.h`, version 0.45.0) via {@link koffi}.
  *
  * The {@link Libhegel} class owns the loaded library's function pointers and
  * exposes ergonomic wrappers. Every fallible call takes a `hegel_context_t*`
@@ -120,7 +120,10 @@ const bufferResultType: TypeObject = koffi.struct({ data: "uint8_t*", len: "size
  * default settings profile, which fails when `HEGEL_DEFAULT_PROFILE` names an
  * unknown profile or a `hegel.toml` is malformed. The output callback taken by
  * `hegel_run_start` / `hegel_test_case_from_blob` is likewise absorbed as NULL
- * (engine output stays on stderr).
+ * (engine output stays on stderr). `stringGeneratorRegex` takes its `pattern`
+ * as a JS string: the wrapper encodes it to a length-delimited UTF-8 buffer
+ * (deriving the ABI's `pattern_len`) and passes a NULL `alphabet` (the default
+ * text alphabet).
  */
 export interface Bindings {
   contextNew: () => Ptr;
@@ -301,7 +304,7 @@ export function bindLibrary(lib: LibraryHandle): Bindings {
     "int hegel_string_generator_text(void* ctx, uint64_t min_size, uint64_t max_size, const char* codec, uint32_t min_codepoint, uint32_t max_codepoint, const char** categories, size_t categories_len, const char** exclude_categories, size_t exclude_categories_len, const uint8_t* include_characters, size_t include_characters_len, const uint8_t* exclude_characters, size_t exclude_characters_len, _Out_ void** out)",
   );
   const stringGeneratorRegex = f(
-    "int hegel_string_generator_regex(void* ctx, const char* pattern, bool fullmatch, void* alphabet, _Out_ void** out)",
+    "int hegel_string_generator_regex(void* ctx, const uint8_t* pattern, size_t pattern_len, bool fullmatch, void* alphabet, _Out_ void** out)",
   );
   const stringGeneratorEmail = f("int hegel_string_generator_email(void* ctx, _Out_ void** out)");
   const stringGeneratorUrl = f("int hegel_string_generator_url(void* ctx, _Out_ void** out)");
@@ -467,8 +470,12 @@ export function bindLibrary(lib: LibraryHandle): Bindings {
         opts.excludeCharacters === null ? 0 : opts.excludeCharacters.length,
         out,
       ),
-    stringGeneratorRegex: (ctx, pattern, fullmatch, out) =>
-      stringGeneratorRegex(ctx, cString(pattern), fullmatch, null, out),
+    stringGeneratorRegex: (ctx, pattern, fullmatch, out) => {
+      // The ABI takes the pattern as a length-delimited UTF-8 buffer (it may
+      // contain NUL, which Python `re` accepts), not a C string.
+      const patternBytes = new TextEncoder().encode(pattern);
+      return stringGeneratorRegex(ctx, patternBytes, patternBytes.length, fullmatch, null, out);
+    },
     stringGeneratorEmail: (ctx, out) => stringGeneratorEmail(ctx, out),
     stringGeneratorUrl: (ctx, out) => stringGeneratorUrl(ctx, out),
     stringGeneratorDomain: (ctx, maxLength, out) => stringGeneratorDomain(ctx, maxLength, out),
