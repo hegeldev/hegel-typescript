@@ -67,13 +67,19 @@ describe("filter combinator", () => {
     ).toThrow(/FilterTooMuch/);
   });
 
-  test("an always-failing filter is fine when the health check is suppressed", () =>
-    hegel.test(
-      (tc) => {
-        tc.draw(gs.integers({ minValue: 0, maxValue: 10 }).filter(() => false));
-      },
-      { suppressHealthCheck: [hegel.HealthCheck.FilterTooMuch] },
-    ));
+  test("an always-failing filter reports Unsatisfiable even when the health check is suppressed", () => {
+    // Suppressing FilterTooMuch no longer hides an always-failing filter: with no
+    // valid input ever generated, the run terminates with an Unsatisfiable error
+    // instead of the (suppressed) health-check warning.
+    expect(() =>
+      hegel.test(
+        (tc) => {
+          tc.draw(gs.integers({ minValue: 0, maxValue: 10 }).filter(() => false));
+        },
+        { suppressHealthCheck: [hegel.HealthCheck.FilterTooMuch] },
+      ),
+    ).toThrow(/Unsatisfiable/);
+  });
 });
 
 describe("flatMap combinator", () => {

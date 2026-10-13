@@ -31,7 +31,7 @@ export const signatures = {
   generate_bytes: "IILLI",
   generate_bytes_result_free: "II",
   string_generator_text: "ILLIIIIIIIIIIII",
-  string_generator_regex: "IIIII",
+  string_generator_regex: "IIIIII",
   string_generator_email: "II",
   string_generator_url: "II",
   string_generator_domain: "ILI",

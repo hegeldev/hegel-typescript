@@ -336,7 +336,15 @@ export class WasmEngine implements Engine {
   ): StringGeneratorHandle {
     return WasmArena.scoped(this.abi, (a) => {
       const c = this.ptr(ctx);
-      return this.handle(c, "string_generator_regex", [c, a.utf8CString(pattern), +fullmatch, 0]);
+      // Length-delimited UTF-8 buffer (NUL allowed), alphabet absorbed as NULL.
+      const bytes = new TextEncoder().encode(pattern);
+      return this.handle(c, "string_generator_regex", [
+        c,
+        a.input(bytes),
+        bytes.length,
+        +fullmatch,
+        0,
+      ]);
     });
   }
   stringGeneratorEmail(ctx: ContextHandle): StringGeneratorHandle {
