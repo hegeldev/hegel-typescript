@@ -31,12 +31,17 @@ export const Status = {
   INTERESTING: 3,
 } as const;
 
-/** `hegel_run_status_t` — aggregate outcome of a finished run. */
+/**
+ * `hegel_run_status_t` — aggregate outcome of a finished run. Value 3
+ * (`FAILED_NONDETERMINISTIC`, removed in the 0.35 ABI break) is retired and
+ * must never be reused: a failing nondeterministic run now reports plain
+ * `FAILED`, its failures carrying a caveat and, when confirmed, a reproduce
+ * blob.
+ */
 export const RunStatus = {
   PASSED: 0,
   FAILED: 1,
   ERROR: 2,
-  FAILED_NONDETERMINISTIC: 3,
 } as const;
 
 /** `hegel_verbosity_t`. */

@@ -454,11 +454,6 @@ export class Hegel {
             if (status === RunStatus.ERROR) {
               throw new EngineError(String(lib.runError(result)));
             }
-            if (status === RunStatus.FAILED_NONDETERMINISTIC) {
-              throw new Error(
-                "Hegel reported a nondeterministic failure; deterministic replay is unavailable.",
-              );
-            }
             if (status !== RunStatus.FAILED) {
               throw new EngineError(`Unknown Hegel run status: ${status}`);
             }
