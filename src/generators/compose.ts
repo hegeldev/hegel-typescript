@@ -22,7 +22,7 @@ export function composite<T>(fn: (tc: TestCase) => T): Generator<T> {
   return new ComposedGenerator(fn);
 }
 
-class RecordGenerator<T extends Record<string, unknown>> extends Generator<T> {
+class RecordGenerator<T extends object> extends Generator<T> {
   private readonly keys: (keyof T & string)[];
   private readonly generators: Generator<T[keyof T & string]>[];
   private readonly basic: BasicGenerator<T> | null;
@@ -84,7 +84,7 @@ class RecordGenerator<T extends Record<string, unknown>> extends Generator<T> {
  * });
  * ```
  */
-export function record<T extends Record<string, unknown>>(schema: {
+export function record<T extends object>(schema: {
   [K in keyof T]: Generator<T[K]>;
 }): Generator<T> {
   return new RecordGenerator(schema);

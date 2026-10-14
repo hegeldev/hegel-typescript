@@ -46,6 +46,7 @@ check-lint:
     npx eslint .
     npx tsc --noEmit
     npm run typecheck:portable
+    npm run typecheck:tests
 
 check-docs:
     npx typedoc

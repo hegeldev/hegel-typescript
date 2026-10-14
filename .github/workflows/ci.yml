@@ -36,6 +36,8 @@ jobs:
         run: npx tsc --noEmit
       - name: Portable typecheck without Node types
         run: npm run typecheck:portable
+      - name: Type-level tests
+        run: npm run typecheck:tests
       - name: Install zizmor
         run: pip install zizmor==1.23.1
       - name: Run zizmor
