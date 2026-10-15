@@ -5,4 +5,4 @@
 /**
  * The pinned libhegel version this client targets.
  */
-export const LIBHEGEL_VERSION = "0.45.4";
+export const LIBHEGEL_VERSION = "0.45.10";
